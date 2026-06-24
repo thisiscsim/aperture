@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist/
+.DS_Store
+*.log
+
+# Generated media artifacts (keep folder structure via .gitkeep)
+projects/*/assets/*
+projects/*/renders/*
+projects/*/transcripts/*
+!projects/*/assets/.gitkeep
+!projects/*/renders/.gitkeep
+!projects/*/transcripts/.gitkeep
+
+.env
+.env.local

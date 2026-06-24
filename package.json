@@ -1,0 +1,23 @@
+{
+  "name": "reel-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI-assisted short-form video studio (Electron editor + Claude Code harness, bridged by edl.json).",
+  "workspaces": [
+    "packages/*",
+    "app"
+  ],
+  "scripts": {
+    "build:edl": "npm run build --workspace @reel/edl",
+    "predev": "npm run build:edl",
+    "dev": "npm --workspace app run dev",
+    "prebuild": "npm run build:edl",
+    "build": "npm --workspace app run build",
+    "pretypecheck": "npm run build:edl",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

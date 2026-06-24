@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "theme": {
+    "fontFamily": "ui-serif, Georgia, serif",
+    "palette": [
+      "#FAF6EE",
+      "#171410",
+      "#E8B04B"
+    ],
+    "captionStyle": "karaoke",
+    "safeMargins": {
+      "top": 220,
+      "bottom": 320,
+      "left": 72,
+      "right": 72
+    }
+  },
+  "assets": [
+    {
+      "id": "01-tokyo",
+      "kind": "video",
+      "src": "assets/01-tokyo.mp4",
+      "durationSec": 4,
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "id": "02-kyoto",
+      "kind": "video",
+      "src": "assets/02-kyoto.mp4",
+      "durationSec": 3.5,
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "id": "03-osaka",
+      "kind": "video",
+      "src": "assets/03-osaka.mp4",
+      "durationSec": 5,
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "id": "music",
+      "kind": "audio",
+      "src": "assets/music.mp3",
+      "durationSec": 11.049795918367346
+    }
+  ],
+  "tracks": [
+    {
+      "id": "v",
+      "type": "video",
+      "clips": [
+        {
+          "id": "v-01-tokyo",
+          "assetId": "01-tokyo",
+          "start": 0,
+          "in": 0,
+          "out": 4,
+          "volume": 0,
+          "transitionOut": {
+            "preset": "fade",
+            "duration": 0.3
+          }
+        },
+        {
+          "id": "v-02-kyoto",
+          "assetId": "02-kyoto",
+          "start": 3.7,
+          "in": 0,
+          "out": 3.5,
+          "volume": 0,
+          "transitionIn": {
+            "preset": "fade",
+            "duration": 0.3
+          },
+          "transitionOut": {
+            "preset": "fade",
+            "duration": 0.3
+          }
+        },
+        {
+          "id": "v-03-osaka",
+          "assetId": "03-osaka",
+          "start": 6.9,
+          "in": 0,
+          "out": 4,
+          "volume": 0,
+          "transitionIn": {
+            "preset": "fade",
+            "duration": 0.3
+          }
+        }
+      ]
+    },
+    {
+      "id": "txt",
+      "type": "text",
+      "clips": [
+        {
+          "id": "t1",
+          "start": 0.2,
+          "end": 2.6,
+          "text": "Christmas in Japan",
+          "style": "title",
+          "anim": {
+            "name": "soft-blur-in",
+            "from": "animate-text"
+          }
+        },
+        {
+          "id": "t2",
+          "start": 2.8,
+          "end": 5,
+          "text": "5 days, 1 camera",
+          "style": "subtitle",
+          "anim": {
+            "name": "spring-scale-in",
+            "from": "animate-text"
+          }
+        },
+        {
+          "id": "t3",
+          "start": 5.2,
+          "end": 7.5,
+          "text": "Tokyo · Kyoto · Osaka",
+          "style": "subtitle",
+          "anim": {
+            "name": "soft-blur-in",
+            "from": "animate-text"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cap",
+      "type": "caption",
+      "style": "karaoke",
+      "words": [
+        {
+          "text": "five",
+          "start": 8,
+          "end": 8.5
+        },
+        {
+          "text": "days",
+          "start": 8.5,
+          "end": 9.1
+        },
+        {
+          "text": "in",
+          "start": 9.1,
+          "end": 9.4
+        },
+        {
+          "text": "japan",
+          "start": 9.4,
+          "end": 10.8
+        }
+      ]
+    },
+    {
+      "id": "aud",
+      "type": "audio",
+      "clips": [
+        {
+          "id": "a-music",
+          "assetId": "music",
+          "start": 0,
+          "in": 0,
+          "out": 10.9,
+          "gain": -12,
+          "duckUnderVoice": false
+        }
+      ]
+    }
+  ]
+}
