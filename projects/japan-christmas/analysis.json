@@ -1,33 +1,5 @@
 {
   "slug": "japan-christmas",
-  "generatedAt": "2026-06-15T07:43:16.200Z",
-  "probes": [
-    {
-      "file": "01-tokyo.mp4",
-      "dimensions": {
-        "height": 1920,
-        "width": 1080
-      },
-      "durationInSeconds": 4,
-      "fps": 30
-    },
-    {
-      "file": "02-kyoto.mp4",
-      "dimensions": {
-        "height": 1920,
-        "width": 1080
-      },
-      "durationInSeconds": 3.5,
-      "fps": 30
-    },
-    {
-      "file": "03-osaka.mp4",
-      "dimensions": {
-        "height": 1920,
-        "width": 1080
-      },
-      "durationInSeconds": 5,
-      "fps": 30
-    }
-  ]
+  "generatedAt": "2026-06-30T18:07:14.136Z",
+  "probes": []
 }

@@ -1,0 +1,1 @@
+This Instagram story is about my day trip to Napa Valley, showing my viewers what they can do within a day.
