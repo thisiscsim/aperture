@@ -22,6 +22,21 @@ export function Preview(): JSX.Element {
 
   if (!edl) return <section className="stage" />;
 
+  const hasContent = edl.tracks.some((t) =>
+    t.type === "text" ? t.clips.length > 0 : t.type === "caption" ? false : t.clips.length > 0,
+  );
+  if (!hasContent) {
+    return (
+      <section className="stage">
+        <div className="device device-empty">
+          <div className="device-empty-msg">
+            Add clips, then <strong>Generate</strong> a first cut to preview it here.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="stage">
       <div className="device">

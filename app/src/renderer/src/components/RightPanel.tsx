@@ -1,11 +1,13 @@
 import { useEditor, type RightTab } from "../store";
 import { Inspector } from "./Inspector";
 import { DesignPanel } from "./DesignPanel";
+import { StylePanel } from "./StylePanel";
 import { CritiquePanel } from "./CritiquePanel";
 
 const TABS: { id: RightTab; label: string }[] = [
   { id: "inspector", label: "Inspector" },
   { id: "design", label: "Design" },
+  { id: "style", label: "Style" },
   { id: "critique", label: "Critique" },
 ];
 
@@ -29,6 +31,7 @@ export function RightPanel(): JSX.Element {
       <div className="tab-body">
         {tab === "inspector" && <Inspector />}
         {tab === "design" && <DesignPanel />}
+        {tab === "style" && <StylePanel />}
         {tab === "critique" && <CritiquePanel />}
       </div>
     </aside>

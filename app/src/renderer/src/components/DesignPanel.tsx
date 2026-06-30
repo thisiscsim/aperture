@@ -1,4 +1,5 @@
 import { useEditor } from "../store";
+import { VISUAL_STYLES, getVisualStyle } from "../styles/visual-styles";
 
 const FONTS = [
   { label: "Editorial serif", value: "ui-serif, Georgia, serif" },
@@ -16,8 +17,33 @@ export function DesignPanel(): JSX.Element {
 
   if (!edl) return <div />;
 
+  const applyPreset = (id: string) => {
+    const preset = getVisualStyle(id);
+    if (!preset) return;
+    updateEdl((d) => {
+      d.theme.stylePreset = preset.id;
+      d.theme.fontFamily = preset.fontFamily;
+      d.theme.palette = [...preset.palette];
+      d.theme.captionStyle = preset.captionStyle;
+    });
+  };
+
   return (
     <div className="pad fields">
+      <label className="field">
+        <span className="field-label">Style preset</span>
+        <select className="input" value={edl.theme.stylePreset ?? ""} onChange={(e) => applyPreset(e.target.value)}>
+          <option value="" disabled>
+            Choose a look…
+          </option>
+          {VISUAL_STYLES.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} — {s.inspiration}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <label className="field">
         <span className="field-label">Display font</span>
         <select

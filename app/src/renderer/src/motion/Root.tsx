@@ -17,7 +17,7 @@ const defaultEdl = EdlSchema.parse({
       id: "txt",
       type: "text",
       clips: [
-        { id: "t1", start: 0.2, end: 2.5, text: "Reel Studio", style: "title", anim: { name: "soft-blur-in" } },
+        { id: "t1", start: 0.2, end: 2.5, text: "Aperture", style: "title", anim: { name: "soft-blur-in" } },
       ],
     },
   ],

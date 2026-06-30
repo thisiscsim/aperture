@@ -3,10 +3,14 @@ import type {
   AssetSchema,
   AudioClipSchema,
   AudioTrackSchema,
+  BenchmarkFeatureSchema,
+  BenchmarksSchema,
   CaptionTrackSchema,
   CaptionWordSchema,
   EdlSchema,
   FormatSchema,
+  MetaSchema,
+  StyleProfileSchema,
   TextAnimSchema,
   TextClipSchema,
   TextTrackSchema,
@@ -16,7 +20,7 @@ import type {
   TransformSchema,
   VideoClipSchema,
   VideoTrackSchema,
-} from "./schema";
+} from "./schema.js";
 
 export type Edl = z.infer<typeof EdlSchema>;
 export type Format = z.infer<typeof FormatSchema>;
@@ -36,3 +40,8 @@ export type AudioTrack = z.infer<typeof AudioTrackSchema>;
 export type VideoClip = z.infer<typeof VideoClipSchema>;
 export type TextClip = z.infer<typeof TextClipSchema>;
 export type AudioClip = z.infer<typeof AudioClipSchema>;
+
+export type Meta = z.infer<typeof MetaSchema>;
+export type StyleProfile = z.infer<typeof StyleProfileSchema>;
+export type Benchmarks = z.infer<typeof BenchmarksSchema>;
+export type BenchmarkFeature = z.infer<typeof BenchmarkFeatureSchema>;

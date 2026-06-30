@@ -1,8 +1,8 @@
-import { EdlSchema } from "./schema";
-import type { Edl, Track } from "./types";
+import { BenchmarksSchema, EdlSchema, MetaSchema, StyleProfileSchema } from "./schema.js";
+import type { Benchmarks, Edl, Meta, StyleProfile, Track } from "./types.js";
 
-export * from "./schema";
-export * from "./types";
+export * from "./schema.js";
+export * from "./types.js";
 
 export interface ParseResult {
   ok: boolean;
@@ -25,6 +25,21 @@ export function parseEdl(input: unknown): ParseResult {
 /** Throwing variant — use where an invalid EDL is a programmer error. */
 export function parseEdlOrThrow(input: unknown): Edl {
   return EdlSchema.parse(input);
+}
+
+/** Parse + validate (with defaults) the per-project meta.json. */
+export function parseMeta(input: unknown): Meta {
+  return MetaSchema.parse(input ?? {});
+}
+
+/** Parse + validate (with defaults) a style.json aesthetic profile. */
+export function parseStyleProfile(input: unknown): StyleProfile {
+  return StyleProfileSchema.parse(input ?? {});
+}
+
+/** Parse + validate (with defaults) a benchmarks.json feature summary. */
+export function parseBenchmarks(input: unknown): Benchmarks {
+  return BenchmarksSchema.parse(input ?? {});
 }
 
 /** Total duration in seconds = the latest end time across all tracks/clips. */

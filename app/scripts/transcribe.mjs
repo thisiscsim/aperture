@@ -35,8 +35,16 @@ async function main() {
   const edlPath = path.join(projectDir, "edl.json");
   const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
 
+  // Prefer the voiceover clip's asset (that's the speech we want captioned),
+  // then any audio asset, then fall back to the video's own audio.
+  const voClip = edl.tracks
+    .flatMap((t) => (t.type === "audio" ? t.clips : []))
+    .find((c) => c.role === "voiceover");
+  const voAsset = voClip ? edl.assets.find((a) => a.id === voClip.assetId) : undefined;
   const asset =
-    edl.assets.find((a) => a.kind === "audio") ?? edl.assets.find((a) => a.kind === "video");
+    voAsset ??
+    edl.assets.find((a) => a.kind === "audio") ??
+    edl.assets.find((a) => a.kind === "video");
   if (!asset) throw new Error("no audio/video asset to transcribe");
 
   const input = path.join(projectDir, asset.src);

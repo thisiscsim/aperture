@@ -4,13 +4,18 @@ dist/
 .DS_Store
 *.log
 
-# Generated media artifacts (keep folder structure via .gitkeep)
+# Generated / uploaded media artifacts (keep folder structure via .gitkeep)
 projects/*/assets/*
 projects/*/renders/*
 projects/*/transcripts/*
+projects/*/references/*
+projects/*/benchmarks/*
+projects/*/.thumb.jpg
 !projects/*/assets/.gitkeep
 !projects/*/renders/.gitkeep
 !projects/*/transcripts/.gitkeep
+!projects/*/references/.gitkeep
+!projects/*/benchmarks/.gitkeep
 
 .env
 .env.local

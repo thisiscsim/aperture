@@ -156,6 +156,15 @@ const AudioTrackView: FC<{ track: AudioTrack; edl: Edl; assetBaseUrl?: string }>
   assetBaseUrl,
 }) => {
   const { fps } = useVideoConfig();
+
+  // Voiceover intervals (across all audio tracks) so music can duck under them.
+  const voIntervals: [number, number][] = edl.tracks
+    .filter((t): t is AudioTrack => t.type === "audio")
+    .flatMap((t) => t.clips)
+    .filter((c) => c.role === "voiceover")
+    .map((c) => [c.start, c.start + (c.out - c.in)]);
+  const DUCK = 0.28;
+
   return (
     <>
       {track.clips.map((clip) => {
@@ -164,7 +173,14 @@ const AudioTrackView: FC<{ track: AudioTrack; edl: Edl; assetBaseUrl?: string }>
         const src = assetBaseUrl ? `${assetBaseUrl}/${asset.src}` : staticFile(asset.src);
         const from = Math.round(clip.start * fps);
         const durationInFrames = Math.max(1, Math.round((clip.out - clip.in) * fps));
-        const volume = Math.min(1, 10 ** ((clip.gain ?? 0) / 20));
+        const base = Math.min(1, 10 ** ((clip.gain ?? 0) / 20));
+        const shouldDuck = clip.role === "music" && clip.duckUnderVoice && voIntervals.length > 0;
+        const volume = shouldDuck
+          ? (f: number) => {
+              const t = clip.start + f / fps;
+              return voIntervals.some(([a, b]) => t >= a && t < b) ? base * DUCK : base;
+            }
+          : base;
         return (
           <Sequence key={clip.id} from={from} durationInFrames={durationInFrames}>
             <Audio

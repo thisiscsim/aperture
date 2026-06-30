@@ -1,4 +1,4 @@
-# Reel Studio
+# Aperture
 
 AI-assisted short-form video studio. Describe a post in plain English, drop in your clips, let an agent assemble a first cut, refine it on a timeline, get it graded, and export a vertical MP4 — all locally.
 
@@ -11,7 +11,7 @@ Two halves bridged by one file:
 - **The bridge** — each video is a folder under `projects/<slug>/` whose `edl.json` is the single source of truth. The agent writes it; the editor previews/edits it; the renderer exports it.
 
 ```
-reel-studio/
+aperture/
   app/                  Electron + Vite + React editor
   packages/edl/         Shared EDL schema (zod) + types
   .claude/skills/       create-social-video, critique-video

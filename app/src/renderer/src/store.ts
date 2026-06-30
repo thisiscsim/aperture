@@ -1,7 +1,47 @@
 import { create } from "zustand";
-import type { Edl } from "@reel/edl";
+import type { Edl, Meta } from "@reel/edl";
+import type { ProjectSummary } from "../../preload";
 
-export type RightTab = "inspector" | "design" | "critique";
+export type RightTab = "inspector" | "design" | "style" | "critique";
+export type Theme = "dark" | "light";
+export type View = "home" | "editor";
+
+const THEME_KEY = "aperture:theme";
+
+function initialTheme(): Theme {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    // localStorage unavailable; fall through to system preference
+  }
+  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: light)").matches) {
+    return "light";
+  }
+  return "dark";
+}
+
+function applyTheme(theme: Theme, persist = true): void {
+  if (typeof document !== "undefined") document.documentElement.dataset.theme = theme;
+  if (!persist) return;
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // persistence is best-effort
+  }
+}
+
+// Debounced persistence of edits back to projects/<slug>/edl.json. Editor edits
+// mutate the in-memory EDL immediately; we flush to disk shortly after so the
+// agent/renderer (which re-read the file) see the same source of truth.
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSave(slug: string | null, edl: Edl): void {
+  if (!slug) return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    void window.api?.saveEdl(slug, edl);
+  }, 400);
+}
 
 export interface ExportResult {
   ok: boolean;
@@ -10,15 +50,19 @@ export interface ExportResult {
 }
 
 interface EditorState {
+  view: View;
+  projects: ProjectSummary[];
   edl: Edl | null;
   slug: string | null;
   dir: string | null;
   promptText: string;
+  meta: Meta | null;
   loadError: string | null;
 
   selectedClipId: string | null;
   currentFrame: number;
   rightTab: RightTab;
+  theme: Theme;
   seek: (frame: number) => void;
 
   exporting: boolean;
@@ -27,15 +71,31 @@ interface EditorState {
   exportResult: ExportResult | null;
 
   generating: boolean;
+  autotuning: boolean;
+  notice: { kind: "error" | "info"; text: string } | null;
   reloadProject: () => void;
 
-  setProject: (p: { edl: Edl; slug?: string | null; dir?: string | null; promptText?: string }) => void;
+  setView: (view: View) => void;
+  setProjects: (projects: ProjectSummary[]) => void;
+  openProject: (slug: string) => void;
+  goHome: () => void;
+  setProject: (p: {
+    edl: Edl;
+    slug?: string | null;
+    dir?: string | null;
+    promptText?: string;
+    meta?: Meta | null;
+  }) => void;
+  setPromptText: (text: string) => void;
   setLoadError: (msg: string | null) => void;
   updateEdl: (mutate: (edl: Edl) => void) => void;
+  saveNow: () => Promise<void>;
   select: (id: string | null) => void;
   setCurrentFrame: (frame: number) => void;
   setRightTab: (tab: RightTab) => void;
   setSeek: (fn: (frame: number) => void) => void;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
 
   startExport: () => void;
   setExportProgress: (pct: number) => void;
@@ -44,19 +104,25 @@ interface EditorState {
   closeExport: () => void;
 
   setGenerating: (value: boolean) => void;
+  setAutotuning: (value: boolean) => void;
+  setNotice: (notice: { kind: "error" | "info"; text: string } | null) => void;
   setReload: (fn: () => void) => void;
 }
 
 export const useEditor = create<EditorState>()((set, get) => ({
+  view: "home",
+  projects: [],
   edl: null,
   slug: null,
   dir: null,
   promptText: "",
+  meta: null,
   loadError: null,
 
   selectedClipId: null,
   currentFrame: 0,
   rightTab: "inspector",
+  theme: initialTheme(),
   seek: () => {},
 
   exporting: false,
@@ -65,28 +131,50 @@ export const useEditor = create<EditorState>()((set, get) => ({
   exportResult: null,
 
   generating: false,
+  autotuning: false,
+  notice: null,
   reloadProject: () => {},
 
+  setView: (view) => set({ view }),
+  setProjects: (projects) => set({ projects }),
+  openProject: (slug) => set({ slug, view: "editor", edl: null, loadError: null, selectedClipId: null }),
+  goHome: () => set({ view: "home", selectedClipId: null }),
   setProject: (p) =>
     set({
       edl: p.edl,
       slug: p.slug ?? null,
       dir: p.dir ?? null,
       promptText: p.promptText ?? "",
+      meta: p.meta ?? null,
       loadError: null,
     }),
+  setPromptText: (text) => set({ promptText: text }),
+  saveNow: async () => {
+    const { slug, edl } = get();
+    if (slug && edl) await window.api?.saveEdl(slug, edl);
+  },
   setLoadError: (msg) => set({ loadError: msg }),
   updateEdl: (mutate) =>
     set((s) => {
       if (!s.edl) return {};
       const next = structuredClone(s.edl);
       mutate(next);
+      scheduleSave(s.slug, next);
       return { edl: next };
     }),
   select: (id) => set({ selectedClipId: id, rightTab: id ? "inspector" : get().rightTab }),
   setCurrentFrame: (frame) => set({ currentFrame: frame }),
   setRightTab: (tab) => set({ rightTab: tab }),
   setSeek: (fn) => set({ seek: fn }),
+  setTheme: (theme) => {
+    applyTheme(theme);
+    set({ theme });
+  },
+  toggleTheme: () => {
+    const theme: Theme = get().theme === "dark" ? "light" : "dark";
+    applyTheme(theme);
+    set({ theme });
+  },
 
   startExport: () => set({ exporting: true, exportProgress: 0, exportPhase: "preparing", exportResult: null }),
   setExportProgress: (pct) => set({ exportProgress: pct }),
@@ -95,5 +183,12 @@ export const useEditor = create<EditorState>()((set, get) => ({
   closeExport: () => set({ exportResult: null, exportProgress: 0, exportPhase: "" }),
 
   setGenerating: (value) => set({ generating: value }),
+  setAutotuning: (value) => set({ autotuning: value }),
+  setNotice: (notice) => set({ notice }),
   setReload: (fn) => set({ reloadProject: fn }),
 }));
+
+// Apply the persisted/system theme to <html> before the first paint. Don't
+// persist here, so a system-derived default keeps following the OS until the
+// user makes an explicit choice via the toggle.
+applyTheme(useEditor.getState().theme, false);

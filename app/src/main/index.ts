@@ -1,17 +1,113 @@
 import { spawn } from "node:child_process";
-import { createReadStream, readFileSync, statSync } from "node:fs";
-import { join, normalize } from "node:path";
+import {
+  copyFileSync,
+  createReadStream,
+  existsSync,
+  type FSWatcher,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  watch,
+  writeFileSync,
+} from "node:fs";
+import { basename, extname, join, normalize } from "node:path";
 import { Readable } from "node:stream";
-import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent, protocol, shell } from "electron";
-import { parseEdl } from "@reel/edl";
+import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
+import ffmpegPath from "ffmpeg-static";
+import {
+  type Benchmarks,
+  durationSeconds,
+  type Edl,
+  parseBenchmarks,
+  parseEdl,
+  parseEdlOrThrow,
+  parseMeta,
+  parseStyleProfile,
+  type StyleProfile,
+} from "@reel/edl";
 
 // In dev (electron-vite) __dirname is <repo>/app/out/main, so the repo root is
 // three levels up. Allow an override for packaged/other layouts.
 const REPO_ROOT = process.env["REEL_ROOT"] ?? join(__dirname, "..", "..", "..");
 const PROJECTS_DIR = process.env["REEL_PROJECTS_DIR"] ?? join(REPO_ROOT, "projects");
-const RENDER_SCRIPT = join(REPO_ROOT, "app", "scripts", "render.mjs");
-const ANALYZE_SCRIPT = join(REPO_ROOT, "app", "scripts", "analyze.mjs");
-const TRANSCRIBE_SCRIPT = join(REPO_ROOT, "app", "scripts", "transcribe.mjs");
+const ICON_PATH = join(REPO_ROOT, "app", "resources", "icon.png");
+const SCRIPTS_DIR = join(REPO_ROOT, "app", "scripts");
+const RENDER_SCRIPT = join(SCRIPTS_DIR, "render.mjs");
+const ANALYZE_SCRIPT = join(SCRIPTS_DIR, "analyze.mjs");
+const GENERATE_LLM_SCRIPT = join(SCRIPTS_DIR, "generate-llm.mjs");
+const CRITIQUE_LLM_SCRIPT = join(SCRIPTS_DIR, "critique-llm.mjs");
+const AUTOTUNE_LLM_SCRIPT = join(SCRIPTS_DIR, "autotune-llm.mjs");
+const TRANSCRIBE_SCRIPT = join(SCRIPTS_DIR, "transcribe.mjs");
+
+// Provider-agnostic LLM config (mirrors app/scripts/llm.mjs) so the UI can show
+// the active model and Generate can route to the LLM path vs the offline baseline.
+function llmInfo(): { provider: string; model: string; configured: boolean } {
+  const provider = (process.env["APERTURE_LLM_PROVIDER"] || "openai").toLowerCase();
+  const model = process.env["APERTURE_LLM_MODEL"] || "gpt-5.5";
+  const baseURL = process.env["APERTURE_LLM_BASE_URL"];
+  const apiKey =
+    process.env["APERTURE_LLM_API_KEY"] ||
+    (provider === "anthropic" ? process.env["ANTHROPIC_API_KEY"] : process.env["OPENAI_API_KEY"]) ||
+    process.env["OPENAI_API_KEY"] ||
+    process.env["ANTHROPIC_API_KEY"];
+  const configured = provider === "openai-compatible" ? Boolean(baseURL || apiKey) : Boolean(apiKey);
+  return { provider, model, configured };
+}
+const EXTRACT_FRAMES_SCRIPT = join(SCRIPTS_DIR, "extract-frames.mjs");
+const ANALYZE_STYLE_SCRIPT = join(SCRIPTS_DIR, "analyze-style.mjs");
+const ANALYZE_BENCHMARKS_SCRIPT = join(SCRIPTS_DIR, "analyze-benchmarks.mjs");
+const AUTOTUNE_SCRIPT = join(SCRIPTS_DIR, "autotune.mjs");
+const BUNDLED_MUSIC_DIR = join(REPO_ROOT, "app", "resources", "music");
+
+const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
+const AUDIO_EXT = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg"]);
+const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
+
+function assetKindFor(file: string): "video" | "audio" | "image" | null {
+  const ext = extname(file).toLowerCase();
+  if (VIDEO_EXT.has(ext)) return "video";
+  if (AUDIO_EXT.has(ext)) return "audio";
+  if (IMAGE_EXT.has(ext)) return "image";
+  return null;
+}
+
+/** Resolve + guard a path so it can never escape PROJECTS_DIR. */
+function safeProjectPath(slug: string, ...rel: string[]): string {
+  const file = normalize(join(PROJECTS_DIR, slug, ...rel));
+  if (!file.startsWith(normalize(PROJECTS_DIR))) throw new Error("path escapes projects dir");
+  return file;
+}
+
+// The macOS menu bar / dock tooltip / About panel use app.name, which defaults
+// to "Electron" in dev. Set it before the default menu is built. (Packaging
+// later should also set productName in the builder config.)
+app.setName("Aperture");
+
+// Load a local, gitignored env file (KEY=VALUE) so secrets like OPENAI_API_KEY
+// can live on disk instead of being exported into the launching shell. Existing
+// process env always wins. Runs at startup so spawned scripts inherit it.
+function loadLocalEnv(): void {
+  for (const file of [join(REPO_ROOT, "app", ".env.local"), join(REPO_ROOT, ".env.local")]) {
+    let text: string;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (!m || line.trimStart().startsWith("#")) continue;
+      let val = m[2];
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (!(m[1] in process.env)) process.env[m[1]] = val;
+    }
+  }
+}
+loadLocalEnv();
 
 // Serve project media to the sandboxed renderer (the Remotion Player can't read
 // file:// from an http origin). reel-asset://<slug>/<relPath> -> projects/<slug>/<relPath>
@@ -57,7 +153,8 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#16140f",
-    title: "Reel Studio",
+    title: "Aperture",
+    icon: ICON_PATH,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
@@ -77,6 +174,18 @@ function createWindow(): void {
   }
 }
 
+function readJson(file: string): unknown {
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
+function readMeta(slug: string) {
+  try {
+    return parseMeta(readJson(safeProjectPath(slug, "meta.json")));
+  } catch {
+    return parseMeta({});
+  }
+}
+
 function loadProject(slug: string) {
   try {
     const dir = join(PROJECTS_DIR, slug);
@@ -88,10 +197,323 @@ function loadProject(slug: string) {
     } catch {
       // prompt.md is optional
     }
-    return { ...result, slug, dir, promptText };
+    return { ...result, slug, dir, promptText, meta: readMeta(slug) };
   } catch (err) {
     return { ok: false, errors: [String(err)], slug };
   }
+}
+
+// We write edl.json from two places: the editor (autosave) and the agent/scripts.
+// Track our own writes so the file watcher doesn't echo a reload back to the UI
+// that just saved (which would clobber in-flight edits / loop).
+const lastSelfWrite = new Map<string, number>();
+let activeWatcher: { slug: string; watcher: FSWatcher } | null = null;
+
+function writeEdl(slug: string, edl: Edl): { ok: boolean; error?: string } {
+  try {
+    const validated = parseEdlOrThrow(edl);
+    const file = safeProjectPath(slug, "edl.json");
+    lastSelfWrite.set(slug, Date.now());
+    writeFileSync(file, `${JSON.stringify(validated, null, 2)}\n`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function touchMeta(slug: string, patch: Partial<ReturnType<typeof readMeta>>): void {
+  try {
+    const meta = { ...readMeta(slug), ...patch, updatedAt: new Date().toISOString() };
+    writeFileSync(safeProjectPath(slug, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
+  } catch {
+    // meta is best-effort
+  }
+}
+
+function watchProject(slug: string, event: IpcMainInvokeEvent): void {
+  activeWatcher?.watcher.close();
+  activeWatcher = null;
+  const file = safeProjectPath(slug, "edl.json");
+  if (!existsSync(file)) return;
+  let timer: NodeJS.Timeout | null = null;
+  const watcher = watch(file, () => {
+    // Ignore the echo from our own autosave.
+    if (Date.now() - (lastSelfWrite.get(slug) ?? 0) < 1200) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => event.sender.send("project:changed", slug), 200);
+  });
+  activeWatcher = { slug, watcher };
+}
+
+export interface ProjectSummary {
+  slug: string;
+  title: string;
+  platform: string;
+  status: string;
+  durationSec: number;
+  assetCount: number;
+  updatedAt?: string;
+}
+
+function slugify(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "project"
+  );
+}
+
+function listProjects(): ProjectSummary[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(PROJECTS_DIR);
+  } catch {
+    return [];
+  }
+  const summaries: ProjectSummary[] = [];
+  for (const slug of entries) {
+    const edlFile = join(PROJECTS_DIR, slug, "edl.json");
+    if (!existsSync(edlFile)) continue;
+    let durationSec = 0;
+    let assetCount = 0;
+    try {
+      const parsed = parseEdl(readJson(edlFile));
+      if (parsed.ok && parsed.edl) {
+        durationSec = durationSeconds(parsed.edl);
+        assetCount = parsed.edl.assets.length;
+      }
+    } catch {
+      // skip unreadable edl, still list the project
+    }
+    const meta = readMeta(slug);
+    let updatedAt = meta.updatedAt;
+    try {
+      if (!updatedAt) updatedAt = statSync(edlFile).mtime.toISOString();
+    } catch {
+      // ignore
+    }
+    summaries.push({
+      slug,
+      title: meta.title || slug,
+      platform: meta.platform,
+      status: meta.status,
+      durationSec,
+      assetCount,
+      updatedAt,
+    });
+  }
+  return summaries.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+}
+
+function createProject(input: {
+  title: string;
+  prompt?: string;
+  platform?: string;
+  styleProfileId?: string;
+}): { ok: boolean; slug?: string; error?: string } {
+  try {
+    const base = slugify(input.title);
+    let slug = base;
+    let n = 2;
+    while (existsSync(join(PROJECTS_DIR, slug))) slug = `${base}-${n++}`;
+    const dir = join(PROJECTS_DIR, slug);
+    for (const sub of ["assets", "references", "benchmarks", "transcripts", "renders"]) {
+      mkdirSync(join(dir, sub), { recursive: true });
+    }
+    const now = new Date().toISOString();
+    const meta = parseMeta({
+      title: input.title.trim() || slug,
+      createdAt: now,
+      updatedAt: now,
+      platform: input.platform ?? "reels",
+      status: "draft",
+      styleProfileId: input.styleProfileId,
+    });
+    writeFileSync(join(dir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
+    writeFileSync(join(dir, "prompt.md"), input.prompt?.trim() ? `${input.prompt.trim()}\n` : `# ${meta.title}\n`);
+    const emptyEdl = parseEdlOrThrow({ tracks: [{ id: "v", type: "video", clips: [] }] });
+    writeFileSync(join(dir, "edl.json"), `${JSON.stringify(emptyEdl, null, 2)}\n`);
+    return { ok: true, slug };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function deleteProject(slug: string): { ok: boolean; error?: string } {
+  try {
+    if (!slug || slug.includes("/") || slug.includes("\\")) return { ok: false, error: "invalid slug" };
+    const dir = safeProjectPath(slug);
+    if (normalize(dir) === normalize(PROJECTS_DIR)) return { ok: false, error: "invalid slug" };
+    if (activeWatcher?.slug === slug) {
+      activeWatcher.watcher.close();
+      activeWatcher = null;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function findFirstVideoSrc(slug: string): string | null {
+  // Prefer an asset declared in the EDL; fall back to scanning assets/.
+  try {
+    const parsed = parseEdl(readJson(safeProjectPath(slug, "edl.json")));
+    const asset = parsed.ok ? parsed.edl?.assets.find((a) => a.kind === "video") : undefined;
+    if (asset) return asset.src;
+  } catch {
+    // fall through
+  }
+  try {
+    const file = readdirSync(safeProjectPath(slug, "assets")).find((f) => assetKindFor(f) === "video");
+    if (file) return `assets/${file}`;
+  } catch {
+    // no assets dir
+  }
+  return null;
+}
+
+// Generate (and cache) a poster frame for the project's first video clip.
+async function ensureThumbnail(slug: string): Promise<string | null> {
+  const thumb = safeProjectPath(slug, ".thumb.jpg");
+  const edlFile = safeProjectPath(slug, "edl.json");
+  try {
+    if (existsSync(thumb) && statSync(thumb).mtimeMs >= statSync(edlFile).mtimeMs) {
+      return `reel-asset://${slug}/.thumb.jpg`;
+    }
+  } catch {
+    // regenerate
+  }
+  const src = findFirstVideoSrc(slug);
+  if (!src || !ffmpegPath) return null;
+  const input = safeProjectPath(slug, src);
+  const ok = await new Promise<boolean>((resolve) => {
+    const child = spawn(ffmpegPath as string, [
+      "-y",
+      "-ss",
+      "0.8",
+      "-i",
+      input,
+      "-frames:v",
+      "1",
+      "-vf",
+      "scale=360:-1",
+      thumb,
+    ]);
+    child.on("close", (code) => resolve(code === 0));
+    child.on("error", () => resolve(false));
+  });
+  return ok ? `reel-asset://${slug}/.thumb.jpg` : null;
+}
+
+export interface ImportedAsset {
+  id: string;
+  kind: "video" | "audio" | "image";
+  src: string;
+  durationSec?: number;
+}
+
+// Parse a media file's duration out of ffmpeg's stderr banner. ffmpeg-static is
+// already a dependency (used by transcribe.mjs); ffprobe isn't bundled.
+function probeDurationSec(file: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    if (!ffmpegPath) return resolve(undefined);
+    const child = spawn(ffmpegPath as string, ["-i", file]);
+    let err = "";
+    child.stderr.on("data", (c: Buffer) => (err += c.toString()));
+    child.on("close", () => {
+      const m = err.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      resolve(m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : undefined);
+    });
+    child.on("error", () => resolve(undefined));
+  });
+}
+
+function uniqueDest(dir: string, name: string): { name: string; dest: string } {
+  const ext = extname(name);
+  const stem = basename(name, ext);
+  let candidate = name;
+  let dest = join(dir, candidate);
+  let i = 2;
+  while (existsSync(dest)) {
+    candidate = `${stem}-${i++}${ext}`;
+    dest = join(dir, candidate);
+  }
+  return { name: candidate, dest };
+}
+
+async function describeAsset(dir: string, name: string): Promise<ImportedAsset | null> {
+  const kind = assetKindFor(name);
+  if (!kind) return null;
+  const durationSec = kind === "image" ? undefined : await probeDurationSec(join(dir, name));
+  const id = basename(name, extname(name)).replace(/[^a-zA-Z0-9_-]+/g, "-");
+  return { id, kind, src: `assets/${name}`, durationSec };
+}
+
+async function importAssets(slug: string, paths: string[]): Promise<{ ok: boolean; assets: ImportedAsset[] }> {
+  const dir = safeProjectPath(slug, "assets");
+  mkdirSync(dir, { recursive: true });
+  const added: ImportedAsset[] = [];
+  for (const p of paths) {
+    if (!assetKindFor(p)) continue;
+    const { name, dest } = uniqueDest(dir, basename(p));
+    copyFileSync(p, dest);
+    const desc = await describeAsset(dir, name);
+    if (desc) added.push(desc);
+  }
+  return { ok: true, assets: added };
+}
+
+async function importAssetBuffer(
+  slug: string,
+  filename: string,
+  data: Uint8Array,
+): Promise<{ ok: boolean; assets: ImportedAsset[] }> {
+  const dir = safeProjectPath(slug, "assets");
+  mkdirSync(dir, { recursive: true });
+  const { name, dest } = uniqueDest(dir, filename);
+  writeFileSync(dest, Buffer.from(data));
+  const desc = await describeAsset(dir, name);
+  return { ok: true, assets: desc ? [desc] : [] };
+}
+
+function listBundledMusic(): string[] {
+  try {
+    return readdirSync(BUNDLED_MUSIC_DIR).filter((f) => AUDIO_EXT.has(extname(f).toLowerCase()));
+  } catch {
+    return [];
+  }
+}
+
+async function importBundledMusic(
+  slug: string,
+  name: string,
+): Promise<{ ok: boolean; assets: ImportedAsset[]; error?: string }> {
+  const source = join(BUNDLED_MUSIC_DIR, basename(name));
+  if (!source.startsWith(normalize(BUNDLED_MUSIC_DIR)) || !existsSync(source)) {
+    return { ok: false, assets: [], error: "unknown track" };
+  }
+  return importAssets(slug, [source]);
+}
+
+function importInto(
+  slug: string,
+  sub: string,
+  paths: string[],
+): { ok: boolean; files: string[] } {
+  const dir = safeProjectPath(slug, sub);
+  mkdirSync(dir, { recursive: true });
+  const files: string[] = [];
+  for (const p of paths) {
+    if (assetKindFor(p) !== "video") continue;
+    const { name, dest } = uniqueDest(dir, basename(p));
+    copyFileSync(p, dest);
+    files.push(name);
+  }
+  return { ok: true, files };
 }
 
 function runScript(
@@ -99,9 +521,13 @@ function runScript(
   slug: string,
   event: IpcMainInvokeEvent,
   channelPrefix: string,
+  extraArgs: string[] = [],
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn("node", [scriptPath, "--slug", slug], { cwd: REPO_ROOT, env: process.env });
+    const child = spawn("node", [scriptPath, "--slug", slug, ...extraArgs], {
+      cwd: REPO_ROOT,
+      env: process.env,
+    });
     let output = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -124,6 +550,13 @@ function runScript(
 }
 
 app.whenReady().then(() => {
+  // macOS ignores the BrowserWindow `icon`; set the dock icon so the app shows
+  // its own icon instead of the default Electron one (matters most in dev).
+  if (process.platform === "darwin" && app.dock) {
+    const dockIcon = nativeImage.createFromPath(ICON_PATH);
+    if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon);
+  }
+
   protocol.handle("reel-asset", (request) => {
     const url = new URL(request.url);
     const slug = url.hostname;
@@ -169,13 +602,144 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("ping", () => "pong");
+  ipcMain.handle("projects:list", () => listProjects());
+  ipcMain.handle(
+    "project:create",
+    (_event, input: { title: string; prompt?: string; platform?: string; styleProfileId?: string }) =>
+      createProject(input),
+  );
+  ipcMain.handle("project:thumbnail", (_event, slug: string) => ensureThumbnail(slug));
+  ipcMain.handle("project:delete", (_event, slug: string) => deleteProject(slug));
   ipcMain.handle("project:load", (_event, slug: string) => loadProject(slug));
+  ipcMain.handle("project:watch", (event, slug: string) => {
+    watchProject(slug, event);
+    return { ok: true };
+  });
+  ipcMain.handle("edl:save", (_event, slug: string, edl: Edl) => writeEdl(slug, edl));
+  ipcMain.handle("prompt:save", (_event, slug: string, text: string) => {
+    try {
+      writeFileSync(safeProjectPath(slug, "prompt.md"), text);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+  ipcMain.handle("meta:load", (_event, slug: string) => readMeta(slug));
+  ipcMain.handle("meta:save", (_event, slug: string, patch: Record<string, unknown>) => {
+    touchMeta(slug, patch);
+    return { ok: true };
+  });
+  ipcMain.handle("asset:import", (_event, slug: string, paths: string[]) => importAssets(slug, paths));
+  ipcMain.handle("asset:importBuffer", (_event, slug: string, filename: string, data: Uint8Array) =>
+    importAssetBuffer(slug, filename, data),
+  );
+  ipcMain.handle("music:listBundled", () => listBundledMusic());
+  ipcMain.handle("music:importBundled", (_event, slug: string, name: string) =>
+    importBundledMusic(slug, name),
+  );
+  ipcMain.handle("references:import", (_event, slug: string, paths: string[]) =>
+    importInto(slug, "references", paths),
+  );
+  ipcMain.handle("references:list", (_event, slug: string) => {
+    try {
+      return readdirSync(safeProjectPath(slug, "references")).filter((f) => assetKindFor(f) === "video");
+    } catch {
+      return [];
+    }
+  });
+  ipcMain.handle("style:learn", async (event, slug: string) => {
+    // Frames (for the agent's eyes) then deterministic features -> style.json.
+    await runScript(EXTRACT_FRAMES_SCRIPT, slug, event, "style");
+    const res = await runScript(ANALYZE_STYLE_SCRIPT, slug, event, "style");
+    if (res.ok) touchMeta(slug, { styleProfileId: "learned" });
+    return res;
+  });
+  ipcMain.handle("style:load", (_event, slug: string): StyleProfile | null => {
+    try {
+      return parseStyleProfile(readJson(safeProjectPath(slug, "style.json")));
+    } catch {
+      return null;
+    }
+  });
+  ipcMain.handle("benchmark:import", (_event, slug: string, paths: string[]) =>
+    importInto(slug, "benchmarks", paths),
+  );
+  ipcMain.handle("benchmark:list", (_event, slug: string) => {
+    try {
+      const dir = safeProjectPath(slug, "benchmarks");
+      const metaFile = join(dir, "benchmarks.meta.json");
+      const metrics = existsSync(metaFile) ? (readJson(metaFile) as Record<string, unknown>) : {};
+      return readdirSync(dir)
+        .filter((f) => assetKindFor(f) === "video")
+        .map((file) => ({ file, ...(metrics[file] as object | undefined) }));
+    } catch {
+      return [];
+    }
+  });
+  ipcMain.handle(
+    "benchmark:saveMetrics",
+    (_event, slug: string, file: string, m: { views?: number; likes?: number }) => {
+      try {
+        const metaFile = safeProjectPath(slug, "benchmarks", "benchmarks.meta.json");
+        const metrics = existsSync(metaFile) ? (readJson(metaFile) as Record<string, unknown>) : {};
+        metrics[file] = { ...(metrics[file] as object | undefined), ...m };
+        writeFileSync(metaFile, `${JSON.stringify(metrics, null, 2)}\n`);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    },
+  );
+  ipcMain.handle("benchmarks:analyze", (event, slug: string) =>
+    runScript(ANALYZE_BENCHMARKS_SCRIPT, slug, event, "benchmarks"),
+  );
+  ipcMain.handle("benchmarks:load", (_event, slug: string): Benchmarks | null => {
+    try {
+      return parseBenchmarks(readJson(safeProjectPath(slug, "benchmarks.json")));
+    } catch {
+      return null;
+    }
+  });
+  // Auto-improve uses the LLM critique-in-the-loop when configured; otherwise the
+  // deterministic fix loop.
+  ipcMain.handle("autotune:start", (event, slug: string) =>
+    runScript(llmInfo().configured ? AUTOTUNE_LLM_SCRIPT : AUTOTUNE_SCRIPT, slug, event, "autotune"),
+  );
+  // LLM critique writes critique.json; requires a configured model.
+  ipcMain.handle("critique:run", (event, slug: string) => {
+    if (!llmInfo().configured) {
+      return Promise.resolve({ ok: false, error: "No model configured (set OPENAI_API_KEY in app/.env.local)." });
+    }
+    return runScript(CRITIQUE_LLM_SCRIPT, slug, event, "critique");
+  });
+  ipcMain.handle("autotune:results", (_event, slug: string) => {
+    try {
+      const rows = readFileSync(safeProjectPath(slug, "results.tsv"), "utf8")
+        .trim()
+        .split("\n")
+        .slice(1)
+        .filter(Boolean)
+        .map((line) => {
+          const [iter, score, delta, change] = line.split("\t");
+          return { iter: Number(iter), score: Number(score), delta, change };
+        });
+      return rows;
+    } catch {
+      return [];
+    }
+  });
   ipcMain.handle("export:start", (event, slug: string) =>
     runScript(RENDER_SCRIPT, slug, event, "export"),
   );
+  // Generate runs the LLM editor (reads prompt + style, crafts a real edit) when
+  // a model is configured; otherwise the deterministic offline baseline.
   ipcMain.handle("generate:start", (event, slug: string) =>
-    runScript(ANALYZE_SCRIPT, slug, event, "generate"),
+    runScript(llmInfo().configured ? GENERATE_LLM_SCRIPT : ANALYZE_SCRIPT, slug, event, "generate"),
   );
+  ipcMain.handle("generate:mode", () => {
+    const info = llmInfo();
+    return { mode: info.configured ? "llm" : "baseline", provider: info.provider, model: info.model };
+  });
   ipcMain.handle("transcribe:start", (event, slug: string) =>
     runScript(TRANSCRIBE_SCRIPT, slug, event, "transcribe"),
   );
