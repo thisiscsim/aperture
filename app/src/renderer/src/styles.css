@@ -1079,7 +1079,8 @@ input[type="range"] {
   background: var(--background-primary);
   border: 1px solid var(--border-base);
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  /* No overflow:hidden — the ⋯ dropdown must escape the card. The media
+     clips its own corners instead. */
   cursor: pointer;
   padding: 0;
   color: var(--foreground-primary);
@@ -1091,6 +1092,9 @@ input[type="range"] {
   border-color: var(--border-secondary);
   box-shadow: var(--shadow-card);
   transform: translateY(-2px);
+  /* The hover transform creates a stacking context; lift it above sibling
+     cards so an open dropdown never paints underneath a neighbor. */
+  z-index: 2;
 }
 
 .project-card-media {
@@ -1100,6 +1104,8 @@ input[type="range"] {
   display: grid;
   place-items: center;
   overflow: hidden;
+  /* card radius (6) minus its 1px border */
+  border-radius: 5px 5px 0 0;
 }
 
 .project-card-media img {
