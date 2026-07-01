@@ -1084,12 +1084,13 @@ input[type="range"] {
   padding: 0;
   color: var(--foreground-primary);
   text-align: left;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 150ms ease;
 }
 
 .project-card:hover {
   border-color: var(--border-secondary);
   box-shadow: var(--shadow-card);
+  transform: translateY(-2px);
 }
 
 .project-card-media {
