@@ -83,6 +83,10 @@ With no key set, Generate falls back to the deterministic baseline assembly and 
 
 Generation, critique, and auto-improve send **text** — the `edl.json` edit plan, your `prompt.md`, the resolved style profile, and benchmark feature stats — never your clips. The one exception is **Style Library analysis**, which sends *sampled still frames* of your reference videos to the model (once per profile) so it can see the aesthetic; your source video/audio files themselves are never uploaded. Clip probing, frame sampling, transcription (whisper.cpp), preview, and export all run locally. With no model configured, nothing leaves your machine.
 
+## Where your work is stored
+
+Projects and the style library are **user data**, not part of the repo. By default they live in **`~/Documents/Aperture/`** (`projects/` and `styles/`), so they're never committed or bundled into the app. You can change the location in Settings (gear icon → Projects folder); a restart applies it. Dev overrides: `APERTURE_HOME` (root), `REEL_PROJECTS_DIR`, `APERTURE_STYLES_DIR`. A sample project for development lives in `fixtures/sample-project/`.
+
 ## Develop
 
 ```bash

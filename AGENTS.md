@@ -38,7 +38,7 @@ Per-project sidecar files (each has its own schema + `parse*` helper in `package
 
 ## Boundaries
 
-- Generated artifacts live under `projects/<slug>/`. Don't write outside a project folder except code changes you were explicitly asked to make.
+- Generated artifacts live under `projects/<slug>/`. In the app these resolve to the user's Aperture home (`~/Documents/Aperture/projects/`, configurable); the scripts honor `APERTURE_PROJECTS_DIR` and fall back to the repo's `projects/` in dev. Don't write outside a project folder except code changes you were explicitly asked to make.
 - Vertical 1080x1920 @ 30fps is the default format.
 - Keep the design system lightweight: font, palette, caption style, simple overlays — all driven by `theme`. Don't hardcode styling that belongs in `theme`.
 - Only reference assets that actually exist in the project's `assets/` and are listed in `edl.assets`.

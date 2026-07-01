@@ -31,7 +31,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(repoRoot, "projects", slug);
+  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edlPath = path.join(projectDir, "edl.json");
   const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
 

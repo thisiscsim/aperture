@@ -114,6 +114,10 @@ const api = {
   // Global style library
   listStyles: (): Promise<StyleSummary[]> => ipcRenderer.invoke("styles:list"),
   createStyle: (name: string): Promise<CreateStyleResult> => ipcRenderer.invoke("styles:create", name),
+  newStyleFromDialog: (
+    mode: "files" | "folder",
+  ): Promise<{ ok: boolean; id?: string; name?: string; files?: string[]; canceled?: boolean; error?: string }> =>
+    ipcRenderer.invoke("styles:newFromDialog", mode),
   addStyleSources: (id: string, mode: "files" | "folder"): Promise<ImportFilesResult> =>
     ipcRenderer.invoke("styles:addFromDialog", id, mode),
   analyzeStyle: (id: string): Promise<ExportResult> => ipcRenderer.invoke("styles:analyze", id),
@@ -141,6 +145,16 @@ const api = {
   loadCritique: (slug: string): Promise<unknown> => ipcRenderer.invoke("critique:load", slug),
   runCritique: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("critique:run", slug),
   revealItem: (filePath: string): Promise<void> => ipcRenderer.invoke("shell:reveal", filePath),
+  getSettings: (): Promise<{ hwDecode: boolean; hwEncode: boolean; homeDir?: string }> =>
+    ipcRenderer.invoke("settings:get"),
+  setSettings: (
+    patch: Partial<{ hwDecode: boolean; hwEncode: boolean; homeDir?: string }>,
+  ): Promise<{ hwDecode: boolean; hwEncode: boolean; homeDir?: string }> =>
+    ipcRenderer.invoke("settings:set", patch),
+  getProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:get"),
+  revealProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:reveal"),
+  pickProjectsDir: (): Promise<{ ok: boolean; homeDir?: string; canceled?: boolean }> =>
+    ipcRenderer.invoke("home:pick"),
   onExportProgress: (cb: (pct: number) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, pct: number) => cb(pct);
     ipcRenderer.on("export:progress", listener);

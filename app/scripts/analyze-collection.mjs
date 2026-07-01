@@ -93,7 +93,7 @@ function resolvePaths() {
     return { sourcesDir: path.join(styleDir, "sources"), outDir: styleDir, profileName: "profile.json" };
   }
   if (slug) {
-    const projectDir = path.join(repoRoot, "projects", slug);
+    const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
     return { sourcesDir: path.join(projectDir, "references"), outDir: projectDir, profileName: "style.json" };
   }
   throw new Error("missing --styleDir or --slug");

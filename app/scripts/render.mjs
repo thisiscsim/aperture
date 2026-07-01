@@ -19,7 +19,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(repoRoot, "projects", slug);
+  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edl = JSON.parse(fs.readFileSync(path.join(projectDir, "edl.json"), "utf8"));
 
   const entryPoint = path.join(repoRoot, "app", "src", "renderer", "src", "motion", "index.ts");
@@ -40,12 +40,16 @@ async function main() {
   const composition = await selectComposition({ serveUrl, id: "SocialVideo", inputProps });
 
   console.log("PHASE rendering");
+  // Hardware-accelerated encode when the user enabled it (VideoToolbox on macOS,
+  // etc.); "if-possible" falls back to software when unavailable.
+  const hardwareAcceleration = process.argv.includes("--hwaccel") ? "if-possible" : "disable";
   await renderMedia({
     composition,
     serveUrl,
     codec: "h264",
     outputLocation: output,
     inputProps,
+    hardwareAcceleration,
     onProgress: ({ progress }) => console.log(`PROGRESS ${Math.round(progress * 100)}`),
   });
 
