@@ -5,8 +5,10 @@ export function ThemeToggle(): JSX.Element {
   const toggleTheme = useEditor((s) => s.toggleTheme);
   const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
   return (
-    <button className="btn icon" onClick={toggleTheme} title={label} aria-label={label}>
-      {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+    <button className="ui-icon-btn" onClick={toggleTheme} title={label} aria-label={label}>
+      <span className="icon" style={{ width: 16, height: 16 }}>
+        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+      </span>
     </button>
   );
 }
