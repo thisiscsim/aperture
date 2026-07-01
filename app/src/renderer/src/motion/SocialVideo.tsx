@@ -113,6 +113,7 @@ const CrossfadeVideo: FC<{
     style = exitStyle(clip.transitionOut?.preset ?? "fade", p);
   }
 
+  const grade = edl.theme.grade;
   return (
     <AbsoluteFill style={style}>
       <OffthreadVideo
@@ -120,10 +121,28 @@ const CrossfadeVideo: FC<{
         trimBefore={Math.round(clip.in * fps)}
         trimAfter={Math.round(clip.out * fps)}
         volume={clip.volume ?? 1}
-        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        style={{ width: "100%", height: "100%", objectFit: "cover", filter: gradeFilter(grade) }}
       />
+      {grade && grade.vignette > 0 && (
+        <AbsoluteFill
+          style={{
+            background: `radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0,0,0,${grade.vignette}) 100%)`,
+          }}
+        />
+      )}
     </AbsoluteFill>
   );
+}
+
+// Light color grade as a CSS filter (no footage-transformation pipeline).
+function gradeFilter(grade: Edl["theme"]["grade"]): string | undefined {
+  if (!grade) return undefined;
+  const parts: string[] = [];
+  if (grade.brightness !== 1) parts.push(`brightness(${grade.brightness})`);
+  if (grade.contrast !== 1) parts.push(`contrast(${grade.contrast})`);
+  if (grade.saturation !== 1) parts.push(`saturate(${grade.saturation})`);
+  if (grade.temperature) parts.push(`hue-rotate(${grade.temperature}deg)`);
+  return parts.length ? parts.join(" ") : undefined;
 };
 
 // p goes 0 -> 1 as the clip enters.

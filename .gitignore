@@ -17,5 +17,8 @@ projects/*/.thumb.jpg
 !projects/*/references/.gitkeep
 !projects/*/benchmarks/.gitkeep
 
+# Global style library = the creator's personal reference videos + learned profiles
+styles/
+
 .env
 .env.local

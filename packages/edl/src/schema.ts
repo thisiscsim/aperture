@@ -20,6 +20,21 @@ export const SafeMarginsSchema = z.object({
   right: z.number().nonnegative().default(64),
 });
 
+/**
+ * A light color grade applied to video clips at render time (CSS filters, not a
+ * footage-transformation pipeline). Neutral defaults = no visible change.
+ */
+export const GradeSchema = z.object({
+  /** Multipliers around 1.0 (e.g. 1.1 = +10%). */
+  brightness: z.number().positive().default(1),
+  contrast: z.number().positive().default(1),
+  saturation: z.number().nonnegative().default(1),
+  /** Warm/cool tint, degrees of hue rotation (-30..30 typical, 0 = none). */
+  temperature: z.number().default(0),
+  /** Vignette strength 0..1 (0 = none). */
+  vignette: z.number().min(0).max(1).default(0),
+});
+
 export const ThemeSchema = z.object({
   fontFamily: z.string().default("Inter"),
   palette: z.array(z.string()).min(1).default(["#FAFAF9", "#0F0E0D", "#E8B04B"]),
@@ -27,6 +42,8 @@ export const ThemeSchema = z.object({
   safeMargins: SafeMarginsSchema.default({}),
   /** Id of the named visual-style preset this theme was seeded from (if any). */
   stylePreset: z.string().optional(),
+  /** Optional color grade applied to all video clips. */
+  grade: GradeSchema.optional(),
 });
 
 /** A scene transition between/over clips. `preset` maps to a Remotion presentation or a gl-transition name. */
@@ -160,9 +177,26 @@ export const MetaSchema = z.object({
 });
 
 /**
- * A learned (or selected) aesthetic profile (projects/<slug>/style.json). The
- * `learn-aesthetic` skill writes this from the creator's uploaded references;
- * generation reads it to bake in palette, pacing, captions, and hook feel.
+ * A compact, structural distillation of one reference video's edit — the
+ * retrievable "exemplar" generation imitates (in-context learning).
+ */
+export const StyleExemplarSchema = z.object({
+  source: z.string().optional(),
+  hook: z.string().optional(),
+  beats: z.string().optional(),
+  captionStyle: z.string().optional(),
+  textTreatment: z.string().optional(),
+  transitions: z.array(z.string()).default([]),
+  gradeNote: z.string().optional(),
+  durationSec: z.number().optional(),
+  cutsPer10s: z.number().optional(),
+});
+
+/**
+ * A learned (or selected) aesthetic profile. Lives either per-project
+ * (projects/<slug>/style.json) or in the global library (styles/<id>/profile.json).
+ * Generation reads it to bake in palette, grade, pacing, captions, and hook feel,
+ * and retrieves `exemplars` to imitate concrete edit structure.
  */
 export const StyleProfileSchema = z.object({
   id: z.string().default("custom"),
@@ -170,6 +204,7 @@ export const StyleProfileSchema = z.object({
   palette: z.array(z.string()).default([]),
   fontFamily: z.string().optional(),
   captionStyle: z.enum(["karaoke", "block", "word", "none"]).optional(),
+  grade: GradeSchema.optional(),
   pacing: z
     .object({
       cutsPer10s: z.number().nonnegative().optional(),
@@ -177,12 +212,23 @@ export const StyleProfileSchema = z.object({
     })
     .default({}),
   hookPattern: z.string().optional(),
+  hookSec: z.number().nonnegative().optional(),
+  textTreatment: z.string().optional(),
+  transitions: z.array(z.string()).default([]),
   /** 0 = calm/cinematic, 1 = frenetic/high-energy. */
   energy: z.number().min(0).max(1).optional(),
+  /** 0 = no music drive, 1 = tightly beat-synced. */
+  musicEnergy: z.number().min(0).max(1).optional(),
   targetLengthSec: z.number().positive().optional(),
+  /** Long-form prose style guide the model reads to imitate the look/feel. */
+  styleGuide: z.string().optional(),
+  /** Per-reference structural exemplars for in-context imitation. */
+  exemplars: z.array(StyleExemplarSchema).default([]),
   do: z.array(z.string()).default([]),
   avoid: z.array(z.string()).default([]),
   notes: z.string().optional(),
+  /** Number of source clips analyzed + when. */
+  source: z.object({ clips: z.number(), generatedAt: z.string() }).partial().optional(),
 });
 
 /** Per-benchmark-video extracted features (one entry per file in benchmarks/). */

@@ -9,7 +9,9 @@ import type {
   CaptionWordSchema,
   EdlSchema,
   FormatSchema,
+  GradeSchema,
   MetaSchema,
+  StyleExemplarSchema,
   StyleProfileSchema,
   TextAnimSchema,
   TextClipSchema,
@@ -42,6 +44,8 @@ export type TextClip = z.infer<typeof TextClipSchema>;
 export type AudioClip = z.infer<typeof AudioClipSchema>;
 
 export type Meta = z.infer<typeof MetaSchema>;
+export type Grade = z.infer<typeof GradeSchema>;
 export type StyleProfile = z.infer<typeof StyleProfileSchema>;
+export type StyleExemplar = z.infer<typeof StyleExemplarSchema>;
 export type Benchmarks = z.infer<typeof BenchmarksSchema>;
 export type BenchmarkFeature = z.infer<typeof BenchmarkFeatureSchema>;

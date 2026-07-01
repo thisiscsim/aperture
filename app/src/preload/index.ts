@@ -57,6 +57,20 @@ export interface ImportFilesResult {
   error?: string;
 }
 
+export interface StyleSummary {
+  id: string;
+  name: string;
+  clips: number;
+  analyzed: boolean;
+  updatedAt?: string;
+}
+
+export interface CreateStyleResult {
+  ok: boolean;
+  id?: string;
+  error?: string;
+}
+
 /**
  * The safe bridge between the sandboxed renderer and the Node-capable main
  * process. Privileged operations (read project, render, reveal files) are
@@ -97,6 +111,14 @@ const api = {
   listReferences: (slug: string): Promise<string[]> => ipcRenderer.invoke("references:list", slug),
   learnStyle: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("style:learn", slug),
   loadStyle: (slug: string): Promise<StyleProfile | null> => ipcRenderer.invoke("style:load", slug),
+  // Global style library
+  listStyles: (): Promise<StyleSummary[]> => ipcRenderer.invoke("styles:list"),
+  createStyle: (name: string): Promise<CreateStyleResult> => ipcRenderer.invoke("styles:create", name),
+  addStyleSources: (id: string, mode: "files" | "folder"): Promise<ImportFilesResult> =>
+    ipcRenderer.invoke("styles:addFromDialog", id, mode),
+  analyzeStyle: (id: string): Promise<ExportResult> => ipcRenderer.invoke("styles:analyze", id),
+  getStyle: (id: string): Promise<StyleProfile | null> => ipcRenderer.invoke("styles:get", id),
+  deleteStyle: (id: string): Promise<SaveResult> => ipcRenderer.invoke("styles:delete", id),
   importBenchmarks: (slug: string, paths: string[]): Promise<ImportFilesResult> =>
     ipcRenderer.invoke("benchmark:import", slug, paths),
   listBenchmarks: (slug: string): Promise<{ file: string; views?: number; likes?: number }[]> =>
