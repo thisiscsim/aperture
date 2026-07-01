@@ -81,7 +81,7 @@ async function main() {
     process.exit(3);
   }
 
-  const projectDir = path.join(repoRoot, "projects", slug);
+  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edlRaw = readMaybe(path.join(projectDir, "edl.json"));
   if (!edlRaw) {
     console.error("ERROR no edl.json to critique");

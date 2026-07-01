@@ -24,7 +24,7 @@ async function main() {
   if (!slug) throw new Error("missing --slug");
   const sub = arg("dir") ?? "references";
 
-  const dir = path.join(repoRoot, "projects", slug, sub);
+  const dir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug, sub);
   const framesDir = path.join(dir, ".frames");
   fs.mkdirSync(framesDir, { recursive: true });
 

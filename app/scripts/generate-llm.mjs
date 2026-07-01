@@ -42,17 +42,48 @@ function readJsonMaybe(file) {
   }
 }
 
-// Resolve the active style profile: a project's own style.json (override) wins;
-// otherwise the global library profile referenced by meta.styleProfileId.
-function resolveStyleProfile(projectDir) {
-  const local = readJsonMaybe(path.join(projectDir, "style.json"));
-  if (local) return local;
-  const meta = readJsonMaybe(path.join(projectDir, "meta.json")) ?? {};
-  if (meta.styleProfileId) {
-    const stylesDir = process.env.APERTURE_STYLES_DIR || path.join(repoRoot, "styles");
-    return readJsonMaybe(path.join(stylesDir, meta.styleProfileId, "profile.json"));
+function stylesDir() {
+  return process.env.APERTURE_STYLES_DIR || path.join(repoRoot, "styles");
+}
+
+// A profile is "analyzed" (rich) once the LLM has distilled a guide/exemplars;
+// the deterministic baseline has neither.
+function isAnalyzed(p) {
+  return Boolean(p && (p.styleGuide || (Array.isArray(p.exemplars) && p.exemplars.length > 0)));
+}
+
+// Resolve the active style + where to (re)analyze it from:
+//   1. project's own style.json (override)  -> analyze via --slug references
+//   2. meta.styleProfileId library profile   -> analyze via --styleDir
+//   3. exactly one library style exists       -> auto-select it
+function resolveActiveStyle(projectDir, slug) {
+  const localPath = path.join(projectDir, "style.json");
+  if (fs.existsSync(localPath)) {
+    return { profile: readJsonMaybe(localPath), kind: "project", analyzeArgs: ["--slug", slug], profilePath: localPath };
   }
-  return null;
+  const meta = readJsonMaybe(path.join(projectDir, "meta.json")) ?? {};
+  const dir = stylesDir();
+  let id = meta.styleProfileId;
+  if (!id) {
+    try {
+      const dirs = fs
+        .readdirSync(dir)
+        .filter((d) => fs.existsSync(path.join(dir, d, "sources")) || fs.existsSync(path.join(dir, d, "profile.json")));
+      if (dirs.length === 1) id = dirs[0];
+    } catch {
+      // no library
+    }
+  }
+  if (id) {
+    const styleDir = path.join(dir, id);
+    return {
+      profile: readJsonMaybe(path.join(styleDir, "profile.json")),
+      kind: "library",
+      analyzeArgs: ["--styleDir", styleDir],
+      profilePath: path.join(styleDir, "profile.json"),
+    };
+  }
+  return { profile: null };
 }
 
 // Turn a profile into concrete directives + retrieved exemplars for the prompt.
@@ -114,7 +145,7 @@ async function main() {
     process.exit(3);
   }
 
-  const projectDir = path.join(repoRoot, "projects", slug);
+  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edlPath = path.join(projectDir, "edl.json");
 
   // 1) Deterministic baseline (probes clips, writes a valid edl.json skeleton).
@@ -130,7 +161,20 @@ async function main() {
 
   const baselineJson = readMaybe(edlPath);
   const promptMd = readMaybe(path.join(projectDir, "prompt.md"));
-  const profile = resolveStyleProfile(projectDir);
+
+  // Resolve the active style and lazily analyze it (once, cached) so the user
+  // never has to click Analyze/Use manually.
+  const active = resolveActiveStyle(projectDir, slug);
+  if (active.analyzeArgs && !isAnalyzed(active.profile)) {
+    console.log("PHASE learning your style");
+    const r = spawnSync("node", [path.join(__dirname, "analyze-collection.mjs"), ...active.analyzeArgs], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    if (r.status === 0) active.profile = readJsonMaybe(active.profilePath) ?? active.profile;
+    // If analysis fails (e.g. no source clips), continue with whatever profile exists.
+  }
+  const profile = active.profile;
 
   const { provider, model } = llmConfig();
   console.log(`PHASE editing with ${provider}/${model}${profile ? ` (style: ${profile.name ?? profile.id})` : ""}`);

@@ -4,20 +4,10 @@ dist/
 .DS_Store
 *.log
 
-# Generated / uploaded media artifacts (keep folder structure via .gitkeep)
-projects/*/assets/*
-projects/*/renders/*
-projects/*/transcripts/*
-projects/*/references/*
-projects/*/benchmarks/*
-projects/*/.thumb.jpg
-!projects/*/assets/.gitkeep
-!projects/*/renders/.gitkeep
-!projects/*/transcripts/.gitkeep
-!projects/*/references/.gitkeep
-!projects/*/benchmarks/.gitkeep
-
-# Global style library = the creator's personal reference videos + learned profiles
+# User data lives in ~/Documents/Aperture (configurable), never in the repo.
+# Any local projects/ or styles/ (e.g. from a dev APERTURE_HOME override) are ignored.
+# The tracked sample project lives in fixtures/sample-project instead.
+projects/
 styles/
 
 .env

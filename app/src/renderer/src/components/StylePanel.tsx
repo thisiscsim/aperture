@@ -27,17 +27,19 @@ export function StylePanel(): JSX.Element {
   useEffect(refresh, [refresh]);
 
   useEffect(() => {
-    if (activeId && !localProfile) window.api?.getStyle(activeId).then(setActiveProfile).catch(() => {});
+    const eid = activeId ?? (styles.length === 1 ? styles[0].id : undefined);
+    if (eid && !localProfile) window.api?.getStyle(eid).then(setActiveProfile).catch(() => {});
     else setActiveProfile(null);
-  }, [activeId, localProfile]);
+  }, [activeId, localProfile, styles]);
 
+  // Open the native folder picker directly and name the style after the folder.
   const newStyle = async () => {
-    const name = window.prompt("Name this style (e.g. 'My TikTok look')");
-    if (!name?.trim()) return;
-    const res = await window.api.createStyle(name.trim());
-    if (res.ok && res.id) {
-      await window.api.addStyleSources(res.id, "folder");
+    setBusy("Choose a folder…");
+    try {
+      await window.api.newStyleFromDialog("folder");
       refresh();
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -68,10 +70,10 @@ export function StylePanel(): JSX.Element {
     }
   };
 
-  const useForProject = async (id: string) => {
+  const setActive = async (id: string) => {
     if (!slug) return;
-    await window.api.saveMeta(slug, { styleProfileId: id });
-    setActiveId(id);
+    await window.api.saveMeta(slug, { styleProfileId: id || undefined });
+    setActiveId(id || undefined);
   };
 
   const removeStyle = async (id: string) => {
@@ -81,33 +83,46 @@ export function StylePanel(): JSX.Element {
     refresh();
   };
 
+  // What generation will actually use: single library auto-selects; project
+  // references override the library.
+  const effectiveId = activeId ?? (styles.length === 1 ? styles[0].id : undefined);
   const profile = localProfile ?? activeProfile;
-  const activeLabel = localProfile
-    ? "this project's own references"
-    : activeId
-      ? styles.find((s) => s.id === activeId)?.name ?? activeId
-      : "none";
 
   return (
     <div className="pad">
       <div className="section-h">Style library</div>
       <p className="muted small">
-        Build a reusable look from a whole collection of your past videos, then point any project at it.
+        Build a reusable look from a folder of your past videos. It's analyzed automatically the first time you
+        Generate — no extra clicks.
       </p>
 
-      <button className="btn btn-primary full mt" onClick={newStyle}>
+      <button className="btn btn-primary full mt" onClick={newStyle} disabled={!!busy}>
         New style (choose a folder)
       </button>
+
+      {styles.length > 1 && (
+        <label className="field mt">
+          <span className="field-label">Active style for this project</span>
+          <select className="input" value={effectiveId ?? ""} onChange={(e) => void setActive(e.target.value)}>
+            <option value="">Auto</option>
+            {styles.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {styles.length > 0 && (
         <div className="style-list mt">
           {styles.map((s) => (
-            <div key={s.id} className={`style-row ${activeId === s.id && !localProfile ? "active" : ""}`}>
+            <div key={s.id} className={`style-row ${effectiveId === s.id && !localProfile ? "active" : ""}`}>
               <div className="style-row-top">
                 <span className="style-name">{s.name}</span>
                 <span className="muted small">
                   {s.clips} clip{s.clips === 1 ? "" : "s"}
-                  {s.analyzed ? " · analyzed" : " · not analyzed"}
+                  {s.analyzed ? " · analyzed" : " · analyzes on Generate"}
                 </span>
               </div>
               <div className="style-actions">
@@ -118,14 +133,7 @@ export function StylePanel(): JSX.Element {
                   + Folder
                 </button>
                 <button className="btn compact" onClick={() => analyze(s.id)} disabled={!!phase || s.clips === 0}>
-                  {phase ? "Analyzing…" : "Analyze"}
-                </button>
-                <button
-                  className="btn compact"
-                  onClick={() => useForProject(s.id)}
-                  disabled={!slug || (activeId === s.id && !localProfile)}
-                >
-                  {activeId === s.id && !localProfile ? "In use" : "Use"}
+                  {phase ? "Analyzing…" : "Re-analyze"}
                 </button>
                 <button className="btn compact" onClick={() => removeStyle(s.id)}>
                   Delete
@@ -143,10 +151,9 @@ export function StylePanel(): JSX.Element {
       )}
       {busy && <p className="muted small mt">{busy}</p>}
 
-      <p className="muted small mt">
-        Active style for this project: <strong>{activeLabel}</strong>
-        {localProfile && " (per-project references override the library)"}
-      </p>
+      {localProfile && (
+        <p className="muted small mt">This project's own references override the library for generation.</p>
+      )}
 
       {profile && <ProfileView profile={profile} onApply={() => applyToTheme(profile, updateEdl)} />}
 

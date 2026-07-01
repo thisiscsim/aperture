@@ -86,7 +86,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(repoRoot, "projects", slug);
+  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const refDir = path.join(projectDir, "references");
   const videos = (fs.existsSync(refDir) ? fs.readdirSync(refDir) : []).filter((f) =>
     VIDEO_EXT.has(path.extname(f).toLowerCase()),

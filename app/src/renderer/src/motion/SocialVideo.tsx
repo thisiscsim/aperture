@@ -19,7 +19,11 @@ import { getSpec, splitUnits, unitStyle } from "./animations";
  * M5: data-driven text animations (animate-text adapter), scene transitions
  * (TransitionSeries), and word-level captions.
  */
-export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string }> = ({ edl, assetBaseUrl }) => {
+export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string; preview?: boolean }> = ({
+  edl,
+  assetBaseUrl,
+  preview,
+}) => {
   const base = edl.theme.palette[1] ?? "#171410";
   const accent = edl.theme.palette[2] ?? "#E8B04B";
   const videoTrack = edl.tracks.find((t): t is VideoTrack => t.type === "video");
@@ -34,7 +38,7 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string }> = ({ edl, asse
       />
 
       {videoTrack && videoTrack.clips.length > 0 && (
-        <VideoTrackView track={videoTrack} edl={edl} assetBaseUrl={assetBaseUrl} />
+        <VideoTrackView track={videoTrack} edl={edl} assetBaseUrl={assetBaseUrl} preview={preview} />
       )}
 
       {edl.tracks.map((track) =>
@@ -61,10 +65,11 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string }> = ({ edl, asse
 // Each clip sits at its absolute EDL position; overlapping neighbors crossfade
 // via opacity. This keeps the video on the same timeline as text/captions
 // (no compression), so overlays stay in sync.
-const VideoTrackView: FC<{ track: VideoTrack; edl: Edl; assetBaseUrl?: string }> = ({
+const VideoTrackView: FC<{ track: VideoTrack; edl: Edl; assetBaseUrl?: string; preview?: boolean }> = ({
   track,
   edl,
   assetBaseUrl,
+  preview,
 }) => {
   const { fps } = useVideoConfig();
   return (
@@ -79,6 +84,7 @@ const VideoTrackView: FC<{ track: VideoTrack; edl: Edl; assetBaseUrl?: string }>
               edl={edl}
               assetBaseUrl={assetBaseUrl}
               durationInFrames={durationInFrames}
+              preview={preview}
             />
           </Sequence>
         );
@@ -92,12 +98,15 @@ const CrossfadeVideo: FC<{
   edl: Edl;
   assetBaseUrl?: string;
   durationInFrames: number;
-}> = ({ clip, edl, assetBaseUrl, durationInFrames }) => {
+  preview?: boolean;
+}> = ({ clip, edl, assetBaseUrl, durationInFrames, preview }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const asset = edl.assets.find((a) => a.id === clip.assetId);
   if (!asset) return null;
-  const src = assetBaseUrl ? `${assetBaseUrl}/${asset.src}` : staticFile(asset.src);
+  // In the editor, prefer the lightweight proxy for smooth playback; export uses the original.
+  const rel = preview && asset.proxySrc ? asset.proxySrc : asset.src;
+  const src = assetBaseUrl ? `${assetBaseUrl}/${rel}` : staticFile(rel);
 
   const inF = clip.transitionIn ? Math.round(clip.transitionIn.duration * fps) : 0;
   const outF = clip.transitionOut ? Math.round(clip.transitionOut.duration * fps) : 0;

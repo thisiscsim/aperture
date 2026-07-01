@@ -929,6 +929,53 @@ input[type="range"] {
   margin-top: 8px;
 }
 
+/* ---------- Settings ---------- */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.setting-label {
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.switch {
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--elevated);
+  position: relative;
+  cursor: pointer;
+  flex: none;
+  transition: background 150ms ease;
+}
+
+.switch.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 150ms ease;
+}
+
+.switch.on .switch-knob {
+  transform: translateX(16px);
+}
+
 /* ---------- Home / project dashboard ---------- */
 .home {
   height: 100vh;

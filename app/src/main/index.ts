@@ -12,7 +12,7 @@ import {
   watch,
   writeFileSync,
 } from "node:fs";
-import { basename, extname, join, normalize } from "node:path";
+import { basename, dirname, extname, join, normalize } from "node:path";
 import { Readable } from "node:stream";
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
 import ffmpegPath from "ffmpeg-static";
@@ -31,7 +31,6 @@ import {
 // In dev (electron-vite) __dirname is <repo>/app/out/main, so the repo root is
 // three levels up. Allow an override for packaged/other layouts.
 const REPO_ROOT = process.env["REEL_ROOT"] ?? join(__dirname, "..", "..", "..");
-const PROJECTS_DIR = process.env["REEL_PROJECTS_DIR"] ?? join(REPO_ROOT, "projects");
 const ICON_PATH = join(REPO_ROOT, "app", "resources", "icon.png");
 const SCRIPTS_DIR = join(REPO_ROOT, "app", "scripts");
 const RENDER_SCRIPT = join(SCRIPTS_DIR, "render.mjs");
@@ -58,7 +57,6 @@ function llmInfo(): { provider: string; model: string; configured: boolean } {
 const EXTRACT_FRAMES_SCRIPT = join(SCRIPTS_DIR, "extract-frames.mjs");
 const ANALYZE_STYLE_SCRIPT = join(SCRIPTS_DIR, "analyze-style.mjs");
 const ANALYZE_COLLECTION_SCRIPT = join(SCRIPTS_DIR, "analyze-collection.mjs");
-const STYLES_DIR = process.env["APERTURE_STYLES_DIR"] ?? join(REPO_ROOT, "styles");
 const ANALYZE_BENCHMARKS_SCRIPT = join(SCRIPTS_DIR, "analyze-benchmarks.mjs");
 const AUTOTUNE_SCRIPT = join(SCRIPTS_DIR, "autotune.mjs");
 const BUNDLED_MUSIC_DIR = join(REPO_ROOT, "app", "resources", "music");
@@ -119,6 +117,60 @@ function loadLocalEnv(): void {
   }
 }
 loadLocalEnv();
+
+// ---- Persistent app settings (hardware acceleration, storage location, etc.) ----
+interface AppSettings {
+  hwDecode: boolean;
+  hwEncode: boolean;
+  /** User-chosen root folder for projects + styles (default ~/Documents/Aperture). */
+  homeDir?: string;
+}
+const SETTINGS_PATH = join(app.getPath("userData"), "settings.json");
+function readSettings(): AppSettings {
+  try {
+    const s = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"));
+    return {
+      hwDecode: Boolean(s.hwDecode),
+      hwEncode: Boolean(s.hwEncode),
+      homeDir: typeof s.homeDir === "string" && s.homeDir ? s.homeDir : undefined,
+    };
+  } catch {
+    return { hwDecode: false, hwEncode: false };
+  }
+}
+function writeSettings(patch: Partial<AppSettings>): AppSettings {
+  const next = { ...readSettings(), ...patch };
+  try {
+    writeFileSync(SETTINGS_PATH, `${JSON.stringify(next, null, 2)}\n`);
+  } catch {
+    // best-effort
+  }
+  return next;
+}
+
+// User-owned storage (Screen Studio style): projects + styles live under the
+// user's home folder, not the repo/app bundle. Resolution: env override (dev) ->
+// user-picked folder (settings) -> ~/Documents/Aperture. Resolved once at startup.
+const APP_HOME =
+  process.env["APERTURE_HOME"] ?? readSettings().homeDir ?? join(app.getPath("documents"), "Aperture");
+const PROJECTS_DIR = process.env["REEL_PROJECTS_DIR"] ?? join(APP_HOME, "projects");
+const STYLES_DIR = process.env["APERTURE_STYLES_DIR"] ?? join(APP_HOME, "styles");
+try {
+  mkdirSync(PROJECTS_DIR, { recursive: true });
+  mkdirSync(STYLES_DIR, { recursive: true });
+} catch {
+  // directories are best-effort at startup
+}
+// Spawned scripts (render/analyze/generate/...) inherit these to find the same dirs.
+process.env["APERTURE_PROJECTS_DIR"] = PROJECTS_DIR;
+process.env["APERTURE_STYLES_DIR"] = STYLES_DIR;
+
+// Hardware-accelerated video decode (playback) is a Chromium switch that must be
+// set before the app is ready, so toggling it needs a restart.
+if (readSettings().hwDecode) {
+  app.commandLine.appendSwitch("ignore-gpu-blocklist");
+  app.commandLine.appendSwitch("enable-features", "PlatformHEVCDecoderSupport");
+}
 
 // Serve project media to the sandboxed renderer (the Remotion Player can't read
 // file:// from an http origin). reel-asset://<slug>/<relPath> -> projects/<slug>/<relPath>
@@ -465,6 +517,49 @@ async function describeAsset(dir: string, name: string): Promise<ImportedAsset |
   return { id, kind, src: `assets/${name}`, durationSec };
 }
 
+// Background H.264 proxy so the editor scrubs smoothly even for HEVC/.MOV; when
+// done, patch the project's edl.json so the preview switches to the proxy. Export
+// still uses the original for full quality.
+function proxyRel(id: string): string {
+  return `assets/.proxies/${id}.mp4`;
+}
+async function generateProxy(slug: string, assetSrc: string, id: string): Promise<void> {
+  if (!ffmpegPath) return;
+  const input = safeProjectPath(slug, assetSrc);
+  const outDir = safeProjectPath(slug, "assets", ".proxies");
+  mkdirSync(outDir, { recursive: true });
+  const out = join(outDir, `${id}.mp4`);
+  const ok = await new Promise<boolean>((resolve) => {
+    const child = spawn(ffmpegPath as string, [
+      "-y", "-i", input, "-an",
+      "-vf", "scale='min(720,iw)':-2",
+      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+      out,
+    ]);
+    child.on("close", (code) => resolve(code === 0));
+    child.on("error", () => resolve(false));
+  });
+  if (ok) patchAssetProxy(slug, id, proxyRel(id));
+}
+// Retry-patch: the renderer's autosave may not have written the new asset yet.
+function patchAssetProxy(slug: string, id: string, proxySrc: string, attempt = 0): void {
+  try {
+    const file = safeProjectPath(slug, "edl.json");
+    const edl = JSON.parse(readFileSync(file, "utf8"));
+    const asset = (edl.assets ?? []).find((a: { id: string }) => a.id === id);
+    if (asset && existsSync(safeProjectPath(slug, proxySrc))) {
+      asset.proxySrc = proxySrc;
+      // Intentionally do NOT mark lastSelfWrite: we want the watcher to reload
+      // the editor so the preview picks up the proxy.
+      writeFileSync(file, `${JSON.stringify(edl, null, 2)}\n`);
+      return;
+    }
+  } catch {
+    // fall through to retry
+  }
+  if (attempt < 12) setTimeout(() => patchAssetProxy(slug, id, proxySrc, attempt + 1), 800);
+}
+
 async function importAssets(slug: string, paths: string[]): Promise<{ ok: boolean; assets: ImportedAsset[] }> {
   const dir = safeProjectPath(slug, "assets");
   mkdirSync(dir, { recursive: true });
@@ -474,7 +569,10 @@ async function importAssets(slug: string, paths: string[]): Promise<{ ok: boolea
     const { name, dest } = uniqueDest(dir, basename(p));
     copyFileSync(p, dest);
     const desc = await describeAsset(dir, name);
-    if (desc) added.push(desc);
+    if (desc) {
+      added.push(desc);
+      if (desc.kind === "video") void generateProxy(slug, desc.src, desc.id);
+    }
   }
   return { ok: true, assets: added };
 }
@@ -671,6 +769,44 @@ async function addStyleSourcesFromDialog(
   }
 }
 
+// Open the native picker and create a new style in one step, named after the
+// chosen folder (no name prompt needed — window.prompt isn't supported in Electron).
+async function createStyleFromDialog(
+  mode: "files" | "folder",
+): Promise<{ ok: boolean; id?: string; name?: string; files?: string[]; canceled?: boolean; error?: string }> {
+  try {
+    const win = mainWindow ?? BrowserWindow.getFocusedWindow();
+    const opts: Electron.OpenDialogOptions = {
+      title: mode === "folder" ? "Choose a folder of reference videos" : "Choose reference videos",
+      properties: mode === "folder" ? ["openDirectory"] : ["openFile", "multiSelections"],
+      filters: mode === "files" ? [{ name: "Video", extensions: ["mp4", "mov", "webm", "m4v"] }] : undefined,
+    };
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    if (result.canceled || result.filePaths.length === 0) return { ok: true, canceled: true };
+
+    let paths: string[];
+    let name: string;
+    if (mode === "folder") {
+      const folder = result.filePaths[0];
+      name = basename(folder) || "My Style";
+      paths = readdirSync(folder)
+        .filter((f) => assetKindFor(f) === "video")
+        .map((f) => join(folder, f));
+    } else {
+      paths = result.filePaths;
+      name = basename(dirname(paths[0])) || "My Style";
+    }
+    if (paths.length === 0) return { ok: false, error: "No videos found in the selection." };
+
+    const created = createStyle(name);
+    if (!created.ok || !created.id) return created;
+    const imp = importStyleSources(created.id, paths);
+    return { ok: true, id: created.id, name, files: imp.files };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 function getStyle(id: string): StyleProfile | null {
   try {
     return parseStyleProfile(JSON.parse(readFileSync(safeStylePath(id, "profile.json"), "utf8")));
@@ -805,6 +941,7 @@ app.whenReady().then(() => {
   // ---- Global style library ----
   ipcMain.handle("styles:list", () => listStyles());
   ipcMain.handle("styles:create", (_event, name: string) => createStyle(name));
+  ipcMain.handle("styles:newFromDialog", (_event, mode: "files" | "folder") => createStyleFromDialog(mode));
   ipcMain.handle("styles:addFromDialog", (_event, id: string, mode: "files" | "folder") =>
     addStyleSourcesFromDialog(id, mode),
   );
@@ -881,8 +1018,25 @@ app.whenReady().then(() => {
     }
   });
   ipcMain.handle("export:start", (event, slug: string) =>
-    runScript(RENDER_SCRIPT, slug, event, "export"),
+    runScript(RENDER_SCRIPT, slug, event, "export", readSettings().hwEncode ? ["--hwaccel"] : []),
   );
+  ipcMain.handle("settings:get", () => readSettings());
+  ipcMain.handle("settings:set", (_event, patch: Partial<AppSettings>) => writeSettings(patch));
+  ipcMain.handle("home:get", () => PROJECTS_DIR);
+  ipcMain.handle("home:reveal", () => shell.openPath(PROJECTS_DIR));
+  ipcMain.handle("home:pick", async () => {
+    const win = mainWindow ?? BrowserWindow.getFocusedWindow();
+    const opts: Electron.OpenDialogOptions = {
+      title: "Choose where Aperture stores your projects",
+      properties: ["openDirectory", "createDirectory"],
+      defaultPath: APP_HOME,
+    };
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    if (result.canceled || result.filePaths.length === 0) return { ok: true, canceled: true };
+    // Store the chosen folder as the Aperture home; projects/styles live under it.
+    writeSettings({ homeDir: result.filePaths[0] });
+    return { ok: true, homeDir: result.filePaths[0] };
+  });
   // Generate runs the LLM editor (reads prompt + style, crafts a real edit) when
   // a model is configured; otherwise the deterministic offline baseline.
   ipcMain.handle("generate:start", (event, slug: string) =>

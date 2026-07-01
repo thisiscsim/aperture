@@ -149,6 +149,8 @@ export const AssetSchema = z.object({
   kind: z.enum(["video", "audio", "image"]),
   /** Path relative to the project folder (e.g. "assets/clip01.mp4"). */
   src: z.string(),
+  /** Optional lightweight H.264 proxy (relative path) used for smooth editor playback. */
+  proxySrc: z.string().optional(),
   durationSec: z.number().positive().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),

@@ -70,7 +70,7 @@ async function main() {
   const maxIterations = Number(arg("iterations") ?? 3);
   const target = Number(arg("target") ?? 88);
 
-  const projectDir = path.join(repoRoot, "projects", slug);
+  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edlPath = path.join(projectDir, "edl.json");
   if (!fs.existsSync(edlPath)) {
     console.error("ERROR no edl.json to improve");

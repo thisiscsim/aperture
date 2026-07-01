@@ -43,7 +43,7 @@ export function Preview(): JSX.Element {
         <Player
           ref={ref}
           component={SocialVideo}
-          inputProps={{ edl, assetBaseUrl: slug ? `reel-asset://${slug}` : undefined }}
+          inputProps={{ edl, assetBaseUrl: slug ? `reel-asset://${slug}` : undefined, preview: true }}
           durationInFrames={durationFrames(edl)}
           fps={edl.format.fps}
           compositionWidth={edl.format.width}

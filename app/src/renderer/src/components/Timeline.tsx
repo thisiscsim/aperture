@@ -36,12 +36,35 @@ export function Timeline(): JSX.Element {
   const currentSec = currentFrame / fps;
   const lanePx = dur * PX_PER_SEC;
 
-  const scrub = (e: MouseEvent<HTMLDivElement>) => {
+  // Live scrubbing: seek continuously as the user drags across the timeline so
+  // the preview plays frame-by-frame under the cursor (rAF-throttled).
+  const startScrub = (e: MouseEvent<HTMLDivElement>) => {
     if (dragging.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - GUTTER;
-    const sec = Math.min(dur, Math.max(0, x / PX_PER_SEC));
-    seek(Math.round(sec * fps));
+    const seekAt = (clientX: number) => {
+      const x = clientX - rect.left - GUTTER;
+      const sec = Math.min(dur, Math.max(0, x / PX_PER_SEC));
+      seek(Math.round(sec * fps));
+    };
+    seekAt(e.clientX);
+    let raf = 0;
+    let lastX = e.clientX;
+    const onMove = (ev: globalThis.MouseEvent) => {
+      lastX = ev.clientX;
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          seekAt(lastX);
+        });
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (raf) cancelAnimationFrame(raf);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   };
 
   const startDrag = (
@@ -90,7 +113,7 @@ export function Timeline(): JSX.Element {
         </span>
       </div>
       <div className="timeline-scroll">
-        <div className="timeline-content" style={{ width: GUTTER + lanePx }} onMouseDown={scrub}>
+        <div className="timeline-content" style={{ width: GUTTER + lanePx }} onMouseDown={startScrub}>
           <div className="ruler">
             <div className="ruler-gutter" />
             <div className="ruler-ticks" style={{ width: lanePx }}>
