@@ -533,6 +533,42 @@ input[type="range"] {
   border: 1px solid var(--line-strong);
 }
 
+.style-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.style-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+}
+
+.style-row.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.style-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.style-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.style-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
 /* ---------- Critique ---------- */
 .critique {
   margin-top: 16px;

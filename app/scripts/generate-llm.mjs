@@ -34,32 +34,87 @@ function readMaybe(file) {
     return "";
   }
 }
+function readJsonMaybe(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
 
-function buildPrompt(baselineJson, promptMd, styleJson) {
+// Resolve the active style profile: a project's own style.json (override) wins;
+// otherwise the global library profile referenced by meta.styleProfileId.
+function resolveStyleProfile(projectDir) {
+  const local = readJsonMaybe(path.join(projectDir, "style.json"));
+  if (local) return local;
+  const meta = readJsonMaybe(path.join(projectDir, "meta.json")) ?? {};
+  if (meta.styleProfileId) {
+    const stylesDir = process.env.APERTURE_STYLES_DIR || path.join(repoRoot, "styles");
+    return readJsonMaybe(path.join(stylesDir, meta.styleProfileId, "profile.json"));
+  }
+  return null;
+}
+
+// Turn a profile into concrete directives + retrieved exemplars for the prompt.
+function styleBlock(profile) {
+  if (!profile) return "(none — use the prompt and general best practices)";
+  const parts = [];
+  if (profile.styleGuide) parts.push(`STYLE GUIDE:\n${profile.styleGuide}`);
+  const d = [];
+  if (profile.palette?.length) d.push(`palette [text,bg,accent] = ${profile.palette.slice(0, 3).join(", ")}`);
+  if (profile.fontFamily) d.push(`fontFamily = ${profile.fontFamily}`);
+  if (profile.captionStyle) d.push(`captionStyle = ${profile.captionStyle}`);
+  if (profile.grade) d.push(`grade = ${JSON.stringify(profile.grade)}`);
+  if (profile.pacing?.cutsPer10s) d.push(`pacing ~= ${profile.pacing.cutsPer10s} cuts/10s`);
+  if (profile.targetLengthSec) d.push(`target length ~= ${profile.targetLengthSec}s`);
+  if (profile.hookPattern) d.push(`hook = ${profile.hookPattern}`);
+  if (profile.textTreatment) d.push(`text treatment = ${profile.textTreatment}`);
+  if (profile.transitions?.length) d.push(`transitions = ${profile.transitions.join(", ")}`);
+  if (d.length) parts.push(`DIRECTIVES:\n- ${d.join("\n- ")}`);
+  if (profile.do?.length) parts.push(`DO: ${profile.do.join("; ")}`);
+  if (profile.avoid?.length) parts.push(`AVOID: ${profile.avoid.join("; ")}`);
+  const ex = (profile.exemplars ?? []).slice(0, 3);
+  if (ex.length) parts.push(`EXEMPLARS (imitate this edit structure):\n${JSON.stringify(ex, null, 2)}`);
+  return parts.join("\n\n");
+}
+
+function buildPrompt(baselineJson, promptMd, profile) {
   return [
     "You are an expert short-form (vertical 9:16) video editor.",
-    "Refine the BASELINE edit decision list (edl.json) into a polished first cut.",
+    "Refine the BASELINE edit decision list (edl.json) into a polished first cut that closely matches the creator's STYLE.",
     "",
     "Return ONLY a single JSON object — the complete updated edl.json. No prose, no code fences.",
     "",
     "Rules:",
     "- Keep the exact same shape/keys as the baseline (it is already schema-valid).",
     "- Only use assets that exist in the baseline `assets` array (same `id` and `src`).",
-    "- Make the first ~2 seconds a strong hook; reorder/trim video clips for pacing.",
-    "- Add a `text` track with title/subtitle overlays derived from the prompt.",
+    "- Make the first ~2 seconds a strong hook; reorder/trim video clips to match the target pacing.",
+    "- Add a `text` track with title/subtitle overlays derived from the prompt, in the style's text treatment.",
     `- Every text clip MUST have this exact shape: {"id":"t1","start":0.2,"end":2.6,"text":"...","style":"title"|"subtitle","anim":{"name":"<one of ${ANIM_NAMES.join("|")}>","from":"animate-text"}}. The anim.name field is REQUIRED — never omit it. Or omit the whole "anim" key.`,
+    "- Set theme.palette, theme.fontFamily, theme.captionStyle, and theme.grade to match the STYLE.",
     "- Respect theme.safeMargins; keep captions/text out of platform UI zones.",
-    "- If a style profile is given, honor its palette, fontFamily, captionStyle, pacing, and target length.",
+    "- Mirror the STYLE's pacing, hook, transitions, and text treatment as closely as the available clips allow.",
     "",
     "=== CREATOR PROMPT (prompt.md) ===",
     promptMd || "(none)",
     "",
-    "=== STYLE PROFILE (style.json) ===",
-    styleJson || "(none)",
+    "=== STYLE (learned from the creator's reference videos) ===",
+    styleBlock(profile),
     "",
     "=== BASELINE edl.json ===",
     baselineJson,
   ].join("\n");
+}
+
+// Deterministically stamp the look the model often under-applies.
+function enforceStyle(edl, profile) {
+  if (!profile) return edl;
+  if (profile.palette?.length) edl.theme.palette = profile.palette.slice(0, 3);
+  if (profile.fontFamily) edl.theme.fontFamily = profile.fontFamily;
+  if (profile.captionStyle) edl.theme.captionStyle = profile.captionStyle;
+  if (profile.grade) edl.theme.grade = profile.grade;
+  if (profile.id) edl.theme.stylePreset = profile.id;
+  return edl;
 }
 
 async function main() {
@@ -86,13 +141,14 @@ async function main() {
 
   const baselineJson = readMaybe(edlPath);
   const promptMd = readMaybe(path.join(projectDir, "prompt.md"));
-  const styleJson = readMaybe(path.join(projectDir, "style.json"));
+  const profile = resolveStyleProfile(projectDir);
 
   const { provider, model } = llmConfig();
-  console.log(`PHASE editing with ${provider}/${model}`);
+  console.log(`PHASE editing with ${provider}/${model}${profile ? ` (style: ${profile.name ?? profile.id})` : ""}`);
 
   const llm = resolveModel();
-  let prompt = buildPrompt(baselineJson, promptMd, styleJson);
+  const base = buildPrompt(baselineJson, promptMd, profile);
+  let prompt = base;
   let edl = null;
   let lastError = "";
 
@@ -112,11 +168,11 @@ async function main() {
         edl = parsed.edl;
       } else {
         lastError = (parsed.errors ?? ["invalid edl"]).join("; ");
-        prompt = `${buildPrompt(baselineJson, promptMd, styleJson)}\n\nYour previous output was invalid: ${lastError}\nReturn corrected JSON only.`;
+        prompt = `${base}\n\nYour previous output was invalid: ${lastError}\nReturn corrected JSON only.`;
       }
     } catch (err) {
       lastError = String(err);
-      prompt = `${buildPrompt(baselineJson, promptMd, styleJson)}\n\nYour previous output could not be parsed: ${lastError}\nReturn a single valid JSON object only.`;
+      prompt = `${base}\n\nYour previous output could not be parsed: ${lastError}\nReturn a single valid JSON object only.`;
     }
   }
 
@@ -124,6 +180,9 @@ async function main() {
     console.error(`ERROR model did not produce a valid edl.json (${lastError}). Baseline was kept.`);
     process.exit(2);
   }
+
+  // Stamp the measurable look so the style shows even if the model under-applied it.
+  edl = enforceStyle(edl, profile);
 
   console.log("PHASE writing edl.json");
   fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);

@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { basename, extname, join, normalize } from "node:path";
 import { Readable } from "node:stream";
-import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
 import ffmpegPath from "ffmpeg-static";
 import {
   type Benchmarks,
@@ -57,6 +57,8 @@ function llmInfo(): { provider: string; model: string; configured: boolean } {
 }
 const EXTRACT_FRAMES_SCRIPT = join(SCRIPTS_DIR, "extract-frames.mjs");
 const ANALYZE_STYLE_SCRIPT = join(SCRIPTS_DIR, "analyze-style.mjs");
+const ANALYZE_COLLECTION_SCRIPT = join(SCRIPTS_DIR, "analyze-collection.mjs");
+const STYLES_DIR = process.env["APERTURE_STYLES_DIR"] ?? join(REPO_ROOT, "styles");
 const ANALYZE_BENCHMARKS_SCRIPT = join(SCRIPTS_DIR, "analyze-benchmarks.mjs");
 const AUTOTUNE_SCRIPT = join(SCRIPTS_DIR, "autotune.mjs");
 const BUNDLED_MUSIC_DIR = join(REPO_ROOT, "app", "resources", "music");
@@ -79,6 +81,15 @@ function safeProjectPath(slug: string, ...rel: string[]): string {
   if (!file.startsWith(normalize(PROJECTS_DIR))) throw new Error("path escapes projects dir");
   return file;
 }
+
+function safeStylePath(id: string, ...rel: string[]): string {
+  const file = normalize(join(STYLES_DIR, id, ...rel));
+  if (!file.startsWith(normalize(STYLES_DIR))) throw new Error("path escapes styles dir");
+  return file;
+}
+
+// Captured so dialogs can parent to the window.
+let mainWindow: BrowserWindow | null = null;
 
 // The macOS menu bar / dock tooltip / About panel use app.name, which defaults
 // to "Electron" in dev. Set it before the default menu is built. (Packaging
@@ -161,6 +172,7 @@ function createWindow(): void {
     },
   });
 
+  mainWindow = win;
   win.on("ready-to-show", () => win.show());
   win.webContents.setWindowOpenHandler((details) => {
     void shell.openExternal(details.url);
@@ -516,18 +528,16 @@ function importInto(
   return { ok: true, files };
 }
 
-function runScript(
+// Spawn a Node script with arbitrary args, streaming its PHASE/PROGRESS/DONE
+// protocol back to the renderer on `${channelPrefix}:*` channels.
+function runScriptArgs(
   scriptPath: string,
-  slug: string,
+  args: string[],
   event: IpcMainInvokeEvent,
   channelPrefix: string,
-  extraArgs: string[] = [],
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn("node", [scriptPath, "--slug", slug, ...extraArgs], {
-      cwd: REPO_ROOT,
-      env: process.env,
-    });
+    const child = spawn("node", [scriptPath, ...args], { cwd: REPO_ROOT, env: process.env });
     let output = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -547,6 +557,138 @@ function runScript(
     });
     child.on("error", (err) => resolve({ ok: false, error: String(err) }));
   });
+}
+
+function runScript(
+  scriptPath: string,
+  slug: string,
+  event: IpcMainInvokeEvent,
+  channelPrefix: string,
+  extraArgs: string[] = [],
+): Promise<{ ok: boolean; output?: string; error?: string }> {
+  return runScriptArgs(scriptPath, ["--slug", slug, ...extraArgs], event, channelPrefix);
+}
+
+// ---- Global style library (styles/<id>/ : sources/, .frames/, profile.json) ----
+export interface StyleSummary {
+  id: string;
+  name: string;
+  clips: number;
+  analyzed: boolean;
+  updatedAt?: string;
+}
+
+function listStyles(): StyleSummary[] {
+  let ids: string[];
+  try {
+    ids = readdirSync(STYLES_DIR);
+  } catch {
+    return [];
+  }
+  const out: StyleSummary[] = [];
+  for (const id of ids) {
+    const dir = join(STYLES_DIR, id);
+    try {
+      if (!statSync(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    let name = id;
+    let analyzed = false;
+    let updatedAt: string | undefined;
+    try {
+      const p = JSON.parse(readFileSync(join(dir, "profile.json"), "utf8"));
+      name = p.name || id;
+      analyzed = Boolean(p.styleGuide || (p.exemplars?.length ?? 0) > 0 || p.palette?.length);
+      updatedAt = p.source?.generatedAt;
+    } catch {
+      // no profile yet
+    }
+    let clips = 0;
+    try {
+      clips = readdirSync(join(dir, "sources")).filter((f) => assetKindFor(f) === "video").length;
+    } catch {
+      // no sources yet
+    }
+    out.push({ id, name, clips, analyzed, updatedAt });
+  }
+  return out.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+}
+
+function createStyle(name: string): { ok: boolean; id?: string; error?: string } {
+  try {
+    const base = slugify(name);
+    let id = base;
+    let n = 2;
+    while (existsSync(join(STYLES_DIR, id))) id = `${base}-${n++}`;
+    mkdirSync(join(STYLES_DIR, id, "sources"), { recursive: true });
+    writeFileSync(
+      join(STYLES_DIR, id, "profile.json"),
+      `${JSON.stringify({ id, name: name.trim() || id, palette: [], exemplars: [], do: [], avoid: [] }, null, 2)}\n`,
+    );
+    return { ok: true, id };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function importStyleSources(id: string, paths: string[]): { ok: boolean; files: string[] } {
+  const dir = safeStylePath(id, "sources");
+  mkdirSync(dir, { recursive: true });
+  const files: string[] = [];
+  for (const p of paths) {
+    if (assetKindFor(p) !== "video") continue;
+    const { name, dest } = uniqueDest(dir, basename(p));
+    copyFileSync(p, dest);
+    files.push(name);
+  }
+  return { ok: true, files };
+}
+
+// Open a native picker (files or a whole folder) and import the chosen videos.
+async function addStyleSourcesFromDialog(
+  id: string,
+  mode: "files" | "folder",
+): Promise<{ ok: boolean; files: string[]; error?: string }> {
+  try {
+    const win = mainWindow ?? BrowserWindow.getFocusedWindow();
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: mode === "folder" ? "Choose a folder of reference videos" : "Choose reference videos",
+      properties: mode === "folder" ? ["openDirectory"] : ["openFile", "multiSelections"],
+      filters: mode === "files" ? [{ name: "Video", extensions: ["mp4", "mov", "webm", "m4v"] }] : undefined,
+    });
+    if (result.canceled || result.filePaths.length === 0) return { ok: true, files: [] };
+    let paths = result.filePaths;
+    if (mode === "folder") {
+      const folder = result.filePaths[0];
+      paths = readdirSync(folder)
+        .filter((f) => assetKindFor(f) === "video")
+        .map((f) => join(folder, f));
+    }
+    return importStyleSources(id, paths);
+  } catch (err) {
+    return { ok: false, files: [], error: String(err) };
+  }
+}
+
+function getStyle(id: string): StyleProfile | null {
+  try {
+    return parseStyleProfile(JSON.parse(readFileSync(safeStylePath(id, "profile.json"), "utf8")));
+  } catch {
+    return null;
+  }
+}
+
+function deleteStyle(id: string): { ok: boolean; error?: string } {
+  try {
+    if (!id || id.includes("/") || id.includes("\\")) return { ok: false, error: "invalid id" };
+    const dir = safeStylePath(id);
+    if (normalize(dir) === normalize(STYLES_DIR)) return { ok: false, error: "invalid id" };
+    rmSync(dir, { recursive: true, force: true });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 app.whenReady().then(() => {
@@ -648,9 +790,8 @@ app.whenReady().then(() => {
     }
   });
   ipcMain.handle("style:learn", async (event, slug: string) => {
-    // Frames (for the agent's eyes) then deterministic features -> style.json.
-    await runScript(EXTRACT_FRAMES_SCRIPT, slug, event, "style");
-    const res = await runScript(ANALYZE_STYLE_SCRIPT, slug, event, "style");
+    // Rich collection analysis over this project's own references/ -> style.json.
+    const res = await runScript(ANALYZE_COLLECTION_SCRIPT, slug, event, "style");
     if (res.ok) touchMeta(slug, { styleProfileId: "learned" });
     return res;
   });
@@ -661,6 +802,17 @@ app.whenReady().then(() => {
       return null;
     }
   });
+  // ---- Global style library ----
+  ipcMain.handle("styles:list", () => listStyles());
+  ipcMain.handle("styles:create", (_event, name: string) => createStyle(name));
+  ipcMain.handle("styles:addFromDialog", (_event, id: string, mode: "files" | "folder") =>
+    addStyleSourcesFromDialog(id, mode),
+  );
+  ipcMain.handle("styles:analyze", (event, id: string) =>
+    runScriptArgs(ANALYZE_COLLECTION_SCRIPT, ["--styleDir", safeStylePath(id)], event, "styles"),
+  );
+  ipcMain.handle("styles:get", (_event, id: string) => getStyle(id));
+  ipcMain.handle("styles:delete", (_event, id: string) => deleteStyle(id));
   ipcMain.handle("benchmark:import", (_event, slug: string, paths: string[]) =>
     importInto(slug, "benchmarks", paths),
   );
