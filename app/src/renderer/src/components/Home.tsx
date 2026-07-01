@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { ThemeToggle } from "./ThemeToggle";
+import { SettingsButton } from "./SettingsModal";
 import type { ProjectSummary } from "../../../preload";
 
 const PLATFORMS = [
@@ -32,6 +33,7 @@ export function Home(): JSX.Element {
         <span className="logo">Aperture</span>
         <div className="home-bar-right">
           <ThemeToggle />
+          <SettingsButton />
           <button className="btn btn-primary" onClick={() => setCreating(true)}>
             New project
           </button>
