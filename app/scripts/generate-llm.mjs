@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { generateText } from "ai";
 import { parseEdl } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel } from "./llm.mjs";
-import { ANIM_NAMES, extractJson, sanitizeEdl } from "./edl-util.mjs";
+import { ANIM_NAMES, enforceStyle, extractJson, sanitizeEdl } from "./edl-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -104,17 +104,6 @@ function buildPrompt(baselineJson, promptMd, profile) {
     "=== BASELINE edl.json ===",
     baselineJson,
   ].join("\n");
-}
-
-// Deterministically stamp the look the model often under-applies.
-function enforceStyle(edl, profile) {
-  if (!profile) return edl;
-  if (profile.palette?.length) edl.theme.palette = profile.palette.slice(0, 3);
-  if (profile.fontFamily) edl.theme.fontFamily = profile.fontFamily;
-  if (profile.captionStyle) edl.theme.captionStyle = profile.captionStyle;
-  if (profile.grade) edl.theme.grade = profile.grade;
-  if (profile.id) edl.theme.stylePreset = profile.id;
-  return edl;
 }
 
 async function main() {

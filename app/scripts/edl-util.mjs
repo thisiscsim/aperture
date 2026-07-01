@@ -49,6 +49,20 @@ export function sanitizeEdl(obj) {
   return obj;
 }
 
+/**
+ * Deterministically stamp the measurable look from a style profile onto an EDL,
+ * so the style shows even when the model under-applies it.
+ */
+export function enforceStyle(edl, profile) {
+  if (!profile || !edl?.theme) return edl;
+  if (profile.palette?.length) edl.theme.palette = profile.palette.slice(0, 3);
+  if (profile.fontFamily) edl.theme.fontFamily = profile.fontFamily;
+  if (profile.captionStyle) edl.theme.captionStyle = profile.captionStyle;
+  if (profile.grade) edl.theme.grade = profile.grade;
+  if (profile.id) edl.theme.stylePreset = profile.id;
+  return edl;
+}
+
 /** Deterministic structural metrics for grounding the LLM critic/editor. */
 export function metrics(edl) {
   const vids = edl.tracks.filter((t) => t.type === "video").flatMap((t) => t.clips ?? []);
