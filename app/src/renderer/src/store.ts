@@ -31,6 +31,15 @@ function applyTheme(theme: Theme, persist = true): void {
   }
 }
 
+// Animate theme switches with the View Transitions API (Chromium): the browser
+// snapshots the old frame and cross-fades to the new one, so every surface
+// changes in one coherent sweep. Falls back to an instant switch (e.g. jsdom).
+function withViewTransition(mutate: () => void): void {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (typeof doc.startViewTransition === "function") doc.startViewTransition(mutate);
+  else mutate();
+}
+
 // Debounced persistence of edits back to projects/<slug>/edl.json. Editor edits
 // mutate the in-memory EDL immediately; we flush to disk shortly after so the
 // agent/renderer (which re-read the file) see the same source of truth.
@@ -167,13 +176,17 @@ export const useEditor = create<EditorState>()((set, get) => ({
   setRightTab: (tab) => set({ rightTab: tab }),
   setSeek: (fn) => set({ seek: fn }),
   setTheme: (theme) => {
-    applyTheme(theme);
-    set({ theme });
+    withViewTransition(() => {
+      applyTheme(theme);
+      set({ theme });
+    });
   },
   toggleTheme: () => {
     const theme: Theme = get().theme === "dark" ? "light" : "dark";
-    applyTheme(theme);
-    set({ theme });
+    withViewTransition(() => {
+      applyTheme(theme);
+      set({ theme });
+    });
   },
 
   startExport: () => set({ exporting: true, exportProgress: 0, exportPhase: "preparing", exportResult: null }),

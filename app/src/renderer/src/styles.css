@@ -61,7 +61,16 @@ body {
   text-rendering: optimizeLegibility;
   user-select: none;
   cursor: default;
-  transition: background 200ms ease, color 200ms ease;
+}
+
+/* Theme switches animate via the View Transitions API (see store.ts): the old
+   frame cross-fades into the new one. Per-element color transitions are
+   intentionally NOT used — they'd animate inside the "new" snapshot and fight
+   the cross-fade. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 300ms;
+  animation-timing-function: ease;
 }
 
 button {
