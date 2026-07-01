@@ -1,4 +1,5 @@
 import { useEditor } from "../store";
+import { useEscapeKey } from "./ui/useEscapeKey";
 
 const PHASE_LABELS: Record<string, string> = {
   preparing: "Preparing renderer…",
@@ -13,6 +14,10 @@ export function ExportModal(): JSX.Element | null {
   const phase = useEditor((s) => s.exportPhase);
   const result = useEditor((s) => s.exportResult);
   const close = useEditor((s) => s.closeExport);
+
+  // Escape dismisses only once a result is shown — an in-flight export is not
+  // cancellable from this modal, so it must not be dismissable mid-render.
+  useEscapeKey(result ? close : null);
 
   if (!exporting && !result) return null;
 

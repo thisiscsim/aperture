@@ -139,8 +139,15 @@ function ProjectCard({
     const onDocClick = (e: MouseEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [menuOpen]);
 
   const onDelete = async () => {

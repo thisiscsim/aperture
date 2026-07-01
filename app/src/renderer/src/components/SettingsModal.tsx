@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useEditor } from "../store";
 import { IconButton } from "./ui";
+import { useEscapeKey } from "./ui/useEscapeKey";
 
 interface HwSettings {
   hwDecode: boolean;
@@ -14,6 +15,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
   const [decodeChanged, setDecodeChanged] = useState(false);
   const [projectsDir, setProjectsDir] = useState<string>("");
   const [folderChanged, setFolderChanged] = useState(false);
+
+  useEscapeKey(onClose);
 
   useEffect(() => {
     window.api?.getSettings().then(setSettings).catch(() => {});
