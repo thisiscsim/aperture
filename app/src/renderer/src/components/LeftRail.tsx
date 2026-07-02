@@ -105,12 +105,14 @@ export function LeftRail(): JSX.Element {
     setBusy("Adding audio…");
     try {
       const res = await window.api.importAssets(slug, paths);
-      for (const asset of res.assets) {
-        updateEdl((d) => {
+      if (res.assets.length === 0) return;
+      // One updateEdl call = one undo step for the whole batch.
+      updateEdl((d) => {
+        for (const asset of res.assets) {
           addAssets(d, [asset]);
           addAudioClip(d, asset.id, "music", asset.durationSec);
-        });
-      }
+        }
+      });
     } finally {
       setBusy(null);
     }

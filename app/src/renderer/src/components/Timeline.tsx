@@ -1,7 +1,7 @@
 import { type DragEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { durationFrames, durationSeconds, type Edl, type Track } from "@reel/edl";
 import { useEditor } from "../store";
-import { addAssets, addAudioClip, addTrack, renameTrack } from "../lib/edl-edit";
+import { addAssets, addTrack, renameTrack } from "../lib/edl-edit";
 import { Icon, IconButton, useEscapeKey, type IconName } from "./ui";
 
 const LABEL_W = 150;
@@ -222,11 +222,8 @@ export function Timeline(): JSX.Element {
             at += len;
           }
         } else if (kind === "audio" && asset.kind === "audio") {
-          const track = d.tracks.find((t) => t.id === target.trackId);
-          const role = track?.id === "vo" || track?.name?.toLowerCase().includes("voice") ? "voiceover" : "music";
-          addAudioClip(d, asset.id, role, asset.durationSec);
-          const placed = (track?.type === "audio" ? track.clips : []).find((c) => c.assetId === asset.id);
-          if (placed) placed.start = round(at);
+          placeAudioOnTrack(d, target.trackId, asset.id, asset.durationSec, at);
+          at += asset.durationSec ?? 1;
         }
       }
     });
@@ -256,13 +253,7 @@ export function Timeline(): JSX.Element {
         }
       });
     } else if (track.type === "audio" && kind === "audio") {
-      const role = track.id === "vo" || track.name?.toLowerCase().includes("voice") ? "voiceover" : "music";
-      updateEdl((d) => {
-        addAudioClip(d, assetId, role, asset.durationSec);
-        const t = d.tracks.find((x) => x.id === track.id);
-        const placed = (t?.type === "audio" ? t.clips : []).find((c) => c.assetId === assetId);
-        if (placed) placed.start = at;
-      });
+      updateEdl((d) => placeAudioOnTrack(d, track.id, assetId, asset.durationSec, at));
     }
   };
 
@@ -398,6 +389,31 @@ export function Timeline(): JSX.Element {
       />
     </section>
   );
+}
+
+/**
+ * Place an audio asset on the exact lane the user targeted (unlike the left
+ * rail's role-routed add). Role is inferred from the lane; a music drop while
+ * a voiceover exists ducks by default.
+ */
+function placeAudioOnTrack(edl: Edl, trackId: string, assetId: string, durationSec: number | undefined, at: number): void {
+  const track = edl.tracks.find((t) => t.id === trackId);
+  if (track?.type !== "audio") return;
+  const role = track.id === "vo" || track.name?.toLowerCase().includes("voice") ? "voiceover" : "music";
+  const hasVoice = edl.tracks.some(
+    (t) => t.type === "audio" && t.clips.some((c) => c.role === "voiceover"),
+  );
+  track.clips = track.clips.filter((c) => c.assetId !== assetId);
+  track.clips.push({
+    id: `a-${assetId}-${Date.now().toString(36)}`,
+    assetId,
+    start: round(at),
+    in: 0,
+    out: round(Math.max(0.1, durationSec ?? 1)),
+    gain: role === "music" ? -12 : 0,
+    duckUnderVoice: role === "music" && hasVoice,
+    role,
+  });
 }
 
 /* ---------- layer button ---------- */

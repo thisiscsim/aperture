@@ -159,7 +159,18 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   setView: (view) => set({ view }),
   setProjects: (projects) => set({ projects }),
-  openProject: (slug) => set({ slug, view: "editor", edl: null, loadError: null, selectedClipId: null }),
+  openProject: (slug) =>
+    set({
+      slug,
+      view: "editor",
+      edl: null,
+      loadError: null,
+      selectedClipId: null,
+      currentFrame: 0,
+      playing: false,
+      notice: null,
+      rightTab: "inspector",
+    }),
   goHome: () => set({ view: "home", selectedClipId: null }),
   setProject: (p) =>
     set({
@@ -225,13 +236,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       set({ theme });
     });
   },
-  toggleTheme: () => {
-    const theme: Theme = get().theme === "dark" ? "light" : "dark";
-    withViewTransition(() => {
-      applyTheme(theme);
-      set({ theme });
-    });
-  },
+  toggleTheme: () => get().setTheme(get().theme === "dark" ? "light" : "dark"),
 
   setPlaying: (v) => set({ playing: v }),
   toggleMuted: () => {

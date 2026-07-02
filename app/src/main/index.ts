@@ -12,7 +12,7 @@ import {
   watch,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, extname, join, normalize } from "node:path";
+import { basename, dirname, extname, join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
 import ffmpegPath from "ffmpeg-static";
@@ -73,17 +73,21 @@ function assetKindFor(file: string): "video" | "audio" | "image" | null {
   return null;
 }
 
-/** Resolve + guard a path so it can never escape PROJECTS_DIR. */
-function safeProjectPath(slug: string, ...rel: string[]): string {
-  const file = normalize(join(PROJECTS_DIR, slug, ...rel));
-  if (!file.startsWith(normalize(PROJECTS_DIR))) throw new Error("path escapes projects dir");
+/** Resolve + guard a path so it can never escape the given root. */
+function safePath(root: string, rel: string[]): string {
+  const base = normalize(root);
+  const file = normalize(join(base, ...rel));
+  // Compare against root + separator so a sibling like "<root>-evil" can't pass.
+  if (file !== base && !file.startsWith(base + sep)) throw new Error("path escapes storage dir");
   return file;
 }
 
+function safeProjectPath(slug: string, ...rel: string[]): string {
+  return safePath(PROJECTS_DIR, [slug, ...rel]);
+}
+
 function safeStylePath(id: string, ...rel: string[]): string {
-  const file = normalize(join(STYLES_DIR, id, ...rel));
-  if (!file.startsWith(normalize(STYLES_DIR))) throw new Error("path escapes styles dir");
-  return file;
+  return safePath(STYLES_DIR, [id, ...rel]);
 }
 
 // Captured so dialogs can parent to the window.
@@ -246,11 +250,19 @@ function mimeFor(file: string): string {
       return "audio/wav";
     case ".m4a":
       return "audio/mp4";
+    case ".aac":
+      return "audio/aac";
+    case ".ogg":
+      return "audio/ogg";
     case ".png":
       return "image/png";
     case ".jpg":
     case ".jpeg":
       return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
     default:
       return "application/octet-stream";
   }
@@ -301,7 +313,7 @@ function readMeta(slug: string) {
 
 function loadProject(slug: string) {
   try {
-    const dir = join(PROJECTS_DIR, slug);
+    const dir = safeProjectPath(slug);
     const raw = JSON.parse(readFileSync(join(dir, "edl.json"), "utf8"));
     const result = parseEdl(raw);
     let promptText = "";
@@ -353,7 +365,9 @@ function watchProject(slug: string, event: IpcMainInvokeEvent): void {
     // Ignore the echo from our own autosave.
     if (Date.now() - (lastSelfWrite.get(slug) ?? 0) < 1200) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => event.sender.send("project:changed", slug), 200);
+    timer = setTimeout(() => {
+      if (!event.sender.isDestroyed()) event.sender.send("project:changed", slug);
+    }, 200);
   });
   activeWatcher = { slug, watcher };
 }
@@ -799,11 +813,12 @@ async function addStyleSourcesFromDialog(
 ): Promise<{ ok: boolean; files: string[]; error?: string }> {
   try {
     const win = mainWindow ?? BrowserWindow.getFocusedWindow();
-    const result = await dialog.showOpenDialog(win ?? undefined!, {
+    const opts: Electron.OpenDialogOptions = {
       title: mode === "folder" ? "Choose a folder of reference videos" : "Choose reference videos",
       properties: mode === "folder" ? ["openDirectory"] : ["openFile", "multiSelections"],
       filters: mode === "files" ? [{ name: "Video", extensions: ["mp4", "mov", "webm", "m4v"] }] : undefined,
-    });
+    };
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (result.canceled || result.filePaths.length === 0) return { ok: true, files: [] };
     let paths = result.filePaths;
     if (mode === "folder") {
@@ -888,8 +903,10 @@ app.whenReady().then(() => {
     const url = new URL(request.url);
     const slug = url.hostname;
     const rel = decodeURIComponent(url.pathname).replace(/^\/+/, "");
-    const file = normalize(join(PROJECTS_DIR, slug, rel));
-    if (!file.startsWith(normalize(PROJECTS_DIR))) {
+    let file: string;
+    try {
+      file = safeProjectPath(slug, rel);
+    } catch {
       return new Response("Forbidden", { status: 403 });
     }
 
@@ -907,8 +924,8 @@ app.whenReady().then(() => {
     // without the main process ever buffering whole files (the OOM cause).
     if (range) {
       const match = /bytes=(\d*)-(\d*)/.exec(range);
-      const start = match?.[1] ? Number.parseInt(match[1], 10) : 0;
-      const end = match?.[2] ? Number.parseInt(match[2], 10) : size - 1;
+      const start = Math.min(match?.[1] ? Number.parseInt(match[1], 10) : 0, Math.max(0, size - 1));
+      const end = Math.min(match?.[2] ? Number.parseInt(match[2], 10) : size - 1, size - 1);
       const body = Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream<Uint8Array>;
       return new Response(body, {
         status: 206,
@@ -1135,7 +1152,7 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("critique:load", (_event, slug: string) => {
     try {
-      return JSON.parse(readFileSync(join(PROJECTS_DIR, slug, "critique.json"), "utf8"));
+      return JSON.parse(readFileSync(safeProjectPath(slug, "critique.json"), "utf8"));
     } catch {
       return null;
     }
