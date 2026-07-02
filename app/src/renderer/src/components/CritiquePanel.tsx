@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Benchmarks } from "@reel/edl";
 import { useEditor } from "../store";
 import { critiqueEdl, type Critique } from "../lib/critique";
+import { Button, Icon } from "./ui";
 
 interface BenchItem {
   file: string;
@@ -9,6 +10,11 @@ interface BenchItem {
   likes?: number;
 }
 
+/**
+ * Critique tab (Figma 13:1063): benchmarks section + score card; clicking the
+ * card opens a Back-headed detail subflow (17:1412) with subscores, fixes, and
+ * Auto-improve (purple trajectory).
+ */
 export function CritiquePanel(): JSX.Element {
   const edl = useEditor((s) => s.edl);
   const slug = useEditor((s) => s.slug);
@@ -21,6 +27,7 @@ export function CritiquePanel(): JSX.Element {
   const [trajectory, setTrajectory] = useState<{ iter: number; score: number; delta: string; change: string }[]>([]);
   const [aiMode, setAiMode] = useState<"llm" | "baseline">("baseline");
   const [critPhase, setCritPhase] = useState<string | null>(null);
+  const [detail, setDetail] = useState(false);
   const benchInput = useRef<HTMLInputElement>(null);
   const autotuning = useEditor((s) => s.autotuning);
   const setAutotuning = useEditor((s) => s.setAutotuning);
@@ -44,7 +51,7 @@ export function CritiquePanel(): JSX.Element {
     window.api?.autoTuneResults(slug).then(setTrajectory).catch(() => {});
   }, [slug]);
 
-  // Refresh the trajectory when an auto-improve run finishes.
+  // Refresh trajectory + critique when an auto-improve run finishes.
   useEffect(() => {
     if (!slug || autotuning) return;
     window.api?.autoTuneResults(slug).then(setTrajectory).catch(() => {});
@@ -67,40 +74,8 @@ export function CritiquePanel(): JSX.Element {
     if (!slug) return;
     await window.api.importBenchmarks(slug, pathsFrom(files));
     window.api.listBenchmarks(slug).then(setBenchList);
-  };
-
-  const onAutoTune = async () => {
-    if (!slug || autotuning) return;
-    setAutotuning(true);
-    setNotice(null);
-    try {
-      const res = await window.api.autoTune(slug);
-      reloadProject();
-      if (!res.ok) setNotice({ kind: "error", text: `Auto-improve failed: ${res.error ?? "unknown error"}` });
-    } catch (err) {
-      setNotice({ kind: "error", text: `Auto-improve failed: ${String(err)}` });
-    } finally {
-      setAutotuning(false);
-    }
-  };
-
-  const runAiCritique = async () => {
-    if (!slug || critPhase) return;
-    setCritPhase("starting");
-    const offPhase = window.api.onPhase("critique", setCritPhase);
-    try {
-      const res = await window.api.runCritique(slug);
-      if (res.ok) {
-        const c = await window.api.loadCritique(slug);
-        if (c && typeof c === "object" && "score" in c) {
-          setResult(c as Critique);
-          setSource("agent");
-        }
-      }
-    } finally {
-      offPhase();
-      setCritPhase(null);
-    }
+    // Re-analyze in the background so the distribution reflects the new set.
+    void analyze();
   };
 
   const analyze = async () => {
@@ -120,101 +95,62 @@ export function CritiquePanel(): JSX.Element {
     }
   };
 
-  return (
-    <div className="pad">
-      <div className="section-h">Benchmarks</div>
-      <p className="muted small">
-        Upload your own high-performing videos. The critique scores this cut against what actually works for you.
-      </p>
-      <div className="dropzone mt" onClick={() => benchInput.current?.click()}>
-        <div className="dropzone-title">
-          {benchList.length === 0 ? "Add benchmark videos" : `${benchList.length} benchmark${benchList.length === 1 ? "" : "s"}`}
-        </div>
-        <div className="dropzone-sub">Your best posts — click to add</div>
-      </div>
-      <input
-        ref={benchInput}
-        type="file"
-        accept="video/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          if (e.target.files) void addBenchmarks(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      {benchList.length > 0 && (
-        <button className="btn full mt" onClick={analyze} disabled={!!phase}>
-          {phase ? `Analyzing… ${phase}` : benchmarks ? "Re-analyze benchmarks" : "Analyze benchmarks"}
-        </button>
-      )}
-      {phase && (
-        <div className="bar lg mt">
-          <div className="bar-fill" style={{ width: `${progress}%` }} />
-        </div>
-      )}
-      {benchmarks && benchmarks.count > 0 && (
-        <p className="muted small mt">
-          Calibrated on {benchmarks.count} of your videos — avg {benchmarks.distribution.durationSec?.mean ?? "?"}s,{" "}
-          {benchmarks.distribution.cutsPer10s?.mean ?? "?"} cuts/10s.
-        </p>
-      )}
+  const runHeuristic = () => {
+    setResult(critiqueEdl(edl, benchmarks));
+    setSource("heuristic");
+  };
 
-      <div className="section-h" style={{ marginTop: 18 }}>
-        Score
-      </div>
-      <button
-        className="btn btn-primary full"
-        onClick={runAiCritique}
-        disabled={aiMode !== "llm" || !!critPhase}
-        title={
-          aiMode === "llm"
-            ? "Critique this cut with the LLM"
-            : "Set OPENAI_API_KEY in app/.env.local to enable AI critique"
+  const runAiCritique = async () => {
+    if (!slug || critPhase) return;
+    setCritPhase("starting");
+    const offPhase = window.api.onPhase("critique", setCritPhase);
+    try {
+      const res = await window.api.runCritique(slug);
+      if (res.ok) {
+        const c = await window.api.loadCritique(slug);
+        if (c && typeof c === "object" && "score" in c) {
+          setResult(c as Critique);
+          setSource("agent");
         }
-      >
-        {critPhase ? `Critiquing… ${critPhase}` : "AI critique"}
-      </button>
-      <button
-        className="btn full mt"
-        onClick={() => {
-          setResult(critiqueEdl(edl, benchmarks));
-          setSource("heuristic");
-        }}
-      >
-        Quick heuristic
-      </button>
-      <button
-        className="btn full mt"
-        onClick={onAutoTune}
-        disabled={autotuning}
-        title="Iteratively improve the cut against best practices and your benchmarks"
-      >
-        {autotuning ? "Improving…" : "Auto-improve"}
-      </button>
+      } else {
+        setNotice({ kind: "error", text: `Critique failed: ${res.error ?? "unknown error"}` });
+      }
+    } finally {
+      offPhase();
+      setCritPhase(null);
+    }
+  };
 
-      {!result && (
-        <p className="muted small mt">
-          {aiMode === "llm"
-            ? "AI critique reads your prompt, style, and benchmarks. Quick heuristic is instant and offline."
-            : "Heuristic score (offline). Add OPENAI_API_KEY in app/.env.local for an LLM critique."}
-        </p>
-      )}
+  const onAutoTune = async () => {
+    if (!slug || autotuning) return;
+    setAutotuning(true);
+    setNotice(null);
+    try {
+      const res = await window.api.autoTune(slug);
+      reloadProject();
+      if (!res.ok) setNotice({ kind: "error", text: `Auto-improve failed: ${res.error ?? "unknown error"}` });
+    } catch (err) {
+      setNotice({ kind: "error", text: `Auto-improve failed: ${String(err)}` });
+    } finally {
+      setAutotuning(false);
+    }
+  };
 
-      {result && (
-        <div className="critique">
-          <div className="critique-head">
-            <Ring score={result.score} />
-            <div>
-              <div className="critique-score-label">Overall</div>
-              <div className="muted small">{verdict(result.score)}</div>
-              <div className="muted small">
-                {source === "agent" ? "Agent critique" : result.benchmarksUsed ? "Benchmark-calibrated" : "Heuristic"}
-              </div>
-            </div>
+  /* ---------- detail subflow ---------- */
+  if (detail && result) {
+    const lastScore = trajectory.length ? trajectory[trajectory.length - 1].score : result.score;
+    return (
+      <div>
+        <div className="subflow-head">
+          <Button variant="secondary" size="sm" onClick={() => setDetail(false)}>
+            Back
+          </Button>
+        </div>
+        <div className="rail-body" style={{ gap: 12, paddingTop: 8 }}>
+          <ScoreCard result={result} benchmarks={benchmarks} source={source} />
+          <div className="crit-trajectory" title="Auto-improve trajectory">
+            <div className="crit-trajectory-fill" style={{ width: `${Math.min(100, lastScore)}%` }} />
           </div>
-
-          {result.summary && <p className="muted small">{result.summary}</p>}
 
           <div className="subscores">
             {result.subscores.map((s) => (
@@ -249,49 +185,166 @@ export function CritiquePanel(): JSX.Element {
               </ul>
             </div>
           )}
-        </div>
-      )}
 
-      {trajectory.length > 0 && (
-        <div className="fixes mt">
-          <div className="section-h">Auto-improve history</div>
-          <ul>
-            {trajectory.map((t) => (
-              <li key={t.iter}>
-                <strong>{t.score}</strong> {t.delta !== "0" && <span className="muted">({t.delta})</span>} — {t.change}
-              </li>
-            ))}
-          </ul>
+          <Button variant="primary" size="sm" onClick={onAutoTune} disabled={autotuning} style={{ width: "100%" }}>
+            {autotuning ? "Improving…" : "Auto-improve"}
+          </Button>
+
+          {trajectory.length > 0 && (
+            <div className="fixes">
+              <div className="section-h">Improvement history</div>
+              <ul>
+                {trajectory.map((t) => (
+                  <li key={t.iter}>
+                    <strong>{t.score}</strong> {t.delta !== "0" && <span className="muted">({t.delta})</span>} —{" "}
+                    {t.change}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- main tab ---------- */
+  return (
+    <div>
+      <div className="rail-section">
+        <div className="rail-head">Benchmarks</div>
+        <div className="rail-body" style={{ gap: 8 }}>
+          <p className="crit-summary" style={{ margin: 0 }}>
+            Upload or search high-performing videos. Our critique agent scores this cut against what actually
+            works for you.
+          </p>
+          <div className="upload-area" style={{ height: 72 }} onClick={() => benchInput.current?.click()}>
+            <span className="upload-title">
+              <Icon name="arrow-out-of-box" size={16} />
+              Upload benchmark video(s)
+            </span>
+            <span className="upload-sub">Drag and drop here or click to upload</span>
+          </div>
+          <input
+            ref={benchInput}
+            type="file"
+            accept="video/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) void addBenchmarks(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          {benchList.length > 0 && (
+            <div className="clip-row" title={benchList.map((b) => b.file).join(", ")}>
+              <Icon name="folder-alt" size={14} />
+              <span className="name">
+                {benchList.length} benchmark{benchList.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
+          {phase && (
+            <div className="crit-trajectory">
+              <div className="crit-trajectory-fill" style={{ width: `${progress}%` }} />
+            </div>
+          )}
+          {aiMode === "llm" ? (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={runAiCritique}
+                disabled={!!critPhase}
+                style={{ width: "100%" }}
+              >
+                {critPhase ? `Critiquing… ${critPhase}` : "AI critique"}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={runHeuristic} style={{ width: "100%" }}>
+                Run heuristic
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="sm" onClick={runHeuristic} style={{ width: "100%" }}>
+              Run heuristic
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {result && (
+        <div className="rail-section">
+          <div className="rail-body" style={{ paddingTop: 12 }}>
+            <div
+              className="crit-score-card"
+              onClick={() => setDetail(true)}
+              role="button"
+              title="Open critique details"
+            >
+              <ScoreCard result={result} benchmarks={benchmarks} source={source} />
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+function ScoreCard({
+  result,
+  benchmarks,
+  source,
+}: {
+  result: Critique;
+  benchmarks: Benchmarks | null;
+  source: "agent" | "heuristic";
+}): JSX.Element {
+  const compared =
+    benchmarks && benchmarks.count > 0
+      ? `Compared with ${benchmarks.count} video${benchmarks.count === 1 ? "" : "s"}`
+      : source === "agent"
+        ? "AI critique"
+        : "Heuristic";
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", minWidth: 0 }}>
+      <Ring score={result.score} />
+      <div style={{ minWidth: 0 }}>
+        <div className="crit-score-title">{verdict(result.score)}</div>
+        <div className="crit-score-sub">{compared}</div>
+        {result.summary && (
+          <p className="crit-summary" style={{ marginTop: 6, marginBottom: 0 }}>
+            {result.summary}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function verdict(score: number): string {
-  if (score >= 85) return "Strong — ship it.";
-  if (score >= 70) return "Solid, a few tweaks.";
-  if (score >= 50) return "Needs work.";
-  return "Early draft.";
+  if (score >= 85) return "Strong — ship it";
+  if (score >= 70) return "Solid, a few tweaks";
+  if (score >= 50) return "Needs improvements";
+  return "Early draft";
 }
 
 function Ring({ score }: { score: number }): JSX.Element {
-  const r = 30;
+  const r = 24;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - Math.max(0, Math.min(100, score)) / 100);
   return (
-    <svg width={76} height={76} viewBox="0 0 76 76" className="ring">
-      <circle cx={38} cy={38} r={r} className="ring-bg" />
+    <svg width={60} height={60} viewBox="0 0 60 60" className="ring" style={{ flex: "none" }}>
+      <circle cx={30} cy={30} r={r} className="ring-bg" />
       <circle
-        cx={38}
-        cy={38}
+        cx={30}
+        cy={30}
         r={r}
         className="ring-fg"
         strokeDasharray={c}
         strokeDashoffset={offset}
-        transform="rotate(-90 38 38)"
+        transform="rotate(-90 30 30)"
       />
-      <text x={38} y={44} textAnchor="middle" className="ring-num">
+      <text x={30} y={35} textAnchor="middle" className="ring-num">
         {score}
       </text>
     </svg>

@@ -1,39 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StyleProfile } from "@reel/edl";
 import { useEditor } from "../store";
+import { Button, Icon } from "./ui";
 import type { StyleSummary } from "../../../preload";
 
+/**
+ * Style tab (Figma 11:854): reference library upload, active library chip,
+ * reference mode (literal vs inspired), and the read-only LLM-distilled style
+ * guide. Analysis runs automatically on Generate; Re-analyze is manual.
+ */
 export function StylePanel(): JSX.Element {
   const slug = useEditor((s) => s.slug);
-  const meta = useEditor((s) => s.meta);
-  const updateEdl = useEditor((s) => s.updateEdl);
-
   const [styles, setStyles] = useState<StyleSummary[]>([]);
-  const [activeId, setActiveId] = useState<string | undefined>(meta?.styleProfileId);
-  const [activeProfile, setActiveProfile] = useState<StyleProfile | null>(null);
-  const [localProfile, setLocalProfile] = useState<StyleProfile | null>(null);
+  const [activeId, setActiveId] = useState<string | undefined>(undefined);
+  const [profile, setProfile] = useState<StyleProfile | null>(null);
+  const [isProjectProfile, setIsProjectProfile] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [phase, setPhase] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const refInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
     window.api?.listStyles().then(setStyles).catch(() => {});
-    if (slug) {
-      window.api?.loadMeta(slug).then((m) => setActiveId(m.styleProfileId)).catch(() => {});
-      window.api?.loadStyle(slug).then(setLocalProfile).catch(() => {});
-    }
+    if (!slug) return;
+    window.api?.loadMeta(slug).then((m) => setActiveId(m.styleProfileId)).catch(() => {});
+    window.api?.loadStyle(slug).then((p) => {
+      setIsProjectProfile(Boolean(p));
+      if (p) setProfile(p);
+    });
   }, [slug]);
 
   useEffect(refresh, [refresh]);
 
+  // Resolve the effective library profile when the project has no override.
+  const effectiveId = activeId ?? (styles.length === 1 ? styles[0].id : undefined);
   useEffect(() => {
-    const eid = activeId ?? (styles.length === 1 ? styles[0].id : undefined);
-    if (eid && !localProfile) window.api?.getStyle(eid).then(setActiveProfile).catch(() => {});
-    else setActiveProfile(null);
-  }, [activeId, localProfile, styles]);
+    if (isProjectProfile || !effectiveId) return;
+    window.api?.getStyle(effectiveId).then((p) => p && setProfile(p)).catch(() => {});
+  }, [effectiveId, isProjectProfile]);
 
-  // Open the native folder picker directly and name the style after the folder.
-  const newStyle = async () => {
+  const newStyleFromFolder = async () => {
     setBusy("Choose a folder…");
     try {
       await window.api.newStyleFromDialog("folder");
@@ -43,181 +49,9 @@ export function StylePanel(): JSX.Element {
     }
   };
 
-  const addSources = async (id: string, mode: "files" | "folder") => {
-    setBusy(`Importing into ${id}…`);
-    try {
-      await window.api.addStyleSources(id, mode);
-      refresh();
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const analyze = async (id: string) => {
-    if (phase) return;
-    setProgress(0);
-    setPhase("starting");
-    const offPhase = window.api.onPhase("styles", setPhase);
-    const offProgress = window.api.onProgress("styles", setProgress);
-    try {
-      await window.api.analyzeStyle(id);
-      refresh();
-      if (activeId === id) window.api.getStyle(id).then(setActiveProfile).catch(() => {});
-    } finally {
-      offPhase();
-      offProgress();
-      setPhase(null);
-    }
-  };
-
-  const setActive = async (id: string) => {
+  const addToLibrary = async (files: FileList) => {
     if (!slug) return;
-    await window.api.saveMeta(slug, { styleProfileId: id || undefined });
-    setActiveId(id || undefined);
-  };
-
-  const removeStyle = async (id: string) => {
-    if (!window.confirm("Delete this style and its reference videos?")) return;
-    await window.api.deleteStyle(id);
-    if (activeId === id) setActiveId(undefined);
-    refresh();
-  };
-
-  // What generation will actually use: single library auto-selects; project
-  // references override the library.
-  const effectiveId = activeId ?? (styles.length === 1 ? styles[0].id : undefined);
-  const profile = localProfile ?? activeProfile;
-
-  return (
-    <div className="pad">
-      <div className="section-h">Style library</div>
-      <p className="muted small">
-        Build a reusable look from a folder of your past videos. It's analyzed automatically the first time you
-        Generate — no extra clicks.
-      </p>
-
-      <button className="btn btn-primary full mt" onClick={newStyle} disabled={!!busy}>
-        New style (choose a folder)
-      </button>
-
-      {styles.length > 1 && (
-        <label className="field mt">
-          <span className="field-label">Active style for this project</span>
-          <select className="input" value={effectiveId ?? ""} onChange={(e) => void setActive(e.target.value)}>
-            <option value="">Auto</option>
-            {styles.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {styles.length > 0 && (
-        <div className="style-list mt">
-          {styles.map((s) => (
-            <div key={s.id} className={`style-row ${effectiveId === s.id && !localProfile ? "active" : ""}`}>
-              <div className="style-row-top">
-                <span className="style-name">{s.name}</span>
-                <span className="muted small">
-                  {s.clips} clip{s.clips === 1 ? "" : "s"}
-                  {s.analyzed ? " · analyzed" : " · analyzes on Generate"}
-                </span>
-              </div>
-              <div className="style-actions">
-                <button className="btn compact" onClick={() => addSources(s.id, "files")} disabled={!!busy}>
-                  + Files
-                </button>
-                <button className="btn compact" onClick={() => addSources(s.id, "folder")} disabled={!!busy}>
-                  + Folder
-                </button>
-                <button className="btn compact" onClick={() => analyze(s.id)} disabled={!!phase || s.clips === 0}>
-                  {phase ? "Analyzing…" : "Re-analyze"}
-                </button>
-                <button className="btn compact" onClick={() => removeStyle(s.id)}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {phase && (
-        <div className="bar lg mt">
-          <div className="bar-fill" style={{ width: `${progress}%` }} />
-        </div>
-      )}
-      {busy && <p className="muted small mt">{busy}</p>}
-
-      {localProfile && (
-        <p className="muted small mt">This project's own references override the library for generation.</p>
-      )}
-
-      {profile && <ProfileView profile={profile} onApply={() => applyToTheme(profile, updateEdl)} />}
-
-      <div className="section-h" style={{ marginTop: 22 }}>
-        Or learn from this project&apos;s clips
-      </div>
-      <ProjectReferences onLearned={refresh} setBusy={setBusy} />
-    </div>
-  );
-}
-
-function ProfileView({ profile, onApply }: { profile: StyleProfile; onApply: () => void }): JSX.Element {
-  return (
-    <div className="critique">
-      <div className="section-h">Style profile</div>
-      {profile.palette.length > 0 && (
-        <div className="swatches">
-          {profile.palette.slice(0, 3).map((c, i) => (
-            <span key={i} className="swatch">
-              <span className="swatch-chip" style={{ background: c }} />
-              <span>{c}</span>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="kv mt">
-        <span>Pacing</span>
-        <span>{profile.pacing.cutsPer10s ?? "—"} cuts / 10s</span>
-      </div>
-      <div className="kv">
-        <span>Energy</span>
-        <span>{profile.energy != null ? `${Math.round(profile.energy * 100)}%` : "—"}</span>
-      </div>
-      <div className="kv">
-        <span>Target length</span>
-        <span>{profile.targetLengthSec ? `${profile.targetLengthSec}s` : "—"}</span>
-      </div>
-      {profile.styleGuide && <p className="prompt mt">{profile.styleGuide}</p>}
-      <button className="btn full mt" onClick={onApply}>
-        Apply look to this video
-      </button>
-    </div>
-  );
-}
-
-function ProjectReferences({
-  onLearned,
-  setBusy,
-}: {
-  onLearned: () => void;
-  setBusy: (s: string | null) => void;
-}): JSX.Element {
-  const slug = useEditor((s) => s.slug);
-  const [refs, setRefs] = useState<string[]>([]);
-  const [phase, setPhase] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
-  const refInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (slug) window.api?.listReferences(slug).then(setRefs).catch(() => {});
-  }, [slug]);
-
-  const addRefs = async (files: FileList) => {
-    if (!slug) return;
+    // Files dropped here become project-level references (override).
     const paths = Array.from(files)
       .map((f) => {
         try {
@@ -227,19 +61,27 @@ function ProjectReferences({
         }
       })
       .filter(Boolean);
-    const res = await window.api.importReferences(slug, paths);
-    if (res.ok) setRefs((r) => Array.from(new Set([...r, ...res.files])));
+    if (paths.length === 0) return;
+    setBusy("Importing references…");
+    try {
+      await window.api.importReferences(slug, paths);
+      refresh();
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const learn = async () => {
-    if (!slug || phase) return;
+  const reanalyze = async () => {
+    if (phase) return;
     setProgress(0);
     setPhase("starting");
-    const offPhase = window.api.onPhase("style", setPhase);
-    const offProgress = window.api.onProgress("style", setProgress);
+    const channel = isProjectProfile || !effectiveId ? "style" : "styles";
+    const offPhase = window.api.onPhase(channel, setPhase);
+    const offProgress = window.api.onProgress(channel, setProgress);
     try {
-      await window.api.learnStyle(slug);
-      onLearned();
+      if (isProjectProfile || !effectiveId) await window.api.learnStyle(slug!);
+      else await window.api.analyzeStyle(effectiveId);
+      refresh();
     } finally {
       offPhase();
       offProgress();
@@ -247,44 +89,108 @@ function ProjectReferences({
     }
   };
 
-  return (
-    <>
-      <p className="muted small">A per-project override: learn from clips you drop just into this project.</p>
-      <div className="dropzone mt" onClick={() => refInput.current?.click()}>
-        <div className="dropzone-title">
-          {refs.length === 0 ? "Add reference videos" : `${refs.length} reference${refs.length === 1 ? "" : "s"}`}
-        </div>
-        <div className="dropzone-sub">Click to add</div>
-      </div>
-      <input
-        ref={refInput}
-        type="file"
-        accept="video/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          if (e.target.files) void addRefs(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      <button className="btn full mt" onClick={learn} disabled={!!phase || refs.length === 0}>
-        {phase ? `Learning… ${phase}` : "Learn from these"}
-      </button>
-      {phase && (
-        <div className="bar lg mt">
-          <div className="bar-fill" style={{ width: `${progress}%` }} />
-        </div>
-      )}
-    </>
-  );
-}
+  const setMode = async (mode: "literal" | "inspired") => {
+    if (!slug) return;
+    setProfile((p) => (p ? { ...p, referenceMode: mode } : p));
+    await window.api.patchStyle(slug, { referenceMode: mode });
+  };
 
-function applyToTheme(profile: StyleProfile, updateEdl: (fn: (edl: import("@reel/edl").Edl) => void) => void): void {
-  updateEdl((d) => {
-    if (profile.palette.length >= 1) d.theme.palette = profile.palette.slice(0, 3);
-    if (profile.fontFamily) d.theme.fontFamily = profile.fontFamily;
-    if (profile.captionStyle) d.theme.captionStyle = profile.captionStyle;
-    if (profile.grade) d.theme.grade = profile.grade;
-    d.theme.stylePreset = profile.id;
-  });
+  const setActive = async (id: string) => {
+    if (!slug) return;
+    await window.api.saveMeta(slug, { styleProfileId: id || undefined });
+    setActiveId(id || undefined);
+  };
+
+  return (
+    <div>
+      <div className="rail-section">
+        <div className="rail-head">Reference library</div>
+        <div className="rail-body" style={{ gap: 8 }}>
+          <p className="crit-summary" style={{ margin: 0 }}>
+            Build a reusable look from a repository of videos.
+          </p>
+          <div className="upload-area" style={{ height: 72 }} onClick={() => refInput.current?.click()}>
+            <span className="upload-title">
+              <Icon name="arrow-out-of-box" size={16} />
+              Upload reference video(s)
+            </span>
+            <span className="upload-sub">{busy ?? "Drag and drop here or click to upload"}</span>
+          </div>
+          <input
+            ref={refInput}
+            type="file"
+            accept="video/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) void addToLibrary(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          {styles.map((s) => (
+            <div key={s.id} className="clip-row" title={`${s.clips} clips`}>
+              <Icon name="folder-alt" size={14} />
+              <span className="name">{s.name}</span>
+            </div>
+          ))}
+          <Button variant="ghost" size="sm" onClick={newStyleFromFolder} disabled={!!busy}>
+            New library from folder…
+          </Button>
+          {styles.length > 1 && (
+            <div className="insp-group" style={{ width: "100%" }}>
+              <span className="insp-label">Active library</span>
+              <span className="insp-select">
+                <select value={effectiveId ?? ""} onChange={(e) => void setActive(e.target.value)}>
+                  <option value="">Auto</option>
+                  {styles.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="chevron-top" size={16} style={{ transform: "rotate(180deg)" }} />
+              </span>
+            </div>
+          )}
+          <div className="insp-group" style={{ width: "100%" }}>
+            <span className="insp-label">Reference</span>
+            <span className="insp-select">
+              <select
+                value={profile?.referenceMode ?? "literal"}
+                onChange={(e) => void setMode(e.target.value as "literal" | "inspired")}
+              >
+                <option value="literal">Literal</option>
+                <option value="inspired">Inspired</option>
+              </select>
+              <Icon name="chevron-top" size={16} style={{ transform: "rotate(180deg)" }} />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rail-section">
+        <div className="rail-head">Prompt</div>
+        <div className="rail-body" style={{ gap: 8 }}>
+          {profile?.styleGuide ? (
+            <p className="crit-summary" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+              {profile.styleGuide}
+            </p>
+          ) : (
+            <p className="crit-summary" style={{ margin: 0 }}>
+              No style guide yet — it&apos;s distilled from your references automatically the first time you
+              Generate, or run analysis now.
+            </p>
+          )}
+          <Button variant="secondary" size="sm" onClick={reanalyze} disabled={!!phase} style={{ width: "100%" }}>
+            {phase ? `Analyzing… ${phase}` : profile?.styleGuide ? "Re-analyze references" : "Analyze references"}
+          </Button>
+          {phase && (
+            <div className="crit-trajectory">
+              <div className="crit-trajectory-fill" style={{ width: `${progress}%` }} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

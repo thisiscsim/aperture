@@ -243,10 +243,23 @@ const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
   const isTitle = clip.style === "title";
   const m = edl.theme.safeMargins;
 
+  // theme.textAlignment places overlays within the safe area (AbsoluteFill is a
+  // flex column: vertical = justifyContent, horizontal = alignItems).
+  const align = edl.theme.textAlignment ?? { horizontal: "center", vertical: "center" };
+  const V: Record<string, CSSProperties["justifyContent"]> = {
+    top: "flex-start",
+    center: "center",
+    bottom: "flex-end",
+  };
+  const H: Record<string, CSSProperties["alignItems"]> = {
+    left: "flex-start",
+    center: "center",
+    right: "flex-end",
+  };
   const container: CSSProperties = {
-    justifyContent: "center",
-    alignItems: "center",
-    textAlign: "center",
+    justifyContent: V[align.vertical] ?? "center",
+    alignItems: H[align.horizontal] ?? "center",
+    textAlign: align.horizontal as CSSProperties["textAlign"],
     paddingTop: m.top,
     paddingBottom: m.bottom,
     paddingLeft: m.left,

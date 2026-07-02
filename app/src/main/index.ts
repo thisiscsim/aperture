@@ -938,6 +938,28 @@ app.whenReady().then(() => {
       return null;
     }
   });
+  // Patch the ACTIVE style profile (same precedence generation uses: project
+  // style.json -> meta.styleProfileId library profile -> the single library style).
+  ipcMain.handle("style:patch", (_event, slug: string, patch: Record<string, unknown>) => {
+    try {
+      const projectStyle = safeProjectPath(slug, "style.json");
+      let file: string | null = existsSync(projectStyle) ? projectStyle : null;
+      if (!file) {
+        let id = readMeta(slug).styleProfileId;
+        if (!id) {
+          const dirs = readdirSync(STYLES_DIR).filter((d) => existsSync(join(STYLES_DIR, d, "profile.json")));
+          if (dirs.length === 1) id = dirs[0];
+        }
+        if (id && existsSync(safeStylePath(id, "profile.json"))) file = safeStylePath(id, "profile.json");
+      }
+      if (!file) return { ok: false, error: "no active style profile" };
+      const profile = { ...(readJson(file) as Record<string, unknown>), ...patch };
+      writeFileSync(file, `${JSON.stringify(profile, null, 2)}\n`);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
   // ---- Global style library ----
   ipcMain.handle("styles:list", () => listStyles());
   ipcMain.handle("styles:create", (_event, name: string) => createStyle(name));

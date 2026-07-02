@@ -1,6 +1,5 @@
 import { useEditor, type RightTab } from "../store";
-import { Inspector } from "./Inspector";
-import { DesignPanel } from "./DesignPanel";
+import { InspectorPanel } from "./InspectorPanel";
 import { StylePanel } from "./StylePanel";
 import { CritiquePanel } from "./CritiquePanel";
 
@@ -13,7 +12,6 @@ const TABS: { id: RightTab; label: string }[] = [
 export function RightPanel(): JSX.Element {
   const tab = useEditor((s) => s.rightTab);
   const setTab = useEditor((s) => s.setRightTab);
-  const selectedClipId = useEditor((s) => s.selectedClipId);
 
   return (
     <aside className="right-panel">
@@ -29,10 +27,7 @@ export function RightPanel(): JSX.Element {
         ))}
       </div>
       <div className="rp-body">
-        {/* Combined tab: project Design settings by default, the clip inspector
-            when something is selected. The full subflow chrome (Back header,
-            Design+Format restyle) lands in editor Phase 2. */}
-        {tab === "inspector" && (selectedClipId ? <Inspector /> : <DesignPanel />)}
+        {tab === "inspector" && <InspectorPanel />}
         {tab === "style" && <StylePanel />}
         {tab === "critique" && <CritiquePanel />}
       </div>
