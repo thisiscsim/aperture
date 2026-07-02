@@ -1078,7 +1078,7 @@ input[type="range"] {
   flex-direction: column;
   background: var(--background-primary);
   border: 1px solid var(--border-base);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   /* No overflow:hidden — the ⋯ dropdown must escape the card. The media
      clips its own corners instead. */
   cursor: pointer;
@@ -1104,8 +1104,8 @@ input[type="range"] {
   display: grid;
   place-items: center;
   overflow: hidden;
-  /* card radius (6) minus its 1px border */
-  border-radius: 5px 5px 0 0;
+  /* card radius (10) minus its 1px border */
+  border-radius: 9px 9px 0 0;
 }
 
 .project-card-media img {
