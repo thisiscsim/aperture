@@ -111,6 +111,8 @@ const api = {
   listReferences: (slug: string): Promise<string[]> => ipcRenderer.invoke("references:list", slug),
   learnStyle: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("style:learn", slug),
   loadStyle: (slug: string): Promise<StyleProfile | null> => ipcRenderer.invoke("style:load", slug),
+  patchStyle: (slug: string, patch: Partial<StyleProfile>): Promise<SaveResult> =>
+    ipcRenderer.invoke("style:patch", slug, patch),
   // Global style library
   listStyles: (): Promise<StyleSummary[]> => ipcRenderer.invoke("styles:list"),
   createStyle: (name: string): Promise<CreateStyleResult> => ipcRenderer.invoke("styles:create", name),

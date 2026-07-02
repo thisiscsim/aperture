@@ -18,6 +18,23 @@ export function App(): JSX.Element {
   const setProject = useEditor((s) => s.setProject);
   const setLoadError = useEditor((s) => s.setLoadError);
   const setReload = useEditor((s) => s.setReload);
+  const undoEdl = useEditor((s) => s.undoEdl);
+  const redoEdl = useEditor((s) => s.redoEdl);
+
+  // Cmd+Z / Shift+Cmd+Z for EDL history. Text fields keep their native undo.
+  useEffect(() => {
+    if (view !== "editor") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
+      e.preventDefault();
+      if (e.shiftKey) redoEdl();
+      else undoEdl();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, undoEdl, redoEdl]);
 
   // Load (and live-reload) the active project whenever we enter the editor.
   useEffect(() => {

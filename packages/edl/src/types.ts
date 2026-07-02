@@ -13,6 +13,7 @@ import type {
   MetaSchema,
   StyleExemplarSchema,
   StyleProfileSchema,
+  TextAlignmentSchema,
   TextAnimSchema,
   TextClipSchema,
   TextTrackSchema,
@@ -45,6 +46,7 @@ export type AudioClip = z.infer<typeof AudioClipSchema>;
 
 export type Meta = z.infer<typeof MetaSchema>;
 export type Grade = z.infer<typeof GradeSchema>;
+export type TextAlignment = z.infer<typeof TextAlignmentSchema>;
 export type StyleProfile = z.infer<typeof StyleProfileSchema>;
 export type StyleExemplar = z.infer<typeof StyleExemplarSchema>;
 export type Benchmarks = z.infer<typeof BenchmarksSchema>;

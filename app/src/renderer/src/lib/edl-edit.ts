@@ -13,6 +13,7 @@ export function addAssets(edl: Edl, assets: Asset[]): void {
 /**
  * Add (or replace) an audio clip for an asset. Music spans the whole video and
  * ducks under voice; voiceover/sfx sit at their natural length from t=0.
+ * Music and voiceover live on separate audio tracks (timeline layers).
  */
 export function addAudioClip(
   edl: Edl,
@@ -20,13 +21,15 @@ export function addAudioClip(
   role: "music" | "voiceover" | "sfx",
   durationSec?: number,
 ): void {
-  let track = edl.tracks.find((t): t is AudioTrack => t.type === "audio");
+  const trackId = role === "voiceover" ? "vo" : "aud";
+  const trackName = role === "voiceover" ? "Voiceover" : "Music";
+  let track = edl.tracks.find((t): t is AudioTrack => t.type === "audio" && t.id === trackId);
   if (!track) {
-    track = { id: "aud", type: "audio", clips: [] };
+    track = { id: trackId, type: "audio", name: trackName, clips: [] };
     edl.tracks.push(track);
   }
   const videoLen = durationSeconds(edl);
-  const out = round(role === "music" ? durationSec ?? Math.max(1, videoLen) : durationSec ?? Math.max(1, videoLen));
+  const out = round(durationSec ?? Math.max(1, videoLen));
   const clip: AudioClip = {
     id: `a-${assetId}`,
     assetId,
@@ -39,6 +42,19 @@ export function addAudioClip(
   };
   track.clips = track.clips.filter((c) => c.assetId !== assetId);
   track.clips.push(clip);
+}
+
+/** Append a new empty timeline layer of the given type. */
+export function addTrack(edl: Edl, type: "video" | "text" | "audio", name?: string): void {
+  const id = `${type}-${Date.now().toString(36)}`;
+  if (type === "video") edl.tracks.push({ id, type, name, clips: [] });
+  else if (type === "text") edl.tracks.push({ id, type, name, clips: [] });
+  else edl.tracks.push({ id, type, name, clips: [] });
+}
+
+export function renameTrack(edl: Edl, trackId: string, name: string): void {
+  const track = edl.tracks.find((t) => t.id === trackId);
+  if (track) track.name = name.trim() || undefined;
 }
 
 export function findVideoClip(edl: Edl, id: string | null): VideoClip | undefined {
@@ -55,6 +71,29 @@ export function findVideoClip(edl: Edl, id: string | null): VideoClip | undefine
 export function mutateVideoClip(edl: Edl, id: string, fn: (clip: VideoClip) => void): void {
   for (const track of edl.tracks) {
     if (track.type === "video") {
+      const clip = track.clips.find((c) => c.id === id);
+      if (clip) {
+        fn(clip);
+        return;
+      }
+    }
+  }
+}
+
+export function findAudioClip(edl: Edl, id: string | null): AudioClip | undefined {
+  if (!id) return undefined;
+  for (const track of edl.tracks) {
+    if (track.type === "audio") {
+      const clip = track.clips.find((c) => c.id === id);
+      if (clip) return clip;
+    }
+  }
+  return undefined;
+}
+
+export function mutateAudioClip(edl: Edl, id: string, fn: (clip: AudioClip) => void): void {
+  for (const track of edl.tracks) {
+    if (track.type === "audio") {
       const clip = track.clips.find((c) => c.id === id);
       if (clip) {
         fn(clip);

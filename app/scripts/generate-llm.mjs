@@ -90,6 +90,11 @@ function resolveActiveStyle(projectDir, slug) {
 function styleBlock(profile) {
   if (!profile) return "(none — use the prompt and general best practices)";
   const parts = [];
+  parts.push(
+    profile.referenceMode === "inspired"
+      ? "REFERENCE MODE: inspired — treat the references as a loose vibe; capture the mood and energy but freely depart from their exact structure."
+      : "REFERENCE MODE: literal — imitate the references' edit structure closely (hook shape, pacing, caption/text treatment, transitions).",
+  );
   if (profile.styleGuide) parts.push(`STYLE GUIDE:\n${profile.styleGuide}`);
   const d = [];
   if (profile.palette?.length) d.push(`palette [text,bg,accent] = ${profile.palette.slice(0, 3).join(", ")}`);
@@ -109,9 +114,21 @@ function styleBlock(profile) {
   return parts.join("\n\n");
 }
 
+function formatLabel(baselineJson) {
+  try {
+    const f = JSON.parse(baselineJson).format ?? {};
+    const w = f.width ?? 1080;
+    const h = f.height ?? 1920;
+    const orient = w === h ? "square 1:1" : w > h ? "landscape 16:9" : "vertical 9:16";
+    return `${orient}, ${w}x${h} @ ${f.fps ?? 30}fps`;
+  } catch {
+    return "vertical 9:16, 1080x1920 @ 30fps";
+  }
+}
+
 function buildPrompt(baselineJson, promptMd, profile) {
   return [
-    "You are an expert short-form (vertical 9:16) video editor.",
+    `You are an expert short-form (${formatLabel(baselineJson)}) video editor.`,
     "Refine the BASELINE edit decision list (edl.json) into a polished first cut that closely matches the creator's STYLE.",
     "",
     "Return ONLY a single JSON object — the complete updated edl.json. No prose, no code fences.",
