@@ -9,6 +9,16 @@ versions.
 
 ### Added
 
+- **Visual language refactor (Home + New Project dialog)** — new design-token
+  system (`styles/tokens.css`, light authoritative + derived dark), Bradford
+  brand font scaffolding with SF Pro as the UI stack, a custom icon set
+  harvested from Figma (38 SVGs, `currentColor`-normalized) behind a typed
+  `Icon` component, componentized UI primitives (`Button`, `IconButton`,
+  `Badge`, `Modal`, `Field`/`Input`/`TextArea`/`Select`), a Figma-faithful Home
+  page (header, welcome hero, 240x300 project cards with status badges +
+  relative time, dashed new-project card) and restyled New Project dialog. The
+  editor is retinted onto the new tokens pending its own redesign.
+
 - **Testing foundation** — Vitest with two projects (Node for `packages/edl` +
   `app/scripts`, jsdom for the renderer), covering the EDL schema, the
   `sanitizeEdl`/`enforceStyle`/`metrics` helpers, critique scoring, EDL edits,
