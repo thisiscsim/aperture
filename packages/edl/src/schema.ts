@@ -35,11 +35,19 @@ export const GradeSchema = z.object({
   vignette: z.number().min(0).max(1).default(0),
 });
 
+/** Default placement for text overlays within the safe area. */
+export const TextAlignmentSchema = z.object({
+  horizontal: z.enum(["left", "center", "right"]).default("center"),
+  vertical: z.enum(["top", "center", "bottom"]).default("center"),
+});
+
 export const ThemeSchema = z.object({
   fontFamily: z.string().default("Inter"),
   palette: z.array(z.string()).min(1).default(["#FAFAF9", "#0F0E0D", "#E8B04B"]),
   captionStyle: z.enum(["karaoke", "block", "word", "none"]).default("karaoke"),
   safeMargins: SafeMarginsSchema.default({}),
+  /** Default text-overlay alignment (Design section in the editor). */
+  textAlignment: TextAlignmentSchema.default({}),
   /** Id of the named visual-style preset this theme was seeded from (if any). */
   stylePreset: z.string().optional(),
   /** Optional color grade applied to all video clips. */
@@ -217,6 +225,8 @@ export const StyleProfileSchema = z.object({
   hookSec: z.number().nonnegative().optional(),
   textTreatment: z.string().optional(),
   transitions: z.array(z.string()).default([]),
+  /** How generation should use the references: imitate closely vs vibe-match. */
+  referenceMode: z.enum(["literal", "inspired"]).default("literal"),
   /** 0 = calm/cinematic, 1 = frenetic/high-energy. */
   energy: z.number().min(0).max(1).optional(),
   /** 0 = no music drive, 1 = tightly beat-synced. */

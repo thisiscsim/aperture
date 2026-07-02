@@ -64,6 +64,29 @@ export function mutateVideoClip(edl: Edl, id: string, fn: (clip: VideoClip) => v
   }
 }
 
+export function findAudioClip(edl: Edl, id: string | null): AudioClip | undefined {
+  if (!id) return undefined;
+  for (const track of edl.tracks) {
+    if (track.type === "audio") {
+      const clip = track.clips.find((c) => c.id === id);
+      if (clip) return clip;
+    }
+  }
+  return undefined;
+}
+
+export function mutateAudioClip(edl: Edl, id: string, fn: (clip: AudioClip) => void): void {
+  for (const track of edl.tracks) {
+    if (track.type === "audio") {
+      const clip = track.clips.find((c) => c.id === id);
+      if (clip) {
+        fn(clip);
+        return;
+      }
+    }
+  }
+}
+
 export function findTextClip(edl: Edl, id: string | null): TextClip | undefined {
   if (!id) return undefined;
   for (const track of edl.tracks) {
