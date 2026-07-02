@@ -1,10 +1,13 @@
-import { type MouseEvent, useRef, useState } from "react";
-import { durationSeconds, type Edl, type Track } from "@reel/edl";
+import { type DragEvent, type MouseEvent, useEffect, useRef, useState } from "react";
+import { durationFrames, durationSeconds, type Edl, type Track } from "@reel/edl";
 import { useEditor } from "../store";
+import { addAssets, addAudioClip, addTrack, renameTrack } from "../lib/edl-edit";
+import { Icon, IconButton, useEscapeKey, type IconName } from "./ui";
 
-const GUTTER = 96;
+const LABEL_W = 150;
 const PX_PER_SEC = 60;
 const MIN_DUR = 0.2;
+export const ASSET_MIME = "application/x-aperture-asset";
 
 type DragMode = "move" | "left" | "right";
 interface Preview {
@@ -21,28 +24,52 @@ interface DragState {
 
 export function Timeline(): JSX.Element {
   const edl = useEditor((s) => s.edl);
+  const slug = useEditor((s) => s.slug);
   const currentFrame = useEditor((s) => s.currentFrame);
   const seek = useEditor((s) => s.seek);
   const selectedClipId = useEditor((s) => s.selectedClipId);
   const select = useEditor((s) => s.select);
   const updateEdl = useEditor((s) => s.updateEdl);
-  const [drag, setDrag] = useState<DragState | null>(null);
-  const dragging = useRef(false);
+  const playing = useEditor((s) => s.playing);
+  const muted = useEditor((s) => s.muted);
+  const playerCtl = useEditor((s) => s.playerCtl);
+  const toggleMuted = useEditor((s) => s.toggleMuted);
 
-  if (!edl) return <section className="timeline" />;
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [ghost, setGhost] = useState<{ trackId: string; start: number; dur: number } | null>(null);
+  const dragging = useRef(false);
+  const videoInput = useRef<HTMLInputElement>(null);
+  const audioInput = useRef<HTMLInputElement>(null);
+  const pendingSec = useRef<{ trackId: string; sec: number } | null>(null);
+
+  // Space toggles playback anywhere outside a text field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
+      e.preventDefault();
+      playerCtl?.toggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [playerCtl]);
+
+  if (!edl) return <section className="tl" />;
 
   const fps = edl.format.fps;
   const dur = Math.max(durationSeconds(edl), 6);
   const currentSec = currentFrame / fps;
   const lanePx = dur * PX_PER_SEC;
+  const tracks = edl.tracks.filter((t) => t.type !== "caption");
 
-  // Live scrubbing: seek continuously as the user drags across the timeline so
-  // the preview plays frame-by-frame under the cursor (rAF-throttled).
+  /* ---------- scrub / drag (unchanged mechanics) ---------- */
+
   const startScrub = (e: MouseEvent<HTMLDivElement>) => {
     if (dragging.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const seekAt = (clientX: number) => {
-      const x = clientX - rect.left - GUTTER;
+      const x = clientX - rect.left - LABEL_W;
       const sec = Math.min(dur, Math.max(0, x / PX_PER_SEC));
       seek(Math.round(sec * fps));
     };
@@ -67,12 +94,7 @@ export function Timeline(): JSX.Element {
     window.addEventListener("mouseup", onUp);
   };
 
-  const startDrag = (
-    e: MouseEvent<HTMLDivElement>,
-    clip: AnyClip,
-    track: Track,
-    mode: DragMode,
-  ) => {
+  const startDrag = (e: MouseEvent<HTMLDivElement>, clip: AnyClip, track: Track, mode: DragMode) => {
     e.stopPropagation();
     select(clip.id);
     dragging.current = true;
@@ -94,87 +116,413 @@ export function Timeline(): JSX.Element {
       window.removeEventListener("mouseup", onUp);
       commit(updateEdl, clip.id, track.type, preview);
       setDrag(null);
-      // defer clearing so the trailing click doesn't scrub
       setTimeout(() => (dragging.current = false), 0);
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };
 
+  /* ---------- empty-lane + drop interactions ---------- */
+
+  const laneSec = (e: { clientX: number; currentTarget: EventTarget & HTMLElement }): number => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return Math.max(0, (e.clientX - rect.left) / PX_PER_SEC);
+  };
+
+  // Drag on an empty text lane sketches a new text clip.
+  const sketchText = (e: MouseEvent<HTMLDivElement>, track: Track) => {
+    if (dragging.current || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest(".tl-chip")) return;
+    e.stopPropagation();
+    dragging.current = true;
+    const lane = e.currentTarget;
+    const anchor = laneSec({ clientX: e.clientX, currentTarget: lane });
+    let a = anchor;
+    let b = anchor;
+    setGhost({ trackId: track.id, start: anchor, dur: 0 });
+    const onMove = (ev: globalThis.MouseEvent) => {
+      const sec = laneSec({ clientX: ev.clientX, currentTarget: lane });
+      a = Math.min(anchor, sec);
+      b = Math.max(anchor, sec);
+      setGhost({ trackId: track.id, start: a, dur: b - a });
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setGhost(null);
+      // A plain click (no meaningful drag) just clears the selection.
+      if ((b - a) * PX_PER_SEC < 4) {
+        select(null);
+        setTimeout(() => (dragging.current = false), 0);
+        return;
+      }
+      const start = round(a);
+      const end = round(Math.max(b, a + 1));
+      const id = `t-${Date.now().toString(36)}`;
+      updateEdl((d) => {
+        const target = d.tracks.find((t) => t.id === track.id);
+        if (target?.type === "text") {
+          target.clips.push({ id, start, end, text: "New text", style: "subtitle" });
+        }
+      });
+      select(id);
+      setTimeout(() => (dragging.current = false), 0);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  // Click on an empty media lane opens the right picker; the file lands there.
+  // Clicking blank space in a populated lane just clears the selection.
+  const pickForLane = (e: MouseEvent<HTMLDivElement>, track: Track) => {
+    if (dragging.current) return;
+    if ((e.target as HTMLElement).closest(".tl-chip")) return;
+    if (track.clips.length > 0) {
+      select(null);
+      return;
+    }
+    pendingSec.current = { trackId: track.id, sec: round(laneSec(e)) };
+    (track.type === "video" ? videoInput : audioInput).current?.click();
+  };
+
+  const importAt = async (files: FileList, kind: "video" | "audio") => {
+    const target = pendingSec.current;
+    pendingSec.current = null;
+    if (!slug || !target) return;
+    const paths = Array.from(files)
+      .map((f) => {
+        try {
+          return window.api.getPathForFile(f);
+        } catch {
+          return "";
+        }
+      })
+      .filter(Boolean);
+    if (paths.length === 0) return;
+    const res = await window.api.importAssets(slug, paths);
+    if (!res.ok || res.assets.length === 0) return;
+    updateEdl((d) => {
+      addAssets(d, res.assets);
+      let at = target.sec;
+      for (const asset of res.assets) {
+        if (kind === "video" && asset.kind === "video") {
+          const track = d.tracks.find((t) => t.id === target.trackId);
+          if (track?.type === "video") {
+            const len = asset.durationSec ?? 3;
+            track.clips.push({
+              id: `c-${asset.id}`,
+              assetId: asset.id,
+              start: round(at),
+              in: 0,
+              out: round(len),
+              volume: 1,
+            });
+            at += len;
+          }
+        } else if (kind === "audio" && asset.kind === "audio") {
+          const track = d.tracks.find((t) => t.id === target.trackId);
+          const role = track?.id === "vo" || track?.name?.toLowerCase().includes("voice") ? "voiceover" : "music";
+          addAudioClip(d, asset.id, role, asset.durationSec);
+          const placed = (track?.type === "audio" ? track.clips : []).find((c) => c.assetId === asset.id);
+          if (placed) placed.start = round(at);
+        }
+      }
+    });
+  };
+
+  // Drops from the left rail (existing assets).
+  const onAssetDrop = (e: DragEvent<HTMLDivElement>, track: Track) => {
+    const raw = e.dataTransfer.getData(ASSET_MIME);
+    if (!raw) return;
+    e.preventDefault();
+    const { assetId, kind } = JSON.parse(raw) as { assetId: string; kind: string };
+    const asset = edl.assets.find((a) => a.id === assetId);
+    if (!asset) return;
+    const at = round(laneSec(e));
+    if (track.type === "video" && kind === "video") {
+      updateEdl((d) => {
+        const t = d.tracks.find((x) => x.id === track.id);
+        if (t?.type === "video") {
+          t.clips.push({
+            id: `c-${assetId}-${Date.now().toString(36)}`,
+            assetId,
+            start: at,
+            in: 0,
+            out: round(asset.durationSec ?? 3),
+            volume: 1,
+          });
+        }
+      });
+    } else if (track.type === "audio" && kind === "audio") {
+      const role = track.id === "vo" || track.name?.toLowerCase().includes("voice") ? "voiceover" : "music";
+      updateEdl((d) => {
+        addAudioClip(d, assetId, role, asset.durationSec);
+        const t = d.tracks.find((x) => x.id === track.id);
+        const placed = (t?.type === "audio" ? t.clips : []).find((c) => c.assetId === assetId);
+        if (placed) placed.start = at;
+      });
+    }
+  };
+
+  const totalFrames = durationFrames(edl);
   const ticks: number[] = [];
-  for (let s = 0; s <= Math.ceil(dur); s++) ticks.push(s);
+  for (let s = 0; s <= Math.ceil(dur); s += 5) ticks.push(s);
 
   return (
-    <section className="timeline">
-      <div className="timeline-toolbar">
-        <span className="tl-label">Timeline</span>
-        <span className="tl-time">
+    <section className="tl">
+      <div className="tl-bar">
+        <div className="tl-bar-side">
+          <LayerButton
+            onAdd={(type) => updateEdl((d) => addTrack(d, type, undefined))}
+          />
+        </div>
+        <div className="tl-bar-center">
+          <IconButton icon="skip" label="Jump to start" onClick={() => seek(0)} style={{ transform: "scaleX(-1)" }} />
+          <button
+            className="ui-icon-btn"
+            onClick={() => playerCtl?.toggle()}
+            title={playing ? "Pause (Space)" : "Play (Space)"}
+            aria-label={playing ? "Pause" : "Play"}
+          >
+            {playing ? <PauseGlyph /> : <Icon name="play-circle" size={16} />}
+          </button>
+          <IconButton icon="skip" label="Jump to end" onClick={() => seek(Math.max(0, totalFrames - 1))} />
+          <IconButton
+            icon="volume-full"
+            label={muted ? "Unmute" : "Mute"}
+            onClick={toggleMuted}
+            style={muted ? { opacity: 0.35 } : undefined}
+          />
+        </div>
+        <div className="tl-bar-side tl-time">
           {currentSec.toFixed(2)}s <span className="muted">/ {dur.toFixed(1)}s</span>
-        </span>
+        </div>
       </div>
-      <div className="timeline-scroll">
-        <div className="timeline-content" style={{ width: GUTTER + lanePx }} onMouseDown={startScrub}>
-          <div className="ruler">
-            <div className="ruler-gutter" />
-            <div className="ruler-ticks" style={{ width: lanePx }}>
+
+      <div className="tl-scroll">
+        <div className="tl-content" style={{ width: LABEL_W + lanePx }}>
+          <div className="tl-ruler" onMouseDown={startScrub}>
+            <div className="tl-ruler-gutter" />
+            <div className="tl-ruler-ticks" style={{ width: lanePx }}>
               {ticks.map((s) => (
-                <div key={s} className="tick" style={{ left: s * PX_PER_SEC }}>
+                <div key={s} className="tl-tick" style={{ left: s * PX_PER_SEC }}>
                   <span>{s}s</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {edl.tracks.map((track) => (
-            <div key={track.id} className={`track track-${track.type}`}>
-              <div className="track-label">
-                <span className={`track-dot ${track.type}`} />
-                {track.type}
-              </div>
-              <div className="track-lane">
+          {tracks.map((track) => (
+            <div key={track.id} className="tl-row">
+              <TrackLabel
+                track={track}
+                onRename={(name) => updateEdl((d) => renameTrack(d, track.id, name))}
+                onDelete={
+                  track.clips.length === 0 && tracks.length > 1
+                    ? () => updateEdl((d) => (d.tracks = d.tracks.filter((t) => t.id !== track.id)))
+                    : undefined
+                }
+              />
+              <div
+                className={`tl-lane tl-lane-${track.type}`}
+                style={{ width: lanePx }}
+                onMouseDown={(e) => {
+                  if (track.type === "text") sketchText(e, track);
+                }}
+                onClick={(e) => {
+                  if (track.type !== "text") pickForLane(e, track);
+                }}
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes(ASSET_MIME)) e.preventDefault();
+                }}
+                onDrop={(e) => onAssetDrop(e, track)}
+              >
                 {clipsOf(track).map((clip) => {
                   const geom = geomFor(track.type, clip, drag);
                   const selected = selectedClipId === clip.id;
-                  const movable = track.type !== "caption";
                   return (
                     <div
                       key={clip.id}
-                      className={`clip ${selected ? "selected" : ""}`}
-                      style={{ left: geom.start * PX_PER_SEC, width: Math.max(10, geom.dur * PX_PER_SEC) }}
-                      onMouseDown={(e) => movable && startDrag(e, clip, track, "move")}
+                      className={`tl-chip tl-chip-${track.type} ${selected ? "selected" : ""}`}
+                      style={{ left: geom.start * PX_PER_SEC, width: Math.max(14, geom.dur * PX_PER_SEC) }}
+                      onMouseDown={(e) => startDrag(e, clip, track, "move")}
                       title={labelOf(track.type, clip)}
                     >
-                      {movable && (
-                        <div
-                          className="clip-handle left"
-                          onMouseDown={(e) => startDrag(e, clip, track, "left")}
-                        />
-                      )}
-                      <span className="clip-label">{labelOf(track.type, clip)}</span>
-                      {movable && (
-                        <div
-                          className="clip-handle right"
-                          onMouseDown={(e) => startDrag(e, clip, track, "right")}
-                        />
-                      )}
+                      <div className="tl-chip-handle left" onMouseDown={(e) => startDrag(e, clip, track, "left")} />
+                      <Icon name={chipIcon(track.type)} size={12} />
+                      <span className="tl-chip-label">{labelOf(track.type, clip)}</span>
+                      <div className="tl-chip-handle right" onMouseDown={(e) => startDrag(e, clip, track, "right")} />
                     </div>
                   );
                 })}
-                {isEmpty(track) && <div className="lane-empty">{emptyHint(track.type)}</div>}
+                {ghost && ghost.trackId === track.id && (
+                  <div
+                    className="tl-chip tl-chip-text ghost"
+                    style={{ left: ghost.start * PX_PER_SEC, width: Math.max(8, ghost.dur * PX_PER_SEC) }}
+                  />
+                )}
+                {track.clips.length === 0 && !ghost && <div className="tl-lane-hint">{emptyHint(track.type)}</div>}
               </div>
             </div>
           ))}
 
-          <div className="playhead" style={{ left: GUTTER + currentSec * PX_PER_SEC }}>
-            <div className="playhead-head" />
+          <div className="tl-playhead" style={{ left: LABEL_W + currentSec * PX_PER_SEC }}>
+            <div className="tl-playhead-head" />
           </div>
         </div>
       </div>
+
+      <input
+        ref={videoInput}
+        type="file"
+        accept="video/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) void importAt(e.target.files, "video");
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={audioInput}
+        type="file"
+        accept="audio/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) void importAt(e.target.files, "audio");
+          e.target.value = "";
+        }}
+      />
     </section>
   );
 }
 
-// ---- clip helpers ----
+/* ---------- layer button ---------- */
+
+function LayerButton({ onAdd }: { onAdd: (type: "video" | "text" | "audio") => void }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEscapeKey(open ? () => setOpen(false) : null);
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: globalThis.MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const items: { type: "video" | "text" | "audio"; icon: IconName; label: string }[] = [
+    { type: "video", icon: "clapboard-wide", label: "Video layer" },
+    { type: "text", icon: "text-motion", label: "Text layer" },
+    { type: "audio", icon: "voice-high", label: "Audio layer" },
+  ];
+
+  return (
+    <div className="presets-wrap" ref={wrapRef}>
+      <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setOpen((v) => !v)}>
+        <Icon name="form-square" size={16} />
+        Layer
+      </button>
+      {open && (
+        <div className="presets-menu tl-layer-menu" role="menu">
+          {items.map((i) => (
+            <button
+              key={i.type}
+              className="presets-item row"
+              onClick={() => {
+                onAdd(i.type);
+                setOpen(false);
+              }}
+            >
+              <Icon name={i.icon} size={14} />
+              <span className="name">{i.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- track label ---------- */
+
+function TrackLabel({
+  track,
+  onRename,
+  onDelete,
+}: {
+  track: Track;
+  onRename: (name: string) => void;
+  onDelete?: () => void;
+}): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const name = track.name ?? defaultName(track);
+
+  const commitName = () => {
+    setEditing(false);
+    if (draft.trim() && draft.trim() !== name) onRename(draft.trim());
+  };
+
+  return (
+    <div className="tl-row-label" onDoubleClick={() => {
+      setDraft(name);
+      setEditing(true);
+    }}>
+      <Icon name={chipIcon(track.type)} size={14} />
+      {editing ? (
+        <input
+          className="tl-rename"
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitName();
+            if (e.key === "Escape") setEditing(false);
+          }}
+        />
+      ) : (
+        <span className="name" title="Double-click to rename">
+          {name}
+        </span>
+      )}
+      {onDelete && !editing && (
+        <button className="tl-row-delete" onClick={onDelete} title="Remove empty layer" aria-label="Remove layer">
+          <Icon name="trash-can" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function defaultName(track: Track): string {
+  if (track.type === "video") return "Video";
+  if (track.type === "text") return "Text";
+  if (track.type === "audio") return track.id === "vo" ? "Voiceover" : "Music";
+  return "Captions";
+}
+
+function chipIcon(type: Track["type"]): IconName {
+  if (type === "video") return "clapboard-wide";
+  if (type === "text") return "text-motion";
+  return "voice-high";
+}
+
+function PauseGlyph(): JSX.Element {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden>
+      <rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor" />
+      <rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+/* ---------- clip helpers (unchanged mechanics) ---------- */
+
 interface MediaLike {
   id: string;
   start: number;
@@ -206,11 +554,7 @@ function assetDurationFor(edl: Edl, clip: AnyClip): number | undefined {
   return edl.assets.find((a) => a.id === assetId)?.durationSec;
 }
 
-function geomFor(
-  type: Track["type"],
-  clip: AnyClip,
-  drag: DragState | null,
-): { start: number; dur: number } {
+function geomFor(type: Track["type"], clip: AnyClip, drag: DragState | null): { start: number; dur: number } {
   const p = drag && drag.clipId === clip.id ? drag.preview : null;
   if (type === "text") {
     const start = p?.start ?? clip.start;
@@ -255,12 +599,7 @@ function computePreview(
   return { start: orig.start, in: inV, out: clamp(outV + dSec, inV + MIN_DUR, maxOut) };
 }
 
-function commit(
-  updateEdl: (fn: (edl: Edl) => void) => void,
-  id: string,
-  type: Track["type"],
-  preview: Preview,
-): void {
+function commit(updateEdl: (fn: (edl: Edl) => void) => void, id: string, type: Track["type"], preview: Preview): void {
   updateEdl((d) => {
     for (const track of d.tracks) {
       if (track.type === "caption") continue;
@@ -281,19 +620,14 @@ function commit(
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const round = (n: number) => Math.round(n * 100) / 100;
 
-function isEmpty(track: Track): boolean {
-  if (track.type === "caption") return !track.source && (track.words?.length ?? 0) === 0;
-  return track.clips.length === 0;
-}
-
 function emptyHint(type: Track["type"]): string {
   switch (type) {
     case "video":
-      return "Drop video clips here";
+      return "Click to add video, or drag a clip from the left";
+    case "text":
+      return "Drag to sketch a text overlay";
     case "audio":
-      return "Add music or voiceover";
-    case "caption":
-      return "Captions generate from audio";
+      return "Click to add audio, or drag from the left";
     default:
       return "";
   }

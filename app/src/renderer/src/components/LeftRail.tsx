@@ -1,6 +1,7 @@
 import { type DragEvent, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets, addAudioClip } from "../lib/edl-edit";
+import { ASSET_MIME } from "./Timeline";
 import { Button, Icon } from "./ui";
 import type { ImportedAsset } from "../../../preload";
 
@@ -205,7 +206,15 @@ export function LeftRail(): JSX.Element {
           {clips.length > 0 && (
             <div className="clip-list">
               {clips.map((a) => (
-                <div key={a.id} className="clip-row" title={a.src}>
+                <div
+                  key={a.id}
+                  className="clip-row"
+                  title={`${a.src} — drag onto the timeline`}
+                  draggable
+                  onDragStart={(e) =>
+                    e.dataTransfer.setData(ASSET_MIME, JSON.stringify({ assetId: a.id, kind: a.kind }))
+                  }
+                >
                   <Icon name="multi-media" size={14} />
                   <span className="name">{a.src.replace(/^assets\//, "")}</span>
                 </div>
@@ -258,7 +267,15 @@ export function LeftRail(): JSX.Element {
             {edl.assets
               .filter((a) => a.kind === "audio")
               .map((a) => (
-                <div key={a.id} className="clip-row" title={a.src}>
+                <div
+                  key={a.id}
+                  className="clip-row"
+                  title={`${a.src} — drag onto an audio layer`}
+                  draggable
+                  onDragStart={(e) =>
+                    e.dataTransfer.setData(ASSET_MIME, JSON.stringify({ assetId: a.id, kind: a.kind }))
+                  }
+                >
                   <Icon name="voice-high" size={14} />
                   <span className="name">{a.src.replace(/^assets\//, "")}</span>
                 </div>

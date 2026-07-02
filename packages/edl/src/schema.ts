@@ -113,12 +113,16 @@ export const AudioClipSchema = z.object({
 
 export const VideoTrackSchema = z.object({
   id: z.string(),
+  /** Optional display name for the timeline layer. */
+  name: z.string().optional(),
   type: z.literal("video"),
   clips: z.array(VideoClipSchema).default([]),
 });
 
 export const TextTrackSchema = z.object({
   id: z.string(),
+  /** Optional display name for the timeline layer. */
+  name: z.string().optional(),
   type: z.literal("text"),
   clips: z.array(TextClipSchema).default([]),
 });
@@ -131,6 +135,8 @@ export const CaptionWordSchema = z.object({
 
 export const CaptionTrackSchema = z.object({
   id: z.string(),
+  /** Optional display name for the timeline layer. */
+  name: z.string().optional(),
   type: z.literal("caption"),
   /** Path (relative to project root) to a word-level transcript JSON. */
   source: z.string().optional(),
@@ -141,6 +147,8 @@ export const CaptionTrackSchema = z.object({
 
 export const AudioTrackSchema = z.object({
   id: z.string(),
+  /** Optional display name for the timeline layer. */
+  name: z.string().optional(),
   type: z.literal("audio"),
   clips: z.array(AudioClipSchema).default([]),
 });
