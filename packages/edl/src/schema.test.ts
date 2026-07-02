@@ -55,6 +55,50 @@ describe("parseEdl", () => {
   });
 });
 
+// Project files are shareable, so the schema is the security boundary:
+// unbounded numbers hang the timeline/player, traversal paths escape the
+// project sandbox, and non-color palette strings reach inline CSS.
+describe("hostile input hardening", () => {
+  const withVideoClip = (clip: Record<string, unknown>) => ({
+    tracks: [{ id: "v", type: "video", clips: [{ id: "c", assetId: "a", start: 0, in: 0, out: 4, ...clip }] }],
+  });
+
+  it("rejects Infinity timings (JSON 1e400 parses to Infinity)", () => {
+    expect(parseEdl(withVideoClip({ out: Number.POSITIVE_INFINITY })).ok).toBe(false);
+    expect(parseEdl(withVideoClip({ start: Number.POSITIVE_INFINITY })).ok).toBe(false);
+  });
+
+  it("rejects absurd finite timings", () => {
+    expect(parseEdl(withVideoClip({ out: 1e13 })).ok).toBe(false);
+    expect(parseEdl(withVideoClip({ out: 14_000 })).ok).toBe(true);
+  });
+
+  it("rejects traversal and absolute asset paths", () => {
+    const asset = (src: string) => parseEdl({ assets: [{ id: "a", kind: "video", src }] });
+    expect(asset("../../secret/recording.m4a").ok).toBe(false);
+    expect(asset("/etc/passwd").ok).toBe(false);
+    expect(asset("C:\\Windows\\evil.mp4").ok).toBe(false);
+    expect(asset("assets/../../../x.mp4").ok).toBe(false);
+    expect(asset("assets/clip.mp4").ok).toBe(true);
+  });
+
+  it("rejects palette entries that are not plain color literals", () => {
+    const theme = (color: string) => parseEdl({ theme: { palette: [color] } });
+    expect(theme("url('https://attacker.example/beacon')").ok).toBe(false);
+    expect(theme("red; background:url(//x)").ok).toBe(false);
+    expect(theme("#E8B04B").ok).toBe(true);
+    expect(theme("rgba(0, 0, 0, 0.5)").ok).toBe(true);
+    expect(theme("rebeccapurple").ok).toBe(true);
+  });
+
+  it("caps text clip length", () => {
+    const text = (t: string) =>
+      parseEdl({ tracks: [{ id: "t", type: "text", clips: [{ id: "t1", start: 0, end: 2, text: t }] }] });
+    expect(text("x".repeat(2001)).ok).toBe(false);
+    expect(text("x".repeat(500)).ok).toBe(true);
+  });
+});
+
 describe("duration helpers", () => {
   const edl = parseEdl({
     format: { fps: 30 },

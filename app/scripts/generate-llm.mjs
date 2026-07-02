@@ -52,6 +52,13 @@ function isAnalyzed(p) {
   return Boolean(p && (p.styleGuide || (Array.isArray(p.exemplars) && p.exemplars.length > 0)));
 }
 
+// Style ids are opaque slugs we generate ourselves (slugify). meta.json is
+// part of a shareable project, so treat styleProfileId as untrusted: anything
+// that could traverse out of the styles dir is ignored.
+function safeStyleId(id) {
+  return typeof id === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id) ? id : undefined;
+}
+
 // Resolve the active style + where to (re)analyze it from:
 //   1. project's own style.json (override)  -> analyze via --slug references
 //   2. meta.styleProfileId library profile   -> analyze via --styleDir
@@ -63,7 +70,7 @@ function resolveActiveStyle(projectDir, slug) {
   }
   const meta = readJsonMaybe(path.join(projectDir, "meta.json")) ?? {};
   const dir = stylesDir();
-  let id = meta.styleProfileId;
+  let id = safeStyleId(meta.styleProfileId);
   if (!id) {
     try {
       const dirs = fs
@@ -75,7 +82,9 @@ function resolveActiveStyle(projectDir, slug) {
     }
   }
   if (id) {
-    const styleDir = path.join(dir, id);
+    const styleDir = path.resolve(dir, id);
+    // Belt-and-braces containment: the id regex already forbids traversal.
+    if (!styleDir.startsWith(path.resolve(dir) + path.sep)) return { profile: null };
     return {
       profile: readJsonMaybe(path.join(styleDir, "profile.json")),
       kind: "library",

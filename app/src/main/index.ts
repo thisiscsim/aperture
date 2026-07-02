@@ -727,6 +727,11 @@ function runScript(
   channelPrefix: string,
   extraArgs: string[] = [],
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
+  // Engine scripts join the slug onto the projects dir themselves, so enforce
+  // slug shape at this IPC boundary (same rule slugify produces).
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(slug)) {
+    return Promise.resolve({ ok: false, error: "invalid project id" });
+  }
   return runScriptArgs(scriptPath, ["--slug", slug, ...extraArgs], event, channelPrefix);
 }
 

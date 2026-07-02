@@ -243,10 +243,18 @@ const TextClipView: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
   );
 };
 
+// Per-unit (character/word) animation creates one styled span per unit with
+// per-frame style work. Past this length, fall back to whole-text animation so
+// a huge text clip can't balloon the DOM.
+const MAX_ANIMATED_UNITS = 400;
+
 const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const spec = getSpec(clip.anim?.name);
+  let spec = getSpec(clip.anim?.name);
+  if (spec.target !== "whole" && clip.text.length > MAX_ANIMATED_UNITS) {
+    spec = { ...spec, target: "whole" };
+  }
   const color = edl.theme.palette[0] ?? "#FAF6EE";
   const isTitle = clip.style === "title";
   const m = edl.theme.safeMargins;

@@ -1,5 +1,5 @@
 import { type DragEvent, type MouseEvent, useEffect, useRef, useState } from "react";
-import { durationFrames, durationSeconds, type Edl, type Track } from "@reel/edl";
+import { durationFrames, durationSeconds, MAX_TIMELINE_SEC, type Edl, type Track } from "@reel/edl";
 import { useEditor } from "../store";
 import { addAssets, addTrack, renameTrack } from "../lib/edl-edit";
 import { Icon, IconButton, useEscapeKey, type IconName } from "./ui";
@@ -60,7 +60,9 @@ export function Timeline(): JSX.Element {
   if (!edl) return <section className="tl" />;
 
   const fps = edl.format.fps;
-  const dur = Math.max(durationSeconds(edl), 6);
+  // Clamp so a corrupt/hostile EDL can never drive the tick loop or lane width
+  // unbounded (schema bounds timings too; this is belt-and-braces).
+  const dur = Math.min(Math.max(durationSeconds(edl), 6), MAX_TIMELINE_SEC);
   const currentSec = currentFrame / fps;
   const lanePx = dur * PX_PER_SEC;
   const tracks = edl.tracks.filter((t): t is LaneTrack => t.type !== "caption");
