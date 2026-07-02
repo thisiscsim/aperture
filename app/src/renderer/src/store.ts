@@ -73,6 +73,9 @@ interface EditorState {
   rightTab: RightTab;
   theme: Theme;
   seek: (frame: number) => void;
+  playing: boolean;
+  muted: boolean;
+  playerCtl: { toggle: () => void; setMuted: (m: boolean) => void } | null;
 
   exporting: boolean;
   exportProgress: number;
@@ -105,6 +108,9 @@ interface EditorState {
   setSeek: (fn: (frame: number) => void) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
+  setPlaying: (v: boolean) => void;
+  toggleMuted: () => void;
+  setPlayerCtl: (ctl: { toggle: () => void; setMuted: (m: boolean) => void } | null) => void;
 
   startExport: () => void;
   setExportProgress: (pct: number) => void;
@@ -133,6 +139,9 @@ export const useEditor = create<EditorState>()((set, get) => ({
   rightTab: "inspector",
   theme: initialTheme(),
   seek: () => {},
+  playing: false,
+  muted: false,
+  playerCtl: null,
 
   exporting: false,
   exportProgress: 0,
@@ -188,6 +197,14 @@ export const useEditor = create<EditorState>()((set, get) => ({
       set({ theme });
     });
   },
+
+  setPlaying: (v) => set({ playing: v }),
+  toggleMuted: () => {
+    const muted = !get().muted;
+    get().playerCtl?.setMuted(muted);
+    set({ muted });
+  },
+  setPlayerCtl: (ctl) => set({ playerCtl: ctl }),
 
   startExport: () => set({ exporting: true, exportProgress: 0, exportPhase: "preparing", exportResult: null }),
   setExportProgress: (pct) => set({ exportProgress: pct }),
