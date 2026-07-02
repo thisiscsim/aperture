@@ -531,15 +531,29 @@ input[type="range"] {
   padding: 4px 16px;
 }
 
-.home-brand {
-  display: flex;
+/* Shared brand block (Home header + editor header). The 4px padding is
+   cancelled by a negative margin so the logomark sits at the exact same
+   position whether or not the block is a clickable button — no layout shift
+   between views. Full foreground color always (no ghost-button dimming). */
+.brand {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-4);
+  padding: var(--space-4);
+  margin: calc(var(--space-4) * -1);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-xs);
   color: var(--foreground-primary);
 }
 
-.home-logomark {
-  color: var(--foreground-primary);
+button.brand {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+button.brand:hover {
+  background: var(--background-secondary);
 }
 
 .home-wordmark {
