@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { Edl, Meta } from "@reel/edl";
 import type { ProjectSummary } from "../../preload";
 
-export type RightTab = "inspector" | "design" | "style" | "critique";
+export type RightTab = "inspector" | "style" | "critique";
 export type Theme = "dark" | "light";
 export type View = "home" | "editor";
 

@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { parseEdl } from "@reel/edl";
-import { LeftPanel } from "./LeftPanel";
+import { LeftRail } from "./LeftRail";
 import { useEditor } from "../store";
 
 afterEach(cleanup);
 
-describe("LeftPanel", () => {
-  it("renders an empty aside before a project loads", () => {
+describe("LeftRail", () => {
+  it("renders an empty rail before a project loads", () => {
     useEditor.setState({ edl: null, slug: null });
-    const { container } = render(<LeftPanel />);
-    expect(container.querySelector(".panel.left")).toBeInTheDocument();
+    const { container } = render(<LeftRail />);
+    expect(container.querySelector(".left-rail")).toBeInTheDocument();
   });
 
   // Regression guard for the rules-of-hooks crash: rendering with a loaded EDL
@@ -18,8 +18,9 @@ describe("LeftPanel", () => {
   it("mounts without crashing once an EDL is loaded", () => {
     const edl = parseEdl({ tracks: [{ id: "v", type: "video", clips: [] }] }).edl!;
     useEditor.setState({ edl, slug: "demo", promptText: "" });
-    render(<LeftPanel />);
+    render(<LeftRail />);
     expect(screen.getByPlaceholderText(/Describe the video you want/i)).toBeInTheDocument();
     expect(screen.getByText("Clips")).toBeInTheDocument();
+    expect(screen.getByText("Upload clips")).toBeInTheDocument();
   });
 });
