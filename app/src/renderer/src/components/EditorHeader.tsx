@@ -14,6 +14,10 @@ export function EditorHeader(): JSX.Element {
   const setExportPhase = useEditor((s) => s.setExportPhase);
   const finishExport = useEditor((s) => s.finishExport);
   const goHome = useEditor((s) => s.goHome);
+  const canUndo = useEditor((s) => s.edlPast.length > 0);
+  const canRedo = useEditor((s) => s.edlFuture.length > 0);
+  const undoEdl = useEditor((s) => s.undoEdl);
+  const redoEdl = useEditor((s) => s.redoEdl);
 
   const onExport = async () => {
     if (!slug || exporting) return;
@@ -48,9 +52,8 @@ export function EditorHeader(): JSX.Element {
       </div>
 
       <div className="editor-header-actions">
-        {/* History lands in Phase 4; the affordance ships disabled per design. */}
-        <IconButton icon="step-back" label="Undo" disabled />
-        <IconButton icon="step-forwards" label="Redo" disabled />
+        <IconButton icon="step-back" label="Undo (⌘Z)" disabled={!canUndo} onClick={undoEdl} />
+        <IconButton icon="step-forwards" label="Redo (⇧⌘Z)" disabled={!canRedo} onClick={redoEdl} />
         <span className="editor-divider" />
         <SettingsButton />
         <span className="editor-divider" />

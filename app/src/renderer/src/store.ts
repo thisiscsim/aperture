@@ -101,6 +101,10 @@ interface EditorState {
   setPromptText: (text: string) => void;
   setLoadError: (msg: string | null) => void;
   updateEdl: (mutate: (edl: Edl) => void) => void;
+  edlPast: Edl[];
+  edlFuture: Edl[];
+  undoEdl: () => void;
+  redoEdl: () => void;
   saveNow: () => Promise<void>;
   select: (id: string | null) => void;
   setCurrentFrame: (frame: number) => void;
@@ -165,6 +169,9 @@ export const useEditor = create<EditorState>()((set, get) => ({
       promptText: p.promptText ?? "",
       meta: p.meta ?? null,
       loadError: null,
+      // External load (open/generate/auto-improve reload) resets edit history.
+      edlPast: [],
+      edlFuture: [],
     }),
   setPromptText: (text) => set({ promptText: text }),
   saveNow: async () => {
@@ -172,13 +179,41 @@ export const useEditor = create<EditorState>()((set, get) => ({
     if (slug && edl) await window.api?.saveEdl(slug, edl);
   },
   setLoadError: (msg) => set({ loadError: msg }),
+  edlPast: [],
+  edlFuture: [],
   updateEdl: (mutate) =>
     set((s) => {
       if (!s.edl) return {};
+      // updateEdl replaces the EDL (copy-on-write), so the previous object can
+      // be kept on the undo stack without cloning.
       const next = structuredClone(s.edl);
       mutate(next);
       scheduleSave(s.slug, next);
-      return { edl: next };
+      return { edl: next, edlPast: [...s.edlPast.slice(-49), s.edl], edlFuture: [] };
+    }),
+  undoEdl: () =>
+    set((s) => {
+      const prev = s.edlPast[s.edlPast.length - 1];
+      if (!prev || !s.edl) return {};
+      scheduleSave(s.slug, prev);
+      return {
+        edl: prev,
+        edlPast: s.edlPast.slice(0, -1),
+        edlFuture: [s.edl, ...s.edlFuture],
+        selectedClipId: clipExists(prev, s.selectedClipId) ? s.selectedClipId : null,
+      };
+    }),
+  redoEdl: () =>
+    set((s) => {
+      const next = s.edlFuture[0];
+      if (!next || !s.edl) return {};
+      scheduleSave(s.slug, next);
+      return {
+        edl: next,
+        edlPast: [...s.edlPast, s.edl],
+        edlFuture: s.edlFuture.slice(1),
+        selectedClipId: clipExists(next, s.selectedClipId) ? s.selectedClipId : null,
+      };
     }),
   select: (id) => set({ selectedClipId: id, rightTab: id ? "inspector" : get().rightTab }),
   setCurrentFrame: (frame) => set({ currentFrame: frame }),
@@ -217,6 +252,11 @@ export const useEditor = create<EditorState>()((set, get) => ({
   setNotice: (notice) => set({ notice }),
   setReload: (fn) => set({ reloadProject: fn }),
 }));
+
+function clipExists(edl: Edl, id: string | null): boolean {
+  if (!id) return false;
+  return edl.tracks.some((t) => t.type !== "caption" && t.clips.some((c) => c.id === id));
+}
 
 // Apply the persisted/system theme to <html> before the first paint. Don't
 // persist here, so a system-derived default keeps following the OS until the
