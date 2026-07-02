@@ -10,6 +10,8 @@ const MIN_DUR = 0.2;
 export const ASSET_MIME = "application/x-aperture-asset";
 
 type DragMode = "move" | "left" | "right";
+/** Timeline lanes render clip-bearing tracks only (captions burn in via preview). */
+type LaneTrack = Extract<Track, { type: "video" | "text" | "audio" }>;
 interface Preview {
   start: number;
   end?: number;
@@ -61,7 +63,7 @@ export function Timeline(): JSX.Element {
   const dur = Math.max(durationSeconds(edl), 6);
   const currentSec = currentFrame / fps;
   const lanePx = dur * PX_PER_SEC;
-  const tracks = edl.tracks.filter((t) => t.type !== "caption");
+  const tracks = edl.tracks.filter((t): t is LaneTrack => t.type !== "caption");
 
   /* ---------- scrub / drag (unchanged mechanics) ---------- */
 
@@ -130,7 +132,7 @@ export function Timeline(): JSX.Element {
   };
 
   // Drag on an empty text lane sketches a new text clip.
-  const sketchText = (e: MouseEvent<HTMLDivElement>, track: Track) => {
+  const sketchText = (e: MouseEvent<HTMLDivElement>, track: LaneTrack) => {
     if (dragging.current || e.button !== 0) return;
     if ((e.target as HTMLElement).closest(".tl-chip")) return;
     e.stopPropagation();
@@ -174,7 +176,7 @@ export function Timeline(): JSX.Element {
 
   // Click on an empty media lane opens the right picker; the file lands there.
   // Clicking blank space in a populated lane just clears the selection.
-  const pickForLane = (e: MouseEvent<HTMLDivElement>, track: Track) => {
+  const pickForLane = (e: MouseEvent<HTMLDivElement>, track: LaneTrack) => {
     if (dragging.current) return;
     if ((e.target as HTMLElement).closest(".tl-chip")) return;
     if (track.clips.length > 0) {
@@ -231,7 +233,7 @@ export function Timeline(): JSX.Element {
   };
 
   // Drops from the left rail (existing assets).
-  const onAssetDrop = (e: DragEvent<HTMLDivElement>, track: Track) => {
+  const onAssetDrop = (e: DragEvent<HTMLDivElement>, track: LaneTrack) => {
     const raw = e.dataTransfer.getData(ASSET_MIME);
     if (!raw) return;
     e.preventDefault();
