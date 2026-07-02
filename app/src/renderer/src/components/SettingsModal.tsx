@@ -31,7 +31,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
   const [tab, setTab] = useState<SettingsTab>("general");
   const [settings, setSettings] = useState<AppSettings>(DEFAULTS);
   const [projectsDir, setProjectsDir] = useState<string>("");
-  const [restartNeeded, setRestartNeeded] = useState(false);
   const [locks, setLocks] = useState({ modelLocked: false, keyLocked: false });
   const [keyDraft, setKeyDraft] = useState("");
   const [keySaved, setKeySaved] = useState(false);
@@ -48,14 +47,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
   }, []);
 
   const update = async (patch: Partial<AppSettings>) => {
-    if ("hwDecode" in patch || "homeDir" in patch) setRestartNeeded(true);
     const next = await window.api.setSettings(patch);
     setSettings(next);
   };
 
   const changeFolder = async () => {
-    const res = await window.api.pickProjectsDir();
-    if (res.ok && res.homeDir) setRestartNeeded(true);
+    await window.api.pickProjectsDir();
   };
 
   const connectKey = async () => {
@@ -215,7 +212,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
             </>
           )}
 
-          {restartNeeded && <p className="settings-restart">Restart Aperture for these changes to take effect.</p>}
         </div>
 
         <div className="settings-footer">
