@@ -9,6 +9,21 @@ versions.
 
 ### Added
 
+- **Editor redesign (Figma V0, 4 phases)** — new shell (header with centered
+  filename, undo/redo, presets dropdown, export; left input rail with prompt +
+  generate, clips and audio upload/record; floating device preview; pill-tab
+  right panel), a combined Inspector (Design: alignment/padding/typography/
+  palette/captions; Format: fps, aspect ratio, resolution; Back-headed clip
+  subflows for text/video/audio), Style tab with reference modes
+  (literal/inspired) and read-only style guide, Critique tab with score card +
+  detail subflow and Auto-improve, timeline rework (dynamic renamable layers,
+  music/voiceover split tracks, Layer button, transport bar with Space
+  play/pause, action-token chips, text-sketch and click-to-add empty lanes,
+  drag assets from the rail), EDL undo/redo history (Cmd+Z / Shift+Cmd+Z) and
+  a tabbed Settings modal (General / Export / Agent). Schema gains
+  `theme.textAlignment`, `styleProfile.referenceMode`, and optional track
+  `name`; generation prompts are format-aware.
+
 - **Visual language refactor (Home + New Project dialog)** — new design-token
   system (`styles/tokens.css`, light authoritative + derived dark), Bradford
   brand font scaffolding with SF Pro as the UI stack, a custom icon set
