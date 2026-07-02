@@ -27,3 +27,8 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # The full app build resolves every asset/CSS import — typecheck and
+      # vitest don't, which once let ignored-but-imported files slip through.
+      - name: Build app
+        run: npm run build

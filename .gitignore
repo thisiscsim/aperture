@@ -7,8 +7,10 @@ dist/
 # User data lives in ~/Documents/Aperture (configurable), never in the repo.
 # Any local projects/ or styles/ (e.g. from a dev APERTURE_HOME override) are ignored.
 # The tracked sample project lives in fixtures/sample-project instead.
-projects/
-styles/
+# NOTE: root-anchored — an unanchored "styles/" also matched
+# app/src/renderer/src/styles/ and silently kept the design system untracked.
+/projects/
+/styles/
 
 .env
 .env.local
