@@ -119,24 +119,45 @@ function loadLocalEnv(): void {
 loadLocalEnv();
 
 // ---- Persistent app settings (hardware acceleration, storage location, etc.) ----
+export type ExportFps = "project" | "24" | "30" | "60";
+export type ExportResolution = "project" | "1080" | "720";
+export type ExportCompression = "social" | "high" | "max";
+export type ReasoningEffort = "low" | "medium" | "high";
 interface AppSettings {
   hwDecode: boolean;
   hwEncode: boolean;
   /** User-chosen root folder for projects + styles (default ~/Documents/Aperture). */
   homeDir?: string;
+  /** Export defaults applied by the render pipeline. */
+  exportFps: ExportFps;
+  exportResolution: ExportResolution;
+  exportCompression: ExportCompression;
+  /** Agent preferences (env vars from .env.local always win). */
+  agentModel: string;
+  agentApiKey?: string;
+  reasoningEffort: ReasoningEffort;
 }
 const SETTINGS_PATH = join(app.getPath("userData"), "settings.json");
 function readSettings(): AppSettings {
+  let s: Record<string, unknown> = {};
   try {
-    const s = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"));
-    return {
-      hwDecode: Boolean(s.hwDecode),
-      hwEncode: Boolean(s.hwEncode),
-      homeDir: typeof s.homeDir === "string" && s.homeDir ? s.homeDir : undefined,
-    };
+    s = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"));
   } catch {
-    return { hwDecode: false, hwEncode: false };
+    // fresh install
   }
+  const oneOf = <T extends string>(v: unknown, options: readonly T[], dflt: T): T =>
+    typeof v === "string" && (options as readonly string[]).includes(v) ? (v as T) : dflt;
+  return {
+    hwDecode: Boolean(s.hwDecode),
+    hwEncode: Boolean(s.hwEncode),
+    homeDir: typeof s.homeDir === "string" && s.homeDir ? s.homeDir : undefined,
+    exportFps: oneOf(s.exportFps, ["project", "24", "30", "60"] as const, "project"),
+    exportResolution: oneOf(s.exportResolution, ["project", "1080", "720"] as const, "project"),
+    exportCompression: oneOf(s.exportCompression, ["social", "high", "max"] as const, "social"),
+    agentModel: typeof s.agentModel === "string" && s.agentModel ? s.agentModel : "gpt-5.5",
+    agentApiKey: typeof s.agentApiKey === "string" && s.agentApiKey ? s.agentApiKey : undefined,
+    reasoningEffort: oneOf(s.reasoningEffort, ["low", "medium", "high"] as const, "low"),
+  };
 }
 function writeSettings(patch: Partial<AppSettings>): AppSettings {
   const next = { ...readSettings(), ...patch };
@@ -145,8 +166,36 @@ function writeSettings(patch: Partial<AppSettings>): AppSettings {
   } catch {
     // best-effort
   }
+  applyAgentEnv(next);
   return next;
 }
+
+// Agent preferences flow to the LLM layer via the same env vars .env.local uses.
+// Anything explicitly set in the environment (shell or .env.local) stays
+// authoritative; settings only fill the gaps. `envLocked` is captured once at
+// startup, before the first injection.
+const envLocked = {
+  provider: "APERTURE_LLM_PROVIDER" in process.env,
+  model: "APERTURE_LLM_MODEL" in process.env,
+  apiKey: Boolean(
+    process.env["APERTURE_LLM_API_KEY"] || process.env["OPENAI_API_KEY"] || process.env["ANTHROPIC_API_KEY"],
+  ),
+  effort: "APERTURE_REASONING_EFFORT" in process.env,
+};
+function applyAgentEnv(s: AppSettings): void {
+  if (!envLocked.model) {
+    process.env["APERTURE_LLM_MODEL"] = s.agentModel;
+    if (!envLocked.provider) {
+      process.env["APERTURE_LLM_PROVIDER"] = s.agentModel.startsWith("claude") ? "anthropic" : "openai";
+    }
+  }
+  if (!envLocked.apiKey) {
+    if (s.agentApiKey) process.env["APERTURE_LLM_API_KEY"] = s.agentApiKey;
+    else delete process.env["APERTURE_LLM_API_KEY"];
+  }
+  if (!envLocked.effort) process.env["APERTURE_REASONING_EFFORT"] = s.reasoningEffort;
+}
+applyAgentEnv(readSettings());
 
 // User-owned storage (Screen Studio style): projects + styles live under the
 // user's home folder, not the repo/app bundle. Resolution: env override (dev) ->
@@ -1039,9 +1088,15 @@ app.whenReady().then(() => {
       return [];
     }
   });
-  ipcMain.handle("export:start", (event, slug: string) =>
-    runScript(RENDER_SCRIPT, slug, event, "export", readSettings().hwEncode ? ["--hwaccel"] : []),
-  );
+  ipcMain.handle("export:start", (event, slug: string) => {
+    const s = readSettings();
+    const args: string[] = [];
+    if (s.hwEncode) args.push("--hwaccel");
+    if (s.exportFps !== "project") args.push("--fps", s.exportFps);
+    if (s.exportResolution !== "project") args.push("--resolution", s.exportResolution);
+    args.push("--compression", s.exportCompression);
+    return runScript(RENDER_SCRIPT, slug, event, "export", args);
+  });
   ipcMain.handle("settings:get", () => readSettings());
   ipcMain.handle("settings:set", (_event, patch: Partial<AppSettings>) => writeSettings(patch));
   ipcMain.handle("home:get", () => PROJECTS_DIR);
@@ -1066,7 +1121,14 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("generate:mode", () => {
     const info = llmInfo();
-    return { mode: info.configured ? "llm" : "baseline", provider: info.provider, model: info.model };
+    return {
+      mode: info.configured ? "llm" : "baseline",
+      provider: info.provider,
+      model: info.model,
+      // True when .env.local / shell env pins these (Settings then can't change them).
+      modelLocked: envLocked.model,
+      keyLocked: envLocked.apiKey,
+    };
   });
   ipcMain.handle("transcribe:start", (event, slug: string) =>
     runScript(TRANSCRIBE_SCRIPT, slug, event, "transcribe"),

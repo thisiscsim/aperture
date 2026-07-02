@@ -13,7 +13,7 @@ import fs from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { generateText } from "ai";
-import { isLlmConfigured, llmConfig, resolveModel } from "./llm.mjs";
+import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { extractJson } from "./edl-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -216,7 +216,7 @@ async function main() {
       const { text } = await generateText({
         model: resolveModel(),
         maxOutputTokens: 4000,
-        providerOptions: { openai: { reasoningEffort: "low" } },
+        providerOptions: { openai: { reasoningEffort: reasoningEffort() } },
         messages: [
           {
             role: "user",

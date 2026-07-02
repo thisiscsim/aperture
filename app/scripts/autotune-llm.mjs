@@ -10,7 +10,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { generateText } from "ai";
 import { parseEdl } from "@reel/edl";
-import { isLlmConfigured, llmConfig, resolveModel } from "./llm.mjs";
+import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { ANIM_NAMES, extractJson, metrics, sanitizeEdl } from "./edl-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -105,7 +105,7 @@ async function main() {
         model: llm,
         prompt,
         maxOutputTokens: 16000,
-        providerOptions: { openai: { reasoningEffort: "low" } },
+        providerOptions: { openai: { reasoningEffort: reasoningEffort() } },
       });
       out = extractJson(text);
     } catch (err) {

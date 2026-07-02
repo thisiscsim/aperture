@@ -13,7 +13,7 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { generateText } from "ai";
 import { parseEdl } from "@reel/edl";
-import { isLlmConfigured, llmConfig, resolveModel } from "./llm.mjs";
+import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { ANIM_NAMES, enforceStyle, extractJson, sanitizeEdl } from "./edl-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -209,7 +209,7 @@ async function main() {
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       // Reasoning models (e.g. gpt-5.5) reject `temperature`; keep effort modest
       // for latency/cost. providerOptions is ignored by non-OpenAI providers.
-      providerOptions: { openai: { reasoningEffort: "low" } },
+      providerOptions: { openai: { reasoningEffort: reasoningEffort() } },
     });
     try {
       const candidate = sanitizeEdl(extractJson(text));

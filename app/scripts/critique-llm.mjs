@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
 import { generateText } from "ai";
-import { isLlmConfigured, llmConfig, resolveModel } from "./llm.mjs";
+import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { extractJson, metrics } from "./edl-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -100,7 +100,7 @@ async function main() {
     model: resolveModel(),
     prompt: buildPrompt({ metricsJson, edlJson: edlRaw, promptMd, styleJson, benchmarksJson }),
     maxOutputTokens: 6000,
-    providerOptions: { openai: { reasoningEffort: "low" } },
+    providerOptions: { openai: { reasoningEffort: reasoningEffort() } },
   });
 
   let critique;

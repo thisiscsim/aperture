@@ -30,6 +30,12 @@ export function isLlmConfigured() {
   return Boolean(apiKey);
 }
 
+/** Reasoning effort for OpenAI reasoning models (Settings → Agent Preferences). */
+export function reasoningEffort() {
+  const v = (process.env.APERTURE_REASONING_EFFORT || "low").toLowerCase();
+  return ["low", "medium", "high"].includes(v) ? v : "low";
+}
+
 export function resolveModel() {
   const { provider, model, baseURL, apiKey } = llmConfig();
   switch (provider) {

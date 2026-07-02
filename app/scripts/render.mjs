@@ -22,6 +22,15 @@ async function main() {
   const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edl = JSON.parse(fs.readFileSync(path.join(projectDir, "edl.json"), "utf8"));
 
+  // Export overrides from Settings. Frame rate re-times nothing (EDL timing is
+  // in seconds); resolution renders the same layout at a scale factor.
+  const fpsOverride = Number(arg("fps")) || null;
+  if (fpsOverride) edl.format = { ...edl.format, fps: fpsOverride };
+  const resolution = Number(arg("resolution")) || null;
+  const shortEdge = Math.min(edl.format.width ?? 1080, edl.format.height ?? 1920);
+  const scale = resolution ? Math.min(1, resolution / shortEdge) : 1;
+  const compression = arg("compression") || "social";
+
   const entryPoint = path.join(repoRoot, "app", "src", "renderer", "src", "motion", "index.ts");
   const rendersDir = path.join(projectDir, "renders");
   fs.mkdirSync(rendersDir, { recursive: true });
@@ -42,14 +51,22 @@ async function main() {
   console.log("PHASE rendering");
   // Hardware-accelerated encode when the user enabled it (VideoToolbox on macOS,
   // etc.); "if-possible" falls back to software when unavailable.
-  const hardwareAcceleration = process.argv.includes("--hwaccel") ? "if-possible" : "disable";
+  const hwaccel = process.argv.includes("--hwaccel");
+  // Compression presets: software encodes steer by CRF (lower = better quality);
+  // hardware encoders ignore CRF, so steer those by target bitrate instead.
+  const CRF = { high: 18, social: 23, max: 28 };
+  const BITRATE = { high: "14M", social: "8M", max: "4M" };
   await renderMedia({
     composition,
     serveUrl,
     codec: "h264",
     outputLocation: output,
     inputProps,
-    hardwareAcceleration,
+    scale,
+    hardwareAcceleration: hwaccel ? "if-possible" : "disable",
+    ...(hwaccel
+      ? { videoBitrate: BITRATE[compression] ?? BITRATE.social }
+      : { crf: CRF[compression] ?? CRF.social }),
     onProgress: ({ progress }) => console.log(`PROGRESS ${Math.round(progress * 100)}`),
   });
 
