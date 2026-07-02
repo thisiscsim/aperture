@@ -60,17 +60,21 @@ export function InspectorPanel(): JSX.Element {
 
 /* ---------------- project design + format ---------------- */
 
+const DEFAULT_ALIGN = { horizontal: "center", vertical: "center" } as const;
+
 function ProjectDesign(): JSX.Element {
   const edl = useEditor((s) => s.edl)!;
   const updateEdl = useEditor((s) => s.updateEdl);
 
-  const align = edl.theme.textAlignment;
+  // Tolerate EDLs parsed before theme.textAlignment existed (e.g. a main
+  // process still running the previous schema) instead of crashing.
+  const align = edl.theme.textAlignment ?? DEFAULT_ALIGN;
   const m = edl.theme.safeMargins;
   const aspect = aspectOf(edl.format.width, edl.format.height);
 
   const setAlign = (patch: Partial<typeof align>) =>
     updateEdl((d) => {
-      d.theme.textAlignment = { ...d.theme.textAlignment, ...patch };
+      d.theme.textAlignment = { ...DEFAULT_ALIGN, ...d.theme.textAlignment, ...patch };
     });
 
   const setMargin = (side: "top" | "bottom" | "left" | "right", value: number) =>
