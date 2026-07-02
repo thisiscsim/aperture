@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { type CSSProperties, useEffect } from "react";
 import { EditorHeader } from "./components/EditorHeader";
 import { LeftRail } from "./components/LeftRail";
 import { PreviewStage } from "./components/PreviewStage";
@@ -6,7 +6,7 @@ import { RightPanel } from "./components/RightPanel";
 import { Timeline } from "./components/Timeline";
 import { ExportModal } from "./components/ExportModal";
 import { Home } from "./components/Home";
-import { useEditor } from "./store";
+import { useEditor, type PanelId } from "./store";
 
 export function App(): JSX.Element {
   const view = useEditor((s) => s.view);
@@ -21,6 +21,22 @@ export function App(): JSX.Element {
   const undoEdl = useEditor((s) => s.undoEdl);
   const redoEdl = useEditor((s) => s.redoEdl);
   const toggleTheme = useEditor((s) => s.toggleTheme);
+  const panelSizes = useEditor((s) => s.panelSizes);
+  const panelsHidden = useEditor((s) => s.panelsHidden);
+  const togglePanels = useEditor((s) => s.togglePanels);
+
+  // Cmd+\ — focus mode: hide rails + timeline, keep only the canvas (Figma-style).
+  useEffect(() => {
+    if (view !== "editor") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "\\" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        togglePanels();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, togglePanels]);
 
   // 'T' toggles light/dark anywhere, unless the user is typing in a field.
   useEffect(() => {
@@ -80,14 +96,38 @@ export function App(): JSX.Element {
       {view === "home" ? (
         <Home />
       ) : (
-        <div className="editor-shell">
+        <div
+          className={`editor-shell ${panelsHidden ? "panels-hidden" : ""}`}
+          style={
+            {
+              "--left-rail-w": `${panelSizes.left}px`,
+              "--right-panel-w": `${panelSizes.right}px`,
+              "--tl-h": `${panelSizes.timeline}px`,
+            } as CSSProperties
+          }
+        >
           <EditorHeader />
           <div className="editor-main">
-            <LeftRail />
+            {!panelsHidden && (
+              <>
+                <LeftRail />
+                <PanelResizer panel="left" />
+              </>
+            )}
             <PreviewStage />
-            <RightPanel />
+            {!panelsHidden && (
+              <>
+                <PanelResizer panel="right" />
+                <RightPanel />
+              </>
+            )}
           </div>
-          <Timeline />
+          {!panelsHidden && (
+            <>
+              <PanelResizer panel="timeline" />
+              <Timeline />
+            </>
+          )}
           <ExportModal />
           {!edl && (
             <div className="boot">
@@ -98,6 +138,48 @@ export function App(): JSX.Element {
       )}
       {notice && <Toast notice={notice} onClose={() => setNotice(null)} />}
     </>
+  );
+}
+
+/**
+ * Slim drag handle between panels. Left/right resize widths, timeline resizes
+ * height; all are clamped in the store (PANEL_LIMITS) and persisted.
+ */
+function PanelResizer({ panel }: { panel: PanelId }): JSX.Element {
+  const setPanelSize = useEditor((s) => s.setPanelSize);
+  const horizontal = panel === "timeline";
+
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const start = useEditor.getState().panelSizes[panel];
+    const el = e.currentTarget;
+    el.classList.add("active");
+    document.body.style.cursor = horizontal ? "row-resize" : "col-resize";
+
+    const onMove = (ev: MouseEvent) => {
+      if (panel === "left") setPanelSize("left", start + (ev.clientX - startX));
+      else if (panel === "right") setPanelSize("right", start - (ev.clientX - startX));
+      else setPanelSize("timeline", start - (ev.clientY - startY));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      el.classList.remove("active");
+      document.body.style.cursor = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  return (
+    <div
+      className={`panel-resizer ${horizontal ? "horizontal" : "vertical"}`}
+      onMouseDown={onMouseDown}
+      role="separator"
+      aria-orientation={horizontal ? "horizontal" : "vertical"}
+    />
   );
 }
 

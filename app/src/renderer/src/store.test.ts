@@ -70,6 +70,29 @@ describe("edl history", () => {
   });
 });
 
+describe("panel layout", () => {
+  it("clamps panel sizes to their limits and persists them", () => {
+    const s = () => useEditor.getState();
+    s().setPanelSize("left", 10_000);
+    expect(s().panelSizes.left).toBe(440);
+    s().setPanelSize("timeline", 10);
+    expect(s().panelSizes.timeline).toBe(160);
+    expect(JSON.parse(localStorage.getItem("aperture:panel-layout")!)).toMatchObject({
+      left: 440,
+      timeline: 160,
+    });
+  });
+
+  it("togglePanels flips focus mode", () => {
+    const s = () => useEditor.getState();
+    const before = s().panelsHidden;
+    s().togglePanels();
+    expect(s().panelsHidden).toBe(!before);
+    s().togglePanels();
+    expect(s().panelsHidden).toBe(before);
+  });
+});
+
 describe("autosave", () => {
   it("debounces a save to disk after updateEdl", () => {
     vi.useFakeTimers();
