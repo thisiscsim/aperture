@@ -77,67 +77,6 @@ button {
   font-family: inherit;
 }
 
-/* ---------- Layout ---------- */
-.editor {
-  display: grid;
-  grid-template-columns: 280px 1fr 340px;
-  grid-template-rows: 48px 1fr 236px;
-  grid-template-areas:
-    "top top top"
-    "left center right"
-    "timeline timeline timeline";
-  height: 100vh;
-}
-
-/* ---------- Top bar ---------- */
-.topbar {
-  grid-area: top;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(var(--panel), var(--panel-2));
-}
-
-.topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.logo {
-  font-family: var(--font-brand);
-  font-size: 16px;
-  letter-spacing: -0.01em;
-  color: var(--fg);
-}
-
-.dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--faint);
-}
-
-.proj {
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.badge {
-  font-size: 10.5px;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 2px 8px;
-}
-
-.topbar-right {
-  display: flex;
-  gap: 8px;
-}
-
 .btn {
   height: 28px;
   padding: 0 12px;
@@ -175,41 +114,6 @@ button {
 .btn.full {
   width: 100%;
   height: 32px;
-}
-
-.btn.icon {
-  width: 28px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-}
-
-.btn.icon:hover:not(:disabled) {
-  color: var(--fg);
-}
-
-.btn.icon svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* ---------- Panels ---------- */
-.panel {
-  background: var(--panel);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.panel.left {
-  grid-area: left;
-  border-right: 1px solid var(--line);
-}
-
-.panel.right {
-  grid-area: right;
-  border-left: 1px solid var(--line);
 }
 
 .section {
@@ -280,28 +184,6 @@ button {
   background: var(--accent-dim);
 }
 
-.prompt-input {
-  width: 100%;
-  height: 96px;
-  min-height: 64px;
-  resize: vertical;
-  line-height: 1.55;
-  font-size: 12.5px;
-}
-
-.audio-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.audio-label {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .audio-actions {
   display: flex;
   gap: 6px;
@@ -319,118 +201,6 @@ button {
   height: 26px;
   padding: 0 10px;
   font-size: 11.5px;
-}
-
-.btn-rec {
-  background: #c0392b;
-  border-color: #c0392b;
-  color: #fff;
-}
-
-.asset-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.asset-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.asset-kind {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: var(--elevated);
-  color: var(--muted);
-}
-
-.asset-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---------- Stage / preview ---------- */
-.stage {
-  grid-area: center;
-  display: grid;
-  place-items: center;
-  padding: 22px;
-  min-height: 0;
-  overflow: hidden;
-  background: radial-gradient(80% 60% at 50% 25%, var(--stage-glow) 0%, var(--bg) 70%);
-}
-
-.device {
-  height: 100%;
-  aspect-ratio: 1080 / 1920;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #000;
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.6),
-    0 0 0 1px var(--line-strong);
-}
-
-.device-empty {
-  display: grid;
-  place-items: center;
-  background: var(--panel-2);
-  border: 1px dashed var(--line-strong);
-}
-
-.device-empty-msg {
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
-  padding: 0 28px;
-  line-height: 1.5;
-}
-
-/* ---------- Tabs / right panel body ---------- */
-.tabs {
-  display: flex;
-  padding: 8px 8px 0;
-  gap: 2px;
-  border-bottom: 1px solid var(--line);
-}
-
-.tab {
-  flex: 1;
-  height: 30px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  transition: color 150ms ease, background 150ms ease;
-}
-
-.tab:hover {
-  color: var(--fg);
-}
-
-.tab.active {
-  color: var(--fg);
-  background: var(--panel-2);
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-.tab-body {
-  flex: 1;
-  overflow-y: auto;
 }
 
 .pad {

@@ -23,6 +23,9 @@ export function CritiquePanel(): JSX.Element {
   const [critPhase, setCritPhase] = useState<string | null>(null);
   const benchInput = useRef<HTMLInputElement>(null);
   const autotuning = useEditor((s) => s.autotuning);
+  const setAutotuning = useEditor((s) => s.setAutotuning);
+  const reloadProject = useEditor((s) => s.reloadProject);
+  const setNotice = useEditor((s) => s.setNotice);
 
   useEffect(() => {
     window.api?.generateMode().then((m) => setAiMode(m.mode)).catch(() => {});
@@ -64,6 +67,21 @@ export function CritiquePanel(): JSX.Element {
     if (!slug) return;
     await window.api.importBenchmarks(slug, pathsFrom(files));
     window.api.listBenchmarks(slug).then(setBenchList);
+  };
+
+  const onAutoTune = async () => {
+    if (!slug || autotuning) return;
+    setAutotuning(true);
+    setNotice(null);
+    try {
+      const res = await window.api.autoTune(slug);
+      reloadProject();
+      if (!res.ok) setNotice({ kind: "error", text: `Auto-improve failed: ${res.error ?? "unknown error"}` });
+    } catch (err) {
+      setNotice({ kind: "error", text: `Auto-improve failed: ${String(err)}` });
+    } finally {
+      setAutotuning(false);
+    }
   };
 
   const runAiCritique = async () => {
@@ -165,6 +183,14 @@ export function CritiquePanel(): JSX.Element {
         }}
       >
         Quick heuristic
+      </button>
+      <button
+        className="btn full mt"
+        onClick={onAutoTune}
+        disabled={autotuning}
+        title="Iteratively improve the cut against best practices and your benchmarks"
+      >
+        {autotuning ? "Improving…" : "Auto-improve"}
       </button>
 
       {!result && (

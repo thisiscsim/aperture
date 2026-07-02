@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { TopBar } from "./components/TopBar";
-import { LeftPanel } from "./components/LeftPanel";
-import { Preview } from "./components/Preview";
+import { EditorHeader } from "./components/EditorHeader";
+import { LeftRail } from "./components/LeftRail";
+import { PreviewStage } from "./components/PreviewStage";
 import { RightPanel } from "./components/RightPanel";
 import { Timeline } from "./components/Timeline";
 import { ExportModal } from "./components/ExportModal";
@@ -50,11 +50,13 @@ export function App(): JSX.Element {
       {view === "home" ? (
         <Home />
       ) : (
-        <div className="editor">
-          <TopBar />
-          <LeftPanel />
-          <Preview />
-          <RightPanel />
+        <div className="editor-shell">
+          <EditorHeader />
+          <div className="editor-main">
+            <LeftRail />
+            <PreviewStage />
+            <RightPanel />
+          </div>
           <Timeline />
           <ExportModal />
           {!edl && (
