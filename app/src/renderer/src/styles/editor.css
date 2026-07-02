@@ -487,6 +487,19 @@
   padding: 0;
   cursor: pointer;
   background: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Strip the native color-well chrome (inner padding + dark border) so the
+   picked color fills the whole swatch. */
+.chip-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.chip-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 3.5px;
 }
 
 .insp-select {

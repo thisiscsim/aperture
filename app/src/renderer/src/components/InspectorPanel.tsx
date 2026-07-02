@@ -477,7 +477,6 @@ function ColorChip({
           type="color"
           value={normalizeHex(value)}
           onChange={(e) => onChange(e.target.value.toUpperCase())}
-          style={{ background: normalizeHex(value) }}
         />
         <input
           type="text"
