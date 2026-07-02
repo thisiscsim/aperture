@@ -5,19 +5,64 @@ import { z } from "zod";
  * The agent writes it, the timeline editor edits it, the Remotion Player
  * previews it, and the renderer exports it. Keep every producer/consumer
  * honest by validating against these schemas.
+ *
+ * Project files are an interchange format (shared between people and written
+ * by LLMs), so treat every field as untrusted: numerics are finite and
+ * bounded (unbounded values hang the timeline/player), media paths must stay
+ * inside the project folder, and colors must be real CSS color literals
+ * (arbitrary strings would reach inline styles and can trigger network
+ * fetches via url(...)).
  */
 
+/** Upper bound for any timeline position/length, in seconds (4 hours). */
+export const MAX_TIMELINE_SEC = 14_400;
+
+/** Finite, non-negative number with a sane ceiling. */
+const bounded = (max: number) => z.number().finite().nonnegative().max(max);
+/** Finite, non-negative seconds capped at the timeline maximum. */
+const seconds = () => bounded(MAX_TIMELINE_SEC);
+
+/**
+ * A path that must stay inside the project folder: relative, no `..`
+ * segments, no drive letters / UNC prefixes / NUL.
+ */
+const RelativePathSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .refine(
+    (p) =>
+      !p.startsWith("/") &&
+      !/^[A-Za-z]:[\\/]/.test(p) &&
+      !p.startsWith("\\\\") &&
+      !p.includes("\0") &&
+      !p.split(/[\\/]/).some((seg) => seg === ".."),
+    { message: "must be a project-relative path without .. segments" },
+  );
+
+/**
+ * A safe CSS color literal: hex, rgb()/hsl() with a numeric-only body, or a
+ * bare color name. Excludes anything that could smuggle url()/expressions
+ * into inline styles.
+ */
+const CssColorSchema = z
+  .string()
+  .max(64)
+  .regex(/^(#[0-9a-fA-F]{3,8}|(rgb|rgba|hsl|hsla)\(\s*[\d.,%\s/-]*\)|[a-zA-Z]+)$/, {
+    message: "must be a hex/rgb()/hsl() color or a color name",
+  });
+
 export const FormatSchema = z.object({
-  width: z.number().int().positive().default(1080),
-  height: z.number().int().positive().default(1920),
-  fps: z.number().int().positive().default(30),
+  width: z.number().int().positive().max(8192).default(1080),
+  height: z.number().int().positive().max(8192).default(1920),
+  fps: z.number().int().positive().max(240).default(30),
 });
 
 export const SafeMarginsSchema = z.object({
-  top: z.number().nonnegative().default(220),
-  bottom: z.number().nonnegative().default(320),
-  left: z.number().nonnegative().default(64),
-  right: z.number().nonnegative().default(64),
+  top: bounded(4096).default(220),
+  bottom: bounded(4096).default(320),
+  left: bounded(4096).default(64),
+  right: bounded(4096).default(64),
 });
 
 /**
@@ -26,11 +71,11 @@ export const SafeMarginsSchema = z.object({
  */
 export const GradeSchema = z.object({
   /** Multipliers around 1.0 (e.g. 1.1 = +10%). */
-  brightness: z.number().positive().default(1),
-  contrast: z.number().positive().default(1),
-  saturation: z.number().nonnegative().default(1),
+  brightness: z.number().finite().positive().max(10).default(1),
+  contrast: z.number().finite().positive().max(10).default(1),
+  saturation: bounded(10).default(1),
   /** Warm/cool tint, degrees of hue rotation (-30..30 typical, 0 = none). */
-  temperature: z.number().default(0),
+  temperature: z.number().finite().min(-180).max(180).default(0),
   /** Vignette strength 0..1 (0 = none). */
   vignette: z.number().min(0).max(1).default(0),
 });
@@ -42,8 +87,8 @@ export const TextAlignmentSchema = z.object({
 });
 
 export const ThemeSchema = z.object({
-  fontFamily: z.string().default("Inter"),
-  palette: z.array(z.string()).min(1).default(["#FAFAF9", "#0F0E0D", "#E8B04B"]),
+  fontFamily: z.string().max(256).default("Inter"),
+  palette: z.array(CssColorSchema).min(1).max(16).default(["#FAFAF9", "#0F0E0D", "#E8B04B"]),
   captionStyle: z.enum(["karaoke", "block", "word", "none"]).default("karaoke"),
   safeMargins: SafeMarginsSchema.default({}),
   /** Default text-overlay alignment (Design section in the editor). */
@@ -56,8 +101,8 @@ export const ThemeSchema = z.object({
 
 /** A scene transition between/over clips. `preset` maps to a Remotion presentation or a gl-transition name. */
 export const TransitionSchema = z.object({
-  preset: z.string(),
-  duration: z.number().positive().default(0.4),
+  preset: z.string().max(64),
+  duration: z.number().finite().positive().max(30).default(0.4),
   direction: z.enum(["left", "right", "up", "down"]).optional(),
 });
 
@@ -68,21 +113,21 @@ export const TextAnimSchema = z.object({
 });
 
 export const TransformSchema = z.object({
-  scale: z.number().default(1),
-  x: z.number().default(0),
-  y: z.number().default(0),
-  rotation: z.number().default(0),
+  scale: z.number().finite().min(0).max(100).default(1),
+  x: z.number().finite().min(-10_000).max(10_000).default(0),
+  y: z.number().finite().min(-10_000).max(10_000).default(0),
+  rotation: z.number().finite().min(-3600).max(3600).default(0),
 });
 
 export const VideoClipSchema = z.object({
-  id: z.string(),
-  assetId: z.string(),
+  id: z.string().max(256),
+  assetId: z.string().max(256),
   /** Timeline position (seconds from composition start). */
-  start: z.number().nonnegative(),
+  start: seconds(),
   /** Source in-point (seconds into the asset). */
-  in: z.number().nonnegative().default(0),
+  in: seconds().default(0),
   /** Source out-point (seconds into the asset). Must be > in. */
-  out: z.number().positive(),
+  out: z.number().finite().positive().max(MAX_TIMELINE_SEC),
   transform: TransformSchema.partial().optional(),
   transitionIn: TransitionSchema.optional(),
   transitionOut: TransitionSchema.optional(),
@@ -90,22 +135,22 @@ export const VideoClipSchema = z.object({
 });
 
 export const TextClipSchema = z.object({
-  id: z.string(),
-  start: z.number().nonnegative(),
-  end: z.number().positive(),
-  text: z.string(),
-  style: z.string().default("title"),
+  id: z.string().max(256),
+  start: seconds(),
+  end: z.number().finite().positive().max(MAX_TIMELINE_SEC),
+  text: z.string().max(2000),
+  style: z.string().max(64).default("title"),
   anim: TextAnimSchema.optional(),
 });
 
 export const AudioClipSchema = z.object({
-  id: z.string(),
-  assetId: z.string(),
-  start: z.number().nonnegative().default(0),
-  in: z.number().nonnegative().default(0),
-  out: z.number().positive(),
+  id: z.string().max(256),
+  assetId: z.string().max(256),
+  start: seconds().default(0),
+  in: seconds().default(0),
+  out: z.number().finite().positive().max(MAX_TIMELINE_SEC),
   /** Gain in dB. */
-  gain: z.number().default(0),
+  gain: z.number().finite().min(-60).max(12).default(0),
   duckUnderVoice: z.boolean().default(false),
   /** What this clip is: a music bed, a spoken voiceover, or a one-off sound effect. */
   role: z.enum(["music", "voiceover", "sfx"]).default("music"),
@@ -116,7 +161,7 @@ export const VideoTrackSchema = z.object({
   /** Optional display name for the timeline layer. */
   name: z.string().optional(),
   type: z.literal("video"),
-  clips: z.array(VideoClipSchema).default([]),
+  clips: z.array(VideoClipSchema).max(500).default([]),
 });
 
 export const TextTrackSchema = z.object({
@@ -124,13 +169,13 @@ export const TextTrackSchema = z.object({
   /** Optional display name for the timeline layer. */
   name: z.string().optional(),
   type: z.literal("text"),
-  clips: z.array(TextClipSchema).default([]),
+  clips: z.array(TextClipSchema).max(500).default([]),
 });
 
 export const CaptionWordSchema = z.object({
-  text: z.string(),
-  start: z.number().nonnegative(),
-  end: z.number().nonnegative(),
+  text: z.string().max(256),
+  start: seconds(),
+  end: seconds(),
 });
 
 export const CaptionTrackSchema = z.object({
@@ -139,10 +184,10 @@ export const CaptionTrackSchema = z.object({
   name: z.string().optional(),
   type: z.literal("caption"),
   /** Path (relative to project root) to a word-level transcript JSON. */
-  source: z.string().optional(),
+  source: RelativePathSchema.optional(),
   style: z.string().default("karaoke"),
   /** Word-level timings (written by the transcribe step or inline). */
-  words: z.array(CaptionWordSchema).optional(),
+  words: z.array(CaptionWordSchema).max(20_000).optional(),
 });
 
 export const AudioTrackSchema = z.object({
@@ -150,7 +195,7 @@ export const AudioTrackSchema = z.object({
   /** Optional display name for the timeline layer. */
   name: z.string().optional(),
   type: z.literal("audio"),
-  clips: z.array(AudioClipSchema).default([]),
+  clips: z.array(AudioClipSchema).max(500).default([]),
 });
 
 export const TrackSchema = z.discriminatedUnion("type", [
@@ -161,23 +206,23 @@ export const TrackSchema = z.discriminatedUnion("type", [
 ]);
 
 export const AssetSchema = z.object({
-  id: z.string(),
+  id: z.string().max(256),
   kind: z.enum(["video", "audio", "image"]),
   /** Path relative to the project folder (e.g. "assets/clip01.mp4"). */
-  src: z.string(),
+  src: RelativePathSchema,
   /** Optional lightweight H.264 proxy (relative path) used for smooth editor playback. */
-  proxySrc: z.string().optional(),
-  durationSec: z.number().positive().optional(),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
+  proxySrc: RelativePathSchema.optional(),
+  durationSec: z.number().finite().positive().max(MAX_TIMELINE_SEC).optional(),
+  width: z.number().int().positive().max(16_384).optional(),
+  height: z.number().int().positive().max(16_384).optional(),
 });
 
 export const EdlSchema = z.object({
   version: z.literal(1).default(1),
   format: FormatSchema.default({}),
   theme: ThemeSchema.default({}),
-  assets: z.array(AssetSchema).default([]),
-  tracks: z.array(TrackSchema).default([]),
+  assets: z.array(AssetSchema).max(500).default([]),
+  tracks: z.array(TrackSchema).max(50).default([]),
 });
 
 /**

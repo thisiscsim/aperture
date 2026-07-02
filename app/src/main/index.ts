@@ -12,7 +12,7 @@ import {
   watch,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, extname, join, normalize } from "node:path";
+import { basename, dirname, extname, join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
 import ffmpegPath from "ffmpeg-static";
@@ -73,17 +73,21 @@ function assetKindFor(file: string): "video" | "audio" | "image" | null {
   return null;
 }
 
-/** Resolve + guard a path so it can never escape PROJECTS_DIR. */
-function safeProjectPath(slug: string, ...rel: string[]): string {
-  const file = normalize(join(PROJECTS_DIR, slug, ...rel));
-  if (!file.startsWith(normalize(PROJECTS_DIR))) throw new Error("path escapes projects dir");
+/** Resolve + guard a path so it can never escape the given root. */
+function safePath(root: string, rel: string[]): string {
+  const base = normalize(root);
+  const file = normalize(join(base, ...rel));
+  // Compare against root + separator so a sibling like "<root>-evil" can't pass.
+  if (file !== base && !file.startsWith(base + sep)) throw new Error("path escapes storage dir");
   return file;
 }
 
+function safeProjectPath(slug: string, ...rel: string[]): string {
+  return safePath(PROJECTS_DIR, [slug, ...rel]);
+}
+
 function safeStylePath(id: string, ...rel: string[]): string {
-  const file = normalize(join(STYLES_DIR, id, ...rel));
-  if (!file.startsWith(normalize(STYLES_DIR))) throw new Error("path escapes styles dir");
-  return file;
+  return safePath(STYLES_DIR, [id, ...rel]);
 }
 
 // Captured so dialogs can parent to the window.
@@ -119,24 +123,45 @@ function loadLocalEnv(): void {
 loadLocalEnv();
 
 // ---- Persistent app settings (hardware acceleration, storage location, etc.) ----
+export type ExportFps = "project" | "24" | "30" | "60";
+export type ExportResolution = "project" | "1080" | "720";
+export type ExportCompression = "social" | "high" | "max";
+export type ReasoningEffort = "low" | "medium" | "high";
 interface AppSettings {
   hwDecode: boolean;
   hwEncode: boolean;
   /** User-chosen root folder for projects + styles (default ~/Documents/Aperture). */
   homeDir?: string;
+  /** Export defaults applied by the render pipeline. */
+  exportFps: ExportFps;
+  exportResolution: ExportResolution;
+  exportCompression: ExportCompression;
+  /** Agent preferences (env vars from .env.local always win). */
+  agentModel: string;
+  agentApiKey?: string;
+  reasoningEffort: ReasoningEffort;
 }
 const SETTINGS_PATH = join(app.getPath("userData"), "settings.json");
 function readSettings(): AppSettings {
+  let s: Record<string, unknown> = {};
   try {
-    const s = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"));
-    return {
-      hwDecode: Boolean(s.hwDecode),
-      hwEncode: Boolean(s.hwEncode),
-      homeDir: typeof s.homeDir === "string" && s.homeDir ? s.homeDir : undefined,
-    };
+    s = JSON.parse(readFileSync(SETTINGS_PATH, "utf8"));
   } catch {
-    return { hwDecode: false, hwEncode: false };
+    // fresh install
   }
+  const oneOf = <T extends string>(v: unknown, options: readonly T[], dflt: T): T =>
+    typeof v === "string" && (options as readonly string[]).includes(v) ? (v as T) : dflt;
+  return {
+    hwDecode: Boolean(s.hwDecode),
+    hwEncode: Boolean(s.hwEncode),
+    homeDir: typeof s.homeDir === "string" && s.homeDir ? s.homeDir : undefined,
+    exportFps: oneOf(s.exportFps, ["project", "24", "30", "60"] as const, "project"),
+    exportResolution: oneOf(s.exportResolution, ["project", "1080", "720"] as const, "project"),
+    exportCompression: oneOf(s.exportCompression, ["social", "high", "max"] as const, "social"),
+    agentModel: typeof s.agentModel === "string" && s.agentModel ? s.agentModel : "gpt-5.5",
+    agentApiKey: typeof s.agentApiKey === "string" && s.agentApiKey ? s.agentApiKey : undefined,
+    reasoningEffort: oneOf(s.reasoningEffort, ["low", "medium", "high"] as const, "low"),
+  };
 }
 function writeSettings(patch: Partial<AppSettings>): AppSettings {
   const next = { ...readSettings(), ...patch };
@@ -145,8 +170,36 @@ function writeSettings(patch: Partial<AppSettings>): AppSettings {
   } catch {
     // best-effort
   }
+  applyAgentEnv(next);
   return next;
 }
+
+// Agent preferences flow to the LLM layer via the same env vars .env.local uses.
+// Anything explicitly set in the environment (shell or .env.local) stays
+// authoritative; settings only fill the gaps. `envLocked` is captured once at
+// startup, before the first injection.
+const envLocked = {
+  provider: "APERTURE_LLM_PROVIDER" in process.env,
+  model: "APERTURE_LLM_MODEL" in process.env,
+  apiKey: Boolean(
+    process.env["APERTURE_LLM_API_KEY"] || process.env["OPENAI_API_KEY"] || process.env["ANTHROPIC_API_KEY"],
+  ),
+  effort: "APERTURE_REASONING_EFFORT" in process.env,
+};
+function applyAgentEnv(s: AppSettings): void {
+  if (!envLocked.model) {
+    process.env["APERTURE_LLM_MODEL"] = s.agentModel;
+    if (!envLocked.provider) {
+      process.env["APERTURE_LLM_PROVIDER"] = s.agentModel.startsWith("claude") ? "anthropic" : "openai";
+    }
+  }
+  if (!envLocked.apiKey) {
+    if (s.agentApiKey) process.env["APERTURE_LLM_API_KEY"] = s.agentApiKey;
+    else delete process.env["APERTURE_LLM_API_KEY"];
+  }
+  if (!envLocked.effort) process.env["APERTURE_REASONING_EFFORT"] = s.reasoningEffort;
+}
+applyAgentEnv(readSettings());
 
 // User-owned storage (Screen Studio style): projects + styles live under the
 // user's home folder, not the repo/app bundle. Resolution: env override (dev) ->
@@ -197,11 +250,19 @@ function mimeFor(file: string): string {
       return "audio/wav";
     case ".m4a":
       return "audio/mp4";
+    case ".aac":
+      return "audio/aac";
+    case ".ogg":
+      return "audio/ogg";
     case ".png":
       return "image/png";
     case ".jpg":
     case ".jpeg":
       return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
     default:
       return "application/octet-stream";
   }
@@ -252,7 +313,7 @@ function readMeta(slug: string) {
 
 function loadProject(slug: string) {
   try {
-    const dir = join(PROJECTS_DIR, slug);
+    const dir = safeProjectPath(slug);
     const raw = JSON.parse(readFileSync(join(dir, "edl.json"), "utf8"));
     const result = parseEdl(raw);
     let promptText = "";
@@ -304,7 +365,9 @@ function watchProject(slug: string, event: IpcMainInvokeEvent): void {
     // Ignore the echo from our own autosave.
     if (Date.now() - (lastSelfWrite.get(slug) ?? 0) < 1200) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => event.sender.send("project:changed", slug), 200);
+    timer = setTimeout(() => {
+      if (!event.sender.isDestroyed()) event.sender.send("project:changed", slug);
+    }, 200);
   });
   activeWatcher = { slug, watcher };
 }
@@ -664,6 +727,11 @@ function runScript(
   channelPrefix: string,
   extraArgs: string[] = [],
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
+  // Engine scripts join the slug onto the projects dir themselves, so enforce
+  // slug shape at this IPC boundary (same rule slugify produces).
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(slug)) {
+    return Promise.resolve({ ok: false, error: "invalid project id" });
+  }
   return runScriptArgs(scriptPath, ["--slug", slug, ...extraArgs], event, channelPrefix);
 }
 
@@ -750,11 +818,12 @@ async function addStyleSourcesFromDialog(
 ): Promise<{ ok: boolean; files: string[]; error?: string }> {
   try {
     const win = mainWindow ?? BrowserWindow.getFocusedWindow();
-    const result = await dialog.showOpenDialog(win ?? undefined!, {
+    const opts: Electron.OpenDialogOptions = {
       title: mode === "folder" ? "Choose a folder of reference videos" : "Choose reference videos",
       properties: mode === "folder" ? ["openDirectory"] : ["openFile", "multiSelections"],
       filters: mode === "files" ? [{ name: "Video", extensions: ["mp4", "mov", "webm", "m4v"] }] : undefined,
-    });
+    };
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (result.canceled || result.filePaths.length === 0) return { ok: true, files: [] };
     let paths = result.filePaths;
     if (mode === "folder") {
@@ -839,8 +908,10 @@ app.whenReady().then(() => {
     const url = new URL(request.url);
     const slug = url.hostname;
     const rel = decodeURIComponent(url.pathname).replace(/^\/+/, "");
-    const file = normalize(join(PROJECTS_DIR, slug, rel));
-    if (!file.startsWith(normalize(PROJECTS_DIR))) {
+    let file: string;
+    try {
+      file = safeProjectPath(slug, rel);
+    } catch {
       return new Response("Forbidden", { status: 403 });
     }
 
@@ -858,8 +929,8 @@ app.whenReady().then(() => {
     // without the main process ever buffering whole files (the OOM cause).
     if (range) {
       const match = /bytes=(\d*)-(\d*)/.exec(range);
-      const start = match?.[1] ? Number.parseInt(match[1], 10) : 0;
-      const end = match?.[2] ? Number.parseInt(match[2], 10) : size - 1;
+      const start = Math.min(match?.[1] ? Number.parseInt(match[1], 10) : 0, Math.max(0, size - 1));
+      const end = Math.min(match?.[2] ? Number.parseInt(match[2], 10) : size - 1, size - 1);
       const body = Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream<Uint8Array>;
       return new Response(body, {
         status: 206,
@@ -1039,9 +1110,15 @@ app.whenReady().then(() => {
       return [];
     }
   });
-  ipcMain.handle("export:start", (event, slug: string) =>
-    runScript(RENDER_SCRIPT, slug, event, "export", readSettings().hwEncode ? ["--hwaccel"] : []),
-  );
+  ipcMain.handle("export:start", (event, slug: string) => {
+    const s = readSettings();
+    const args: string[] = [];
+    if (s.hwEncode) args.push("--hwaccel");
+    if (s.exportFps !== "project") args.push("--fps", s.exportFps);
+    if (s.exportResolution !== "project") args.push("--resolution", s.exportResolution);
+    args.push("--compression", s.exportCompression);
+    return runScript(RENDER_SCRIPT, slug, event, "export", args);
+  });
   ipcMain.handle("settings:get", () => readSettings());
   ipcMain.handle("settings:set", (_event, patch: Partial<AppSettings>) => writeSettings(patch));
   ipcMain.handle("home:get", () => PROJECTS_DIR);
@@ -1066,14 +1143,21 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("generate:mode", () => {
     const info = llmInfo();
-    return { mode: info.configured ? "llm" : "baseline", provider: info.provider, model: info.model };
+    return {
+      mode: info.configured ? "llm" : "baseline",
+      provider: info.provider,
+      model: info.model,
+      // True when .env.local / shell env pins these (Settings then can't change them).
+      modelLocked: envLocked.model,
+      keyLocked: envLocked.apiKey,
+    };
   });
   ipcMain.handle("transcribe:start", (event, slug: string) =>
     runScript(TRANSCRIBE_SCRIPT, slug, event, "transcribe"),
   );
   ipcMain.handle("critique:load", (_event, slug: string) => {
     try {
-      return JSON.parse(readFileSync(join(PROJECTS_DIR, slug, "critique.json"), "utf8"));
+      return JSON.parse(readFileSync(safeProjectPath(slug, "critique.json"), "utf8"));
     } catch {
       return null;
     }

@@ -47,7 +47,12 @@ async function main() {
     edl.assets.find((a) => a.kind === "video");
   if (!asset) throw new Error("no audio/video asset to transcribe");
 
-  const input = path.join(projectDir, asset.src);
+  // edl.json is untrusted (shareable project file): the transcode input must
+  // stay inside the project folder, mirroring the app's safeProjectPath guard.
+  const input = path.resolve(projectDir, asset.src);
+  if (!input.startsWith(path.resolve(projectDir) + path.sep)) {
+    throw new Error(`asset src escapes the project folder: ${asset.src}`);
+  }
   const wavDir = path.join(projectDir, "transcripts");
   fs.mkdirSync(wavDir, { recursive: true });
   const wav = path.join(wavDir, `${slug}-16k.wav`);

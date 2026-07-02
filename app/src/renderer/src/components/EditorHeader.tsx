@@ -38,10 +38,10 @@ export function EditorHeader(): JSX.Element {
   return (
     <header className="editor-header">
       <div className="editor-header-left">
-        <button className="ui-icon-btn" onClick={goHome} title="Back to projects" aria-label="Back to projects">
+        <button className="brand" onClick={goHome} title="Back to projects">
           <Icon name="aperture-logomark" size={20} />
+          <span className="home-wordmark">Aperture</span>
         </button>
-        <span className="home-wordmark">Aperture</span>
       </div>
 
       <div className="editor-header-title">

@@ -3,10 +3,22 @@ import { durationSeconds } from "@reel/edl";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
-/** Append imported assets, skipping any whose id already exists. */
+/**
+ * Append imported assets. Re-importing the same file (same id + src) is a
+ * no-op; a *different* file whose stem collides with an existing id (e.g.
+ * clip.mp4 then clip.mov) gets a suffixed id — mutated in place so callers
+ * that read `asset.id` afterwards (to place clips) see the final id.
+ */
 export function addAssets(edl: Edl, assets: Asset[]): void {
   for (const a of assets) {
-    if (!edl.assets.some((x) => x.id === a.id)) edl.assets.push(a);
+    const existing = edl.assets.find((x) => x.id === a.id);
+    if (existing) {
+      if (existing.src === a.src) continue;
+      let n = 2;
+      while (edl.assets.some((x) => x.id === `${a.id}-${n}`)) n++;
+      a.id = `${a.id}-${n}`;
+    }
+    edl.assets.push(a);
   }
 }
 
@@ -29,7 +41,11 @@ export function addAudioClip(
     edl.tracks.push(track);
   }
   const videoLen = durationSeconds(edl);
-  const out = round(durationSec ?? Math.max(1, videoLen));
+  // A music bed underlays the existing cut — cap it at the video length so a
+  // 3-minute track doesn't stretch a 20s composition. Voiceover/sfx keep their
+  // natural length (captions may run past the last clip intentionally).
+  const natural = durationSec ?? Math.max(1, videoLen);
+  const out = round(role === "music" && videoLen > 0 ? Math.min(natural, videoLen) : natural);
   const clip: AudioClip = {
     id: `a-${assetId}`,
     assetId,
@@ -42,6 +58,16 @@ export function addAudioClip(
   };
   track.clips = track.clips.filter((c) => c.assetId !== assetId);
   track.clips.push(clip);
+
+  // A new voiceover should duck any existing music beds under it.
+  if (role === "voiceover") {
+    for (const t of edl.tracks) {
+      if (t.type !== "audio") continue;
+      for (const c of t.clips) {
+        if (c.role === "music") c.duckUnderVoice = true;
+      }
+    }
+  }
 }
 
 /** Append a new empty timeline layer of the given type. */

@@ -7,6 +7,32 @@ export type Theme = "dark" | "light";
 export type View = "home" | "editor";
 
 const THEME_KEY = "aperture:theme";
+const LAYOUT_KEY = "aperture:panel-layout";
+
+export type PanelId = "left" | "right" | "timeline";
+/** Resize clamps: [min, max] px. Left/right are widths, timeline is height. */
+export const PANEL_LIMITS: Record<PanelId, [number, number]> = {
+  left: [220, 440],
+  right: [240, 440],
+  timeline: [160, 440],
+};
+const PANEL_DEFAULTS: Record<PanelId, number> = { left: 300, right: 300, timeline: 240 };
+
+function initialPanelSizes(): Record<PanelId, number> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "{}") as Partial<Record<PanelId, number>>;
+    const out = { ...PANEL_DEFAULTS };
+    for (const id of ["left", "right", "timeline"] as PanelId[]) {
+      const v = saved[id];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        out[id] = Math.min(Math.max(v, PANEL_LIMITS[id][0]), PANEL_LIMITS[id][1]);
+      }
+    }
+    return out;
+  } catch {
+    return { ...PANEL_DEFAULTS };
+  }
+}
 
 function initialTheme(): Theme {
   try {
@@ -76,6 +102,9 @@ interface EditorState {
   playing: boolean;
   muted: boolean;
   playerCtl: { toggle: () => void; setMuted: (m: boolean) => void } | null;
+  panelSizes: Record<PanelId, number>;
+  /** Cmd+\ focus mode: hide the rails + timeline, keep only the canvas. */
+  panelsHidden: boolean;
 
   exporting: boolean;
   exportProgress: number;
@@ -115,6 +144,8 @@ interface EditorState {
   setPlaying: (v: boolean) => void;
   toggleMuted: () => void;
   setPlayerCtl: (ctl: { toggle: () => void; setMuted: (m: boolean) => void } | null) => void;
+  setPanelSize: (panel: PanelId, px: number) => void;
+  togglePanels: () => void;
 
   startExport: () => void;
   setExportProgress: (pct: number) => void;
@@ -146,6 +177,8 @@ export const useEditor = create<EditorState>()((set, get) => ({
   playing: false,
   muted: false,
   playerCtl: null,
+  panelSizes: initialPanelSizes(),
+  panelsHidden: false,
 
   exporting: false,
   exportProgress: 0,
@@ -159,7 +192,18 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   setView: (view) => set({ view }),
   setProjects: (projects) => set({ projects }),
-  openProject: (slug) => set({ slug, view: "editor", edl: null, loadError: null, selectedClipId: null }),
+  openProject: (slug) =>
+    set({
+      slug,
+      view: "editor",
+      edl: null,
+      loadError: null,
+      selectedClipId: null,
+      currentFrame: 0,
+      playing: false,
+      notice: null,
+      rightTab: "inspector",
+    }),
   goHome: () => set({ view: "home", selectedClipId: null }),
   setProject: (p) =>
     set({
@@ -225,13 +269,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       set({ theme });
     });
   },
-  toggleTheme: () => {
-    const theme: Theme = get().theme === "dark" ? "light" : "dark";
-    withViewTransition(() => {
-      applyTheme(theme);
-      set({ theme });
-    });
-  },
+  toggleTheme: () => get().setTheme(get().theme === "dark" ? "light" : "dark"),
 
   setPlaying: (v) => set({ playing: v }),
   toggleMuted: () => {
@@ -240,6 +278,17 @@ export const useEditor = create<EditorState>()((set, get) => ({
     set({ muted });
   },
   setPlayerCtl: (ctl) => set({ playerCtl: ctl }),
+  setPanelSize: (panel, px) => {
+    const [min, max] = PANEL_LIMITS[panel];
+    const next = { ...get().panelSizes, [panel]: Math.round(Math.min(Math.max(px, min), max)) };
+    set({ panelSizes: next });
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(next));
+    } catch {
+      // persistence is best-effort
+    }
+  },
+  togglePanels: () => set({ panelsHidden: !get().panelsHidden }),
 
   startExport: () => set({ exporting: true, exportProgress: 0, exportPhase: "preparing", exportResult: null }),
   setExportProgress: (pct) => set({ exportProgress: pct }),

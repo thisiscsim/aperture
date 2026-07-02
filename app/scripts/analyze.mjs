@@ -14,8 +14,11 @@ import { nodeReader } from "@remotion/media-parser/node";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
-const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
-const AUDIO_EXT = new Set([".mp3", ".wav", ".m4a", ".aac"]);
+// .webm is ambiguous (recorded voiceovers are audio-only .webm); those files
+// are classified by probing for video dimensions instead of by extension.
+const VIDEO_EXT = new Set([".mp4", ".mov", ".m4v"]);
+const AUDIO_EXT = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg"]);
+const AMBIGUOUS_EXT = new Set([".webm"]);
 const CAP_SEC = 4;
 
 function arg(name) {
@@ -34,9 +37,22 @@ async function main() {
   const edlPath = path.join(projectDir, "edl.json");
   const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
 
-  const all = fs.readdirSync(assetsDir).sort();
+  const all = fs.readdirSync(assetsDir).filter((f) => !f.startsWith(".")).sort();
   const videoFiles = all.filter((f) => VIDEO_EXT.has(path.extname(f).toLowerCase()));
   const audioFiles = all.filter((f) => AUDIO_EXT.has(path.extname(f).toLowerCase()));
+  for (const f of all.filter((x) => AMBIGUOUS_EXT.has(path.extname(x).toLowerCase()))) {
+    try {
+      const meta = await parseMedia({
+        src: path.join(assetsDir, f),
+        fields: { dimensions: true },
+        reader: nodeReader,
+        acknowledgeRemotionLicense: true,
+      });
+      (meta.dimensions ? videoFiles : audioFiles).push(f);
+    } catch {
+      // unreadable file: skip
+    }
+  }
 
   console.log(`PHASE probing ${videoFiles.length} clips`);
   const assets = [];
@@ -100,20 +116,38 @@ async function main() {
     });
   }
 
-  edl.assets = assets;
+  // Merge probed assets with the existing list: probes win on fresh metadata,
+  // but keep fields only the app knows (proxySrc) and keep entries this scan
+  // doesn't cover (images, previously imported files).
+  const byId = new Map(edl.assets?.map((a) => [a.id, a]) ?? []);
+  for (const probed of assets) {
+    const prev = byId.get(probed.id);
+    byId.set(probed.id, prev ? { ...prev, ...probed, proxySrc: prev.proxySrc } : probed);
+  }
+  edl.assets = [...byId.values()];
+
   const videoTrack = edl.tracks.find((tr) => tr.type === "video");
   if (videoTrack) videoTrack.clips = clips;
   else edl.tracks.unshift({ id: "v", type: "video", clips });
 
+  // Music bed on the dedicated music track ("aud"). Voiceover tracks/clips are
+  // preserved untouched, and a voiceover's own audio file never becomes music.
+  const voAssetIds = new Set(
+    edl.tracks
+      .flatMap((tr) => (tr.type === "audio" ? tr.clips ?? [] : []))
+      .filter((c) => c.role === "voiceover")
+      .map((c) => c.assetId),
+  );
   const videoDur = round(cursor);
-  const music = assets.find((a) => a.kind === "audio");
+  const music = edl.assets.find((a) => a.kind === "audio" && !voAssetIds.has(a.id));
   if (music) {
     const span = videoDur > 0 ? videoDur : (music.durationSec ?? 1);
     const out = round(Math.min(music.durationSec ?? span, span)) || 1;
+    const duckUnderVoice = voAssetIds.size > 0;
     const audioClips = [
-      { id: `a-${music.id}`, assetId: music.id, start: 0, in: 0, out, gain: -12, duckUnderVoice: false },
+      { id: `a-${music.id}`, assetId: music.id, start: 0, in: 0, out, gain: -12, duckUnderVoice, role: "music" },
     ];
-    const audioTrack = edl.tracks.find((tr) => tr.type === "audio");
+    const audioTrack = edl.tracks.find((tr) => tr.type === "audio" && tr.id !== "vo");
     if (audioTrack) audioTrack.clips = audioClips;
     else edl.tracks.push({ id: "aud", type: "audio", clips: audioClips });
   }

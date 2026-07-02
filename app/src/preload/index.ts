@@ -1,6 +1,18 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from "electron";
 import type { Benchmarks, Edl, Meta, StyleProfile } from "@reel/edl";
 
+export interface AppSettings {
+  hwDecode: boolean;
+  hwEncode: boolean;
+  homeDir?: string;
+  exportFps: "project" | "24" | "30" | "60";
+  exportResolution: "project" | "1080" | "720";
+  exportCompression: "social" | "high" | "max";
+  agentModel: string;
+  agentApiKey?: string;
+  reasoningEffort: "low" | "medium" | "high";
+}
+
 export interface LoadProjectResult {
   ok: boolean;
   edl?: Edl;
@@ -141,18 +153,19 @@ const api = {
     ipcRenderer.invoke("autotune:results", slug),
   exportProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("export:start", slug),
   generateProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("generate:start", slug),
-  generateMode: (): Promise<{ mode: "llm" | "baseline"; provider: string; model: string }> =>
-    ipcRenderer.invoke("generate:mode"),
+  generateMode: (): Promise<{
+    mode: "llm" | "baseline";
+    provider: string;
+    model: string;
+    modelLocked: boolean;
+    keyLocked: boolean;
+  }> => ipcRenderer.invoke("generate:mode"),
   transcribeProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("transcribe:start", slug),
   loadCritique: (slug: string): Promise<unknown> => ipcRenderer.invoke("critique:load", slug),
   runCritique: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("critique:run", slug),
   revealItem: (filePath: string): Promise<void> => ipcRenderer.invoke("shell:reveal", filePath),
-  getSettings: (): Promise<{ hwDecode: boolean; hwEncode: boolean; homeDir?: string }> =>
-    ipcRenderer.invoke("settings:get"),
-  setSettings: (
-    patch: Partial<{ hwDecode: boolean; hwEncode: boolean; homeDir?: string }>,
-  ): Promise<{ hwDecode: boolean; hwEncode: boolean; homeDir?: string }> =>
-    ipcRenderer.invoke("settings:set", patch),
+  getSettings: (): Promise<AppSettings> => ipcRenderer.invoke("settings:get"),
+  setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> => ipcRenderer.invoke("settings:set", patch),
   getProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:get"),
   revealProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:reveal"),
   pickProjectsDir: (): Promise<{ ok: boolean; homeDir?: string; canceled?: boolean }> =>

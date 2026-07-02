@@ -26,13 +26,34 @@ export function extractJson(text) {
   return JSON.parse(body.slice(start, end + 1));
 }
 
+const MAX_SEC = 14_400; // mirrors MAX_TIMELINE_SEC in the EDL schema
+const SAFE_COLOR = /^(#[0-9a-fA-F]{3,8}|(rgb|rgba|hsl|hsla)\(\s*[\d.,%\s/-]*\)|[a-zA-Z]+)$/;
+
+function clampSec(v, fallback) {
+  if (typeof v !== "number" || !Number.isFinite(v)) return fallback;
+  return Math.min(Math.max(v, 0), MAX_SEC);
+}
+
 /** Repair common harmless model deviations before strict EdlSchema validation. */
 export function sanitizeEdl(obj) {
   if (!obj || !Array.isArray(obj.tracks)) return obj;
+  if (Array.isArray(obj.theme?.palette)) {
+    // Colors reach inline CSS; anything not a plain color literal is unsafe.
+    obj.theme.palette = obj.theme.palette.filter((c) => typeof c === "string" && SAFE_COLOR.test(c));
+    if (obj.theme.palette.length === 0) delete obj.theme.palette;
+  }
   for (const track of obj.tracks) {
-    if (track?.type === "text" && Array.isArray(track.clips)) {
-      for (const clip of track.clips) {
-        if (clip && clip.anim != null) {
+    if (!Array.isArray(track?.clips)) continue;
+    for (const clip of track.clips) {
+      if (!clip) continue;
+      // Non-finite / absurd timings hang the timeline and player.
+      if ("start" in clip) clip.start = clampSec(clip.start, 0);
+      if ("in" in clip) clip.in = clampSec(clip.in, 0);
+      if ("out" in clip) clip.out = clampSec(clip.out, 1) || 1;
+      if ("end" in clip) clip.end = clampSec(clip.end, 1) || 1;
+      if (track.type === "text") {
+        if (typeof clip.text === "string" && clip.text.length > 2000) clip.text = clip.text.slice(0, 2000);
+        if (clip.anim != null) {
           if (typeof clip.anim !== "object") {
             delete clip.anim;
           } else if (typeof clip.anim.name !== "string" || !clip.anim.name) {
@@ -40,7 +61,7 @@ export function sanitizeEdl(obj) {
             clip.anim.from = clip.anim.from ?? "animate-text";
           }
         }
-        if (clip && clip.style && clip.style !== "title" && clip.style !== "subtitle") {
+        if (clip.style && clip.style !== "title" && clip.style !== "subtitle") {
           clip.style = "subtitle";
         }
       }

@@ -2,6 +2,7 @@ import type { CSSProperties, FC } from "react";
 import {
   AbsoluteFill,
   Audio,
+  Img,
   interpolate,
   OffthreadVideo,
   Sequence,
@@ -26,7 +27,6 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string; preview?: boolea
 }) => {
   const base = edl.theme.palette[1] ?? "#171410";
   const accent = edl.theme.palette[2] ?? "#E8B04B";
-  const videoTrack = edl.tracks.find((t): t is VideoTrack => t.type === "video");
   const captionTrack = edl.tracks.find((t): t is CaptionTrack => t.type === "caption");
 
   return (
@@ -37,8 +37,11 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string; preview?: boolea
         }}
       />
 
-      {videoTrack && videoTrack.clips.length > 0 && (
-        <VideoTrackView track={videoTrack} edl={edl} assetBaseUrl={assetBaseUrl} preview={preview} />
+      {/* All video tracks render in EDL order; later layers stack on top. */}
+      {edl.tracks.map((track) =>
+        track.type === "video" && track.clips.length > 0 ? (
+          <VideoTrackView key={track.id} track={track} edl={edl} assetBaseUrl={assetBaseUrl} preview={preview} />
+        ) : null,
       )}
 
       {edl.tracks.map((track) =>
@@ -123,15 +126,20 @@ const CrossfadeVideo: FC<{
   }
 
   const grade = edl.theme.grade;
+  const mediaStyle: CSSProperties = { width: "100%", height: "100%", objectFit: "cover", filter: gradeFilter(grade) };
   return (
     <AbsoluteFill style={style}>
-      <OffthreadVideo
-        src={src}
-        trimBefore={Math.round(clip.in * fps)}
-        trimAfter={Math.round(clip.out * fps)}
-        volume={clip.volume ?? 1}
-        style={{ width: "100%", height: "100%", objectFit: "cover", filter: gradeFilter(grade) }}
-      />
+      {asset.kind === "image" ? (
+        <Img src={src} style={mediaStyle} />
+      ) : (
+        <OffthreadVideo
+          src={src}
+          trimBefore={Math.round(clip.in * fps)}
+          trimAfter={Math.round(clip.out * fps)}
+          volume={clip.volume ?? 1}
+          style={mediaStyle}
+        />
+      )}
       {grade && grade.vignette > 0 && (
         <AbsoluteFill
           style={{
@@ -235,10 +243,18 @@ const TextClipView: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
   );
 };
 
+// Per-unit (character/word) animation creates one styled span per unit with
+// per-frame style work. Past this length, fall back to whole-text animation so
+// a huge text clip can't balloon the DOM.
+const MAX_ANIMATED_UNITS = 400;
+
 const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const spec = getSpec(clip.anim?.name);
+  let spec = getSpec(clip.anim?.name);
+  if (spec.target !== "whole" && clip.text.length > MAX_ANIMATED_UNITS) {
+    spec = { ...spec, target: "whole" };
+  }
   const color = edl.theme.palette[0] ?? "#FAF6EE";
   const isTitle = clip.style === "title";
   const m = edl.theme.safeMargins;

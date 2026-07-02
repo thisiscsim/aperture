@@ -31,8 +31,8 @@ export function Home(): JSX.Element {
   return (
     <div className="home">
       <header className="home-header">
-        <div className="home-brand">
-          <Icon name="aperture-logomark" size={20} className="home-logomark" />
+        <div className="brand">
+          <Icon name="aperture-logomark" size={20} />
           <span className="home-wordmark">Aperture</span>
         </div>
         <div className="home-header-actions">
