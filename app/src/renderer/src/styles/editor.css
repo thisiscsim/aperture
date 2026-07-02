@@ -300,6 +300,21 @@
   opacity: 0.45;
 }
 
+.clip-row-remove {
+  margin-left: auto;
+  display: inline-flex;
+  flex: none;
+  border: none;
+  background: none;
+  padding: 2px;
+  color: var(--foreground-muted);
+  cursor: pointer;
+}
+
+.clip-row-remove:hover {
+  color: var(--foreground-primary);
+}
+
 /* ---------- Preview stage ---------- */
 .preview-stage {
   flex: 1;
