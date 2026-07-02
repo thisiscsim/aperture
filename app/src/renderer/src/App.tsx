@@ -20,6 +20,19 @@ export function App(): JSX.Element {
   const setReload = useEditor((s) => s.setReload);
   const undoEdl = useEditor((s) => s.undoEdl);
   const redoEdl = useEditor((s) => s.redoEdl);
+  const toggleTheme = useEditor((s) => s.toggleTheme);
+
+  // 'T' toggles light/dark anywhere, unless the user is typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "t" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
+      toggleTheme();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleTheme]);
 
   // Cmd+Z / Shift+Cmd+Z for EDL history. Text fields keep their native undo.
   useEffect(() => {
