@@ -1,15 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { type DragEvent, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
+import { addAssets } from "../lib/edl-edit";
 import { SettingsButton } from "./SettingsModal";
 import { ThemeToggle } from "./ThemeToggle";
-import { Badge, Button, Field, Icon, IconButton, Input, Modal, Select, TextArea } from "./ui";
+import { Badge, Button, Field, Icon, IconButton, Input, Modal, TextArea } from "./ui";
 import type { ProjectSummary } from "../../../preload";
-
-const PLATFORMS = [
-  { value: "reels", label: "Instagram Reels" },
-  { value: "tiktok", label: "TikTok" },
-  { value: "shorts", label: "YouTube Shorts" },
-];
 
 export function Home(): JSX.Element {
   const projects = useEditor((s) => s.projects);
@@ -203,6 +198,11 @@ function ProjectCard({
   );
 }
 
+interface StagedFile {
+  path: string;
+  name: string;
+}
+
 function NewProjectModal({
   onClose,
   onCreated,
@@ -212,22 +212,55 @@ function NewProjectModal({
 }): JSX.Element {
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [platform, setPlatform] = useState("reels");
-  const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<StagedFile[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const stage = (list: FileList | File[]) => {
+    setFiles((prev) => {
+      const next = [...prev];
+      for (const f of Array.from(list)) {
+        try {
+          const path = window.api.getPathForFile(f);
+          if (path && !next.some((s) => s.path === path)) next.push({ path, name: f.name });
+        } catch {
+          // not a disk-backed file; skip
+        }
+      }
+      return next;
+    });
+  };
 
   const create = async () => {
     if (!title.trim() || busy) return;
-    setBusy(true);
+    setBusy("Creating project…");
     setError(null);
     try {
-      const res = await window.api.createProject({ title, prompt, platform });
-      if (res.ok && res.slug) onCreated(res.slug);
-      else setError(res.error ?? "Could not create project");
+      const res = await window.api.createProject({ title, prompt });
+      if (!res.ok || !res.slug) {
+        setError(res.error ?? "Could not create project");
+        return;
+      }
+      // Import the staged clips and register them in the fresh project's EDL
+      // so the editor opens with everything already in place.
+      if (files.length > 0) {
+        setBusy(`Importing ${files.length} clip${files.length === 1 ? "" : "s"}…`);
+        const imp = await window.api.importAssets(res.slug, files.map((f) => f.path));
+        if (imp.ok && imp.assets.length > 0) {
+          const proj = await window.api.loadProject(res.slug);
+          if (proj.ok && proj.edl) {
+            addAssets(proj.edl, imp.assets);
+            await window.api.saveEdl(res.slug, proj.edl);
+          }
+        }
+      }
+      onCreated(res.slug);
     } catch (err) {
       setError(String(err));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -237,11 +270,11 @@ function NewProjectModal({
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
+          <Button variant="secondary" onClick={onClose} disabled={!!busy}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={create} disabled={busy || !title.trim()}>
-            {busy ? "Creating…" : "Create"}
+          <Button variant="primary" onClick={create} disabled={!!busy || !title.trim()}>
+            {busy ?? "Create"}
           </Button>
         </>
       }
@@ -255,6 +288,62 @@ function NewProjectModal({
           onKeyDown={(e) => e.key === "Enter" && create()}
         />
       </Field>
+      <Field label="Clips">
+        <div
+          className={`upload-area ${dragOver ? "drag" : ""}`}
+          style={{ height: 96 }}
+          onClick={() => fileInput.current?.click()}
+          onDragOver={(e: DragEvent<HTMLDivElement>) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e: DragEvent<HTMLDivElement>) => {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer.files.length) stage(e.dataTransfer.files);
+          }}
+        >
+          <span className="upload-title">
+            <Icon name="arrow-out-of-box" size={16} />
+            Upload clips
+          </span>
+          <span className="upload-sub">Drag and drop files here or click to upload</span>
+          <span className="upload-formats">MP4, MOV, HEIC, WebM, JPEGs, PNGs</span>
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="video/*,image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files) stage(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        {files.length > 0 && (
+          <div className="clip-list" style={{ marginTop: 6 }}>
+            {files.map((f) => (
+              <div key={f.path} className="clip-row" title={f.path}>
+                <Icon name="multi-media" size={14} />
+                <span className="name">{f.name}</span>
+                <button
+                  className="clip-row-remove"
+                  title="Remove"
+                  aria-label={`Remove ${f.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFiles((prev) => prev.filter((s) => s.path !== f.path));
+                  }}
+                >
+                  <Icon name="trash-can" size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Field>
       <Field label="What do you want to make?">
         <TextArea
           rows={4}
@@ -262,15 +351,6 @@ function NewProjectModal({
           placeholder="Describe the vibe, beats, hook, length, and any music or captions you want."
           onChange={(e) => setPrompt(e.target.value)}
         />
-      </Field>
-      <Field label="Platform">
-        <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
-          {PLATFORMS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </Select>
       </Field>
       {error && <p className="ui-form-error">{error}</p>}
     </Modal>
