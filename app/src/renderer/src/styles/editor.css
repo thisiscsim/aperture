@@ -281,6 +281,7 @@
   align-items: center;
   gap: var(--space-6);
   height: 28px;
+  flex: none;
   padding: 0 var(--space-8);
   background: var(--background-page);
   border-radius: var(--radius-sm);
@@ -298,6 +299,12 @@
 
 .clip-row.pending {
   opacity: 0.45;
+}
+
+/* Show at most 5 rows (5 x 28px rows + 4 x 6px gaps), then scroll inside. */
+.clip-list-capped {
+  max-height: 164px;
+  overflow-y: auto;
 }
 
 .clip-row-remove {

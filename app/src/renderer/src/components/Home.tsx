@@ -329,7 +329,7 @@ function NewProjectModal({
           }}
         />
         {files.length > 0 && (
-          <div className="clip-list" style={{ marginTop: 6 }}>
+          <div className="clip-list clip-list-capped" style={{ marginTop: 6 }}>
             {files.map((f) => (
               <div key={f.path} className="clip-row" title={f.path}>
                 <Icon name="multi-media" size={14} />
