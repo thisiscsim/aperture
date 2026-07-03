@@ -217,15 +217,23 @@ function NewProjectModal({
   const fileInput = useRef<HTMLInputElement>(null);
 
   const stage = (list: FileList | File[]) => {
+    // Snapshot synchronously: a FileList is LIVE, and the caller resets the
+    // input right after this call — by the time React runs a deferred state
+    // updater the list would already be empty.
+    const picked: StagedFile[] = [];
+    for (const f of Array.from(list)) {
+      try {
+        const path = window.api.getPathForFile(f);
+        if (path) picked.push({ path, name: f.name });
+      } catch {
+        // not a disk-backed file; skip
+      }
+    }
+    if (picked.length === 0) return;
     setFiles((prev) => {
       const next = [...prev];
-      for (const f of Array.from(list)) {
-        try {
-          const path = window.api.getPathForFile(f);
-          if (path && !next.some((s) => s.path === path)) next.push({ path, name: f.name });
-        } catch {
-          // not a disk-backed file; skip
-        }
+      for (const p of picked) {
+        if (!next.some((s) => s.path === p.path)) next.push(p);
       }
       return next;
     });
