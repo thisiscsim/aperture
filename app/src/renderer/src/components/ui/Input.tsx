@@ -1,12 +1,15 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { Icon } from "./Icon";
 
+// Deliberately a <div>, not a <label>: label activation forwards clicks to the
+// first labelable descendant, which double-fires hidden file inputs (the picker
+// reopened after every selection in the New Project dialog).
 export function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
-    <label className="ui-field">
+    <div className="ui-field">
       <span className="ui-field-label">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }
 
