@@ -2,7 +2,6 @@ import { type DragEvent, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets } from "../lib/edl-edit";
 import { SettingsButton } from "./SettingsModal";
-import { ThemeToggle } from "./ThemeToggle";
 import { Badge, Button, Field, Icon, IconButton, Input, Modal, TextArea } from "./ui";
 import type { ProjectSummary } from "../../../preload";
 
@@ -31,7 +30,6 @@ export function Home(): JSX.Element {
           <span className="home-wordmark">Aperture</span>
         </div>
         <div className="home-header-actions">
-          <ThemeToggle />
           <SettingsButton />
           <Button variant="primary" size="sm" icon="clapboard-wide" onClick={() => setCreating(true)}>
             New project
