@@ -996,6 +996,15 @@ app.whenReady().then(() => {
       return [];
     }
   });
+  ipcMain.handle("references:remove", (_event, slug: string, file: string) => {
+    try {
+      if (basename(file) !== file) return { ok: false, error: "invalid filename" };
+      rmSync(safeProjectPath(slug, "references", file));
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
   ipcMain.handle("style:learn", async (event, slug: string) => {
     // Rich collection analysis over this project's own references/ -> style.json.
     const res = await runScript(ANALYZE_COLLECTION_SCRIPT, slug, event, "style");
