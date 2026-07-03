@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enforceStyle, extractJson, metrics, sanitizeEdl } from "./edl-util.mjs";
+import { enforceStyle, extractJson, metrics, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
 
 describe("sanitizeEdl", () => {
   it("fills a missing anim.name (the baseline-fallback bug) and defaults from", () => {
@@ -21,6 +21,58 @@ describe("sanitizeEdl", () => {
   it("leaves non-text tracks and valid anims untouched", () => {
     const input = { tracks: [{ type: "video", clips: [{ id: "v1" }] }] };
     expect(sanitizeEdl(input)).toEqual(input);
+  });
+});
+
+describe("restoreAudioTracks", () => {
+  const baseline = {
+    tracks: [
+      { id: "v", type: "video", clips: [{ id: "v1", assetId: "a", start: 0, in: 0, out: 12 }] },
+      {
+        id: "aud",
+        type: "audio",
+        name: "Music",
+        clips: [{ id: "a-m", assetId: "m", start: 0, in: 0, out: 12, gain: -12, duckUnderVoice: false, role: "music" }],
+      },
+      {
+        id: "vo",
+        type: "audio",
+        clips: [{ id: "a-v", assetId: "v", start: 0, in: 0, out: 6, gain: 0, duckUnderVoice: false, role: "voiceover" }],
+      },
+    ],
+  };
+
+  it("re-attaches audio tracks the model dropped, capping music to the new video length", () => {
+    const modelCut = {
+      tracks: [{ id: "v", type: "video", clips: [{ id: "v1", assetId: "a", start: 0, in: 0, out: 8 }] }],
+    };
+    const out = restoreAudioTracks(modelCut, baseline);
+    const aud = out.tracks.find((t) => t.id === "aud");
+    const vo = out.tracks.find((t) => t.id === "vo");
+    expect(aud.name).toBe("Music");
+    expect(aud.clips[0]).toMatchObject({ assetId: "m", role: "music", out: 8 });
+    // Voiceover keeps its natural length (captions may outlast the last cut).
+    expect(vo.clips[0]).toMatchObject({ assetId: "v", role: "voiceover", out: 6 });
+  });
+
+  it("restores clips onto an emptied track without duplicating a kept one", () => {
+    const modelCut = {
+      tracks: [
+        { id: "v", type: "video", clips: [{ id: "v1", assetId: "a", start: 0, in: 0, out: 12 }] },
+        { id: "aud", type: "audio", clips: [] },
+        { id: "vo", type: "audio", clips: [{ id: "a-v", assetId: "v", start: 1, in: 0, out: 6, role: "voiceover" }] },
+      ],
+    };
+    const out = restoreAudioTracks(modelCut, baseline);
+    expect(out.tracks.find((t) => t.id === "aud").clips).toHaveLength(1);
+    // The model's own placement of the kept voiceover is untouched.
+    expect(out.tracks.find((t) => t.id === "vo").clips[0].start).toBe(1);
+  });
+
+  it("is a no-op when the model kept all audio", () => {
+    const modelCut = JSON.parse(JSON.stringify(baseline));
+    const out = restoreAudioTracks(modelCut, baseline);
+    expect(out).toEqual(baseline);
   });
 });
 

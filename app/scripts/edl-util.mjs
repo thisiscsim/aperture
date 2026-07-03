@@ -71,6 +71,45 @@ export function sanitizeEdl(obj) {
 }
 
 /**
+ * Re-attach audio the model dropped. LLM refine/improve passes return a whole
+ * EDL and routinely omit the audio tracks the baseline laid down (music bed,
+ * voiceover). For every baseline audio track that is missing or emptied in
+ * the new cut, restore the baseline clips — re-capping music beds to the new
+ * cut's video length. Deterministic insurance, same philosophy as enforceStyle.
+ */
+export function restoreAudioTracks(edl, baseline) {
+  if (!edl?.tracks || !Array.isArray(edl.tracks)) return edl;
+  if (!baseline?.tracks || !Array.isArray(baseline.tracks)) return edl;
+
+  const videoLen = round(
+    edl.tracks
+      .filter((t) => t?.type === "video")
+      .flatMap((t) => t.clips ?? [])
+      .reduce((m, c) => Math.max(m, (c.start ?? 0) + (c.out ?? 0) - (c.in ?? 0)), 0),
+  );
+
+  for (const baseTrack of baseline.tracks) {
+    if (baseTrack?.type !== "audio" || (baseTrack.clips?.length ?? 0) === 0) continue;
+    let track = edl.tracks.find((t) => t?.type === "audio" && t.id === baseTrack.id);
+    if (!track) {
+      track = { id: baseTrack.id, type: "audio", clips: [] };
+      if (baseTrack.name) track.name = baseTrack.name;
+      edl.tracks.push(track);
+    }
+    if ((track.clips?.length ?? 0) > 0) continue; // the model kept this track's audio
+    track.clips = baseTrack.clips.map((c) => {
+      const clip = { ...c };
+      if ((clip.role ?? "music") === "music" && videoLen > 0) {
+        const maxOut = round((clip.in ?? 0) + Math.max(0.1, videoLen - (clip.start ?? 0)));
+        clip.out = Math.min(clip.out ?? maxOut, maxOut);
+      }
+      return clip;
+    });
+  }
+  return edl;
+}
+
+/**
  * Deterministically stamp the measurable look from a style profile onto an EDL,
  * so the style shows even when the model under-applies it.
  */

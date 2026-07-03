@@ -59,8 +59,6 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string; preview?: boolea
       {captionTrack?.words && captionTrack.words.length > 0 && edl.theme.captionStyle !== "none" && (
         <CaptionView track={captionTrack} edl={edl} />
       )}
-
-      <ProgressBar color={accent} margin={edl.theme.safeMargins.left} bottom={edl.theme.safeMargins.bottom} />
     </AbsoluteFill>
   );
 };
@@ -280,6 +278,10 @@ const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
     paddingBottom: m.bottom,
     paddingLeft: m.left,
     paddingRight: m.right,
+    // AbsoluteFill sets width/height 100%; without border-box the safe-margin
+    // padding pushes the content box past the canvas edge and text escapes
+    // the safe area.
+    boxSizing: "border-box",
   };
   const textStyle: CSSProperties = {
     color,
@@ -288,6 +290,10 @@ const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
     letterSpacing: isTitle ? "-0.02em" : "0.01em",
     lineHeight: 1.12,
     maxWidth: "85%",
+    // Flex items refuse to shrink below their content (min-width: auto), so
+    // long words could overflow the safe area instead of wrapping.
+    minWidth: 0,
+    overflowWrap: "break-word",
     textShadow: "0 4px 40px rgba(0,0,0,0.5)",
   };
 
@@ -390,31 +396,6 @@ const CaptionView: FC<{ track: CaptionTrack; edl: Edl }> = ({ track, edl }) => {
       >
         {active.text.toUpperCase()}
       </span>
-    </div>
-  );
-};
-
-const ProgressBar: FC<{ color: string; margin: number; bottom: number }> = ({ color, margin, bottom }) => {
-  const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-  const p = interpolate(frame, [0, Math.max(1, durationInFrames - 1)], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: margin,
-        right: margin,
-        bottom: Math.max(48, bottom * 0.45),
-        height: 8,
-        borderRadius: 999,
-        background: "rgba(255,255,255,0.14)",
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ height: "100%", width: `${p * 100}%`, background: color, borderRadius: 999 }} />
     </div>
   );
 };
