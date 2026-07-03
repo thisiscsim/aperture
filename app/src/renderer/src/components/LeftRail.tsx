@@ -26,6 +26,8 @@ export function LeftRail(): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [audioDragOver, setAudioDragOver] = useState(false);
+  const [audioUrl, setAudioUrl] = useState("");
+  const [urlBusy, setUrlBusy] = useState<string | null>(null);
   const [genMode, setGenMode] = useState<{ mode: "llm" | "baseline"; model: string }>({
     mode: "baseline",
     model: "gpt-5.5",
@@ -115,6 +117,34 @@ export function LeftRail(): JSX.Element {
       });
     } finally {
       setBusy(null);
+    }
+  };
+
+  const importFromUrl = async () => {
+    const url = audioUrl.trim();
+    if (!slug || !url || urlBusy) return;
+    setUrlBusy("Fetching…");
+    const offPhase = window.api.onPhase("audiourl", (p) => setUrlBusy(`${p}…`));
+    const offProgress = window.api.onProgress("audiourl", (pct) => setUrlBusy(`Fetching ${pct}%`));
+    try {
+      const res = await window.api.importAudioFromUrl(slug, url);
+      if (res.ok && res.assets.length > 0) {
+        updateEdl((d) => {
+          for (const asset of res.assets) {
+            addAssets(d, [asset]);
+            addAudioClip(d, asset.id, "music", asset.durationSec);
+          }
+        });
+        setAudioUrl("");
+      } else {
+        setNotice({ kind: "error", text: `Couldn't fetch audio: ${res.error ?? "unknown error"}` });
+      }
+    } catch (err) {
+      setNotice({ kind: "error", text: `Couldn't fetch audio: ${String(err)}` });
+    } finally {
+      offPhase();
+      offProgress();
+      setUrlBusy(null);
     }
   };
 
@@ -264,6 +294,27 @@ export function LeftRail(): JSX.Element {
               e.target.value = "";
             }}
           />
+          <div className="url-row">
+            <input
+              className="url-input"
+              type="text"
+              placeholder="Paste a SoundCloud or audio URL"
+              value={audioUrl}
+              disabled={!!urlBusy}
+              onChange={(e) => setAudioUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void importFromUrl()}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void importFromUrl()}
+              disabled={!audioUrl.trim() || !!urlBusy}
+              title="Fetch the track and add it as the music bed"
+            >
+              {urlBusy ? "Adding…" : "Add"}
+            </Button>
+          </div>
+          {urlBusy && <span className="upload-sub">{urlBusy}</span>}
           <RecordButton setBusy={setBusy} onAdd={addVoiceover} />
           <div className="clip-list">
             {edl.assets

@@ -115,6 +115,9 @@ const api = {
     ipcRenderer.invoke("asset:import", slug, paths),
   importAssetBuffer: (slug: string, filename: string, data: Uint8Array): Promise<ImportResult> =>
     ipcRenderer.invoke("asset:importBuffer", slug, filename, data),
+  /** Fetch audio from a supported URL (SoundCloud, direct file) into assets/. */
+  importAudioFromUrl: (slug: string, url: string): Promise<ImportResult> =>
+    ipcRenderer.invoke("audio:fromUrl", slug, url),
   listBundledMusic: (): Promise<string[]> => ipcRenderer.invoke("music:listBundled"),
   importBundledMusic: (slug: string, name: string): Promise<ImportResult> =>
     ipcRenderer.invoke("music:importBundled", slug, name),

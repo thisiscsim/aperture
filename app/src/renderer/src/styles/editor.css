@@ -270,6 +270,39 @@
   text-align: center;
 }
 
+.url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.url-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--background-page);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--foreground-primary);
+  outline: none;
+  transition: box-shadow 120ms ease;
+}
+
+.url-input::placeholder {
+  color: var(--foreground-muted);
+}
+
+.url-input:focus {
+  box-shadow: 0 0 0 1.5px var(--border-secondary);
+}
+
+.url-input:disabled {
+  opacity: 0.6;
+}
+
 .clip-list {
   display: flex;
   flex-direction: column;

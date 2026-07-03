@@ -12,8 +12,11 @@ import {
   watch,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
+import { resolveAudioSource } from "./audio-sources";
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
 import ffmpegPath from "ffmpeg-static";
 import {
@@ -672,6 +675,84 @@ async function importBundledMusic(
   return importAssets(slug, [source]);
 }
 
+// ---- Audio from URL (SoundCloud etc.) ----
+// yt-dlp does the extraction; like whisper.cpp it is fetched on first use
+// (~35MB universal macOS binary) and cached in userData/bin.
+const YTDLP_RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos";
+const YTDLP_BIN = join(app.getPath("userData"), "bin", "yt-dlp");
+
+async function ensureYtDlp(): Promise<string> {
+  if (existsSync(YTDLP_BIN)) return YTDLP_BIN;
+  mkdirSync(dirname(YTDLP_BIN), { recursive: true });
+  const res = await fetch(YTDLP_RELEASE_URL);
+  if (!res.ok) throw new Error(`could not fetch the audio downloader (HTTP ${res.status})`);
+  writeFileSync(YTDLP_BIN, Buffer.from(await res.arrayBuffer()), { mode: 0o755 });
+  return YTDLP_BIN;
+}
+
+async function importAudioFromUrl(
+  slug: string,
+  rawUrl: string,
+  event: IpcMainInvokeEvent,
+): Promise<{ ok: boolean; assets: ImportedAsset[]; error?: string }> {
+  const source = resolveAudioSource(rawUrl);
+  if (!source.ok) return { ok: false, assets: [], error: source.error };
+  const send = (channel: string, value: unknown) => {
+    if (!event.sender.isDestroyed()) event.sender.send(channel, value);
+  };
+  let tmp: string | null = null;
+  try {
+    if (!existsSync(YTDLP_BIN)) send("audiourl:phase", "getting the downloader (first run)");
+    const bin = await ensureYtDlp();
+    tmp = mkdtempSync(join(tmpdir(), "aperture-audio-"));
+    send("audiourl:phase", `fetching from ${source.label}`);
+
+    const args = [
+      "--no-playlist",
+      "--no-warnings",
+      "--newline",
+      "--max-filesize", "200m",
+      "-f", "bestaudio/best",
+      "-x",
+      "--audio-format", "m4a",
+      "--ffmpeg-location", ffmpegPath as string,
+      "-o", join(tmp, "%(title).120B.%(ext)s"),
+      source.url,
+    ];
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(bin, args);
+      let stderr = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        const m = chunk.toString().match(/\[download\]\s+([\d.]+)%/);
+        if (m) send("audiourl:progress", Math.round(Number(m[1])));
+      });
+      child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error("timed out after 5 minutes"));
+      }, 300_000);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        if (code === 0) resolve();
+        else reject(new Error(stderr.trim().split("\n").pop() || `downloader exited with code ${code}`));
+      });
+      child.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+
+    const produced = readdirSync(tmp).find((f) => assetKindFor(f) === "audio");
+    if (!produced) return { ok: false, assets: [], error: "The link didn't yield an audio file." };
+    send("audiourl:phase", "importing");
+    return await importAssets(slug, [join(tmp, produced)]);
+  } catch (err) {
+    return { ok: false, assets: [], error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (tmp) rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 function importInto(
   slug: string,
   sub: string,
@@ -982,6 +1063,7 @@ app.whenReady().then(() => {
   ipcMain.handle("asset:importBuffer", (_event, slug: string, filename: string, data: Uint8Array) =>
     importAssetBuffer(slug, filename, data),
   );
+  ipcMain.handle("audio:fromUrl", (event, slug: string, url: string) => importAudioFromUrl(slug, url, event));
   ipcMain.handle("music:listBundled", () => listBundledMusic());
   ipcMain.handle("music:importBundled", (_event, slug: string, name: string) =>
     importBundledMusic(slug, name),
