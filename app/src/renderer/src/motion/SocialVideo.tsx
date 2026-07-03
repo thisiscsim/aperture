@@ -52,7 +52,7 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string; preview?: boolea
 
       {edl.tracks.map((track) =>
         track.type === "audio" && track.clips.length > 0 ? (
-          <AudioTrackView key={track.id} track={track} edl={edl} assetBaseUrl={assetBaseUrl} />
+          <AudioTrackView key={track.id} track={track} edl={edl} assetBaseUrl={assetBaseUrl} preview={preview} />
         ) : null,
       )}
 
@@ -73,13 +73,19 @@ const VideoTrackView: FC<{ track: VideoTrack; edl: Edl; assetBaseUrl?: string; p
   preview,
 }) => {
   const { fps } = useVideoConfig();
+  // Preview only: mount each clip's <video> ~2s early so it has loaded and
+  // seeked before its sequence begins. Without this the Player hits its
+  // buffering pause exactly when a transition overlap mounts the next clip —
+  // the "freezes for half a second at every cut" bug. Export renders
+  // frame-exactly and needs no premount.
+  const premountFor = preview ? Math.round(2 * fps) : 0;
   return (
     <>
       {track.clips.map((clip) => {
         const from = Math.round(clip.start * fps);
         const durationInFrames = Math.max(1, Math.round((clip.out - clip.in) * fps));
         return (
-          <Sequence key={clip.id} from={from} durationInFrames={durationInFrames}>
+          <Sequence key={clip.id} from={from} durationInFrames={durationInFrames} premountFor={premountFor}>
             <CrossfadeVideo
               clip={clip}
               edl={edl}
@@ -184,12 +190,16 @@ function exitStyle(preset: string, p: number): CSSProperties {
   }
 }
 
-const AudioTrackView: FC<{ track: AudioTrack; edl: Edl; assetBaseUrl?: string }> = ({
+const AudioTrackView: FC<{ track: AudioTrack; edl: Edl; assetBaseUrl?: string; preview?: boolean }> = ({
   track,
   edl,
   assetBaseUrl,
+  preview,
 }) => {
   const { fps } = useVideoConfig();
+  // Same preview premount as video: an audio clip starting mid-timeline
+  // (voiceover, late music) would otherwise buffer-pause the Player on mount.
+  const premountFor = preview ? Math.round(2 * fps) : 0;
 
   // Voiceover intervals (across all audio tracks) so music can duck under them.
   const voIntervals: [number, number][] = edl.tracks
@@ -216,7 +226,7 @@ const AudioTrackView: FC<{ track: AudioTrack; edl: Edl; assetBaseUrl?: string }>
             }
           : base;
         return (
-          <Sequence key={clip.id} from={from} durationInFrames={durationInFrames}>
+          <Sequence key={clip.id} from={from} durationInFrames={durationInFrames} premountFor={premountFor}>
             <Audio
               src={src}
               trimBefore={Math.round(clip.in * fps)}
