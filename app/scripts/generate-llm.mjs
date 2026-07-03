@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { generateText } from "ai";
 import { parseEdl } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
-import { ANIM_NAMES, enforceStyle, extractJson, sanitizeEdl } from "./edl-util.mjs";
+import { ANIM_NAMES, enforceStyle, extractJson, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -145,6 +145,7 @@ function buildPrompt(baselineJson, promptMd, profile) {
     "Rules:",
     "- Keep the exact same shape/keys as the baseline (it is already schema-valid).",
     "- Only use assets that exist in the baseline `assets` array (same `id` and `src`).",
+    "- Keep every audio track and its clips from the baseline (music bed, voiceover) — never remove or silence them unless the CREATOR PROMPT explicitly asks.",
     "- Make the first ~2 seconds a strong hook; reorder/trim video clips to match the target pacing.",
     "- Add a `text` track with title/subtitle overlays derived from the prompt, in the style's text treatment.",
     `- Every text clip MUST have this exact shape: {"id":"t1","start":0.2,"end":2.6,"text":"...","style":"title"|"subtitle","anim":{"name":"<one of ${ANIM_NAMES.join("|")}>","from":"animate-text"}}. The anim.name field is REQUIRED — never omit it. Or omit the whole "anim" key.`,
@@ -240,8 +241,14 @@ async function main() {
     process.exit(2);
   }
 
-  // Stamp the measurable look so the style shows even if the model under-applied it.
+  // Stamp the measurable look so the style shows even if the model under-applied it,
+  // and re-attach any audio the model dropped (music bed / voiceover).
   edl = enforceStyle(edl, profile);
+  try {
+    edl = restoreAudioTracks(edl, JSON.parse(baselineJson));
+  } catch {
+    // baseline unreadable — keep the model's cut as-is
+  }
 
   console.log("PHASE writing edl.json");
   fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);

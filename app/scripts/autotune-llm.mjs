@@ -11,7 +11,7 @@ import fs from "node:fs";
 import { generateText } from "ai";
 import { parseEdl } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
-import { ANIM_NAMES, extractJson, metrics, sanitizeEdl } from "./edl-util.mjs";
+import { ANIM_NAMES, extractJson, metrics, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -122,7 +122,8 @@ async function main() {
     const score = typeof out.score === "number" ? Math.round(out.score) : prev ?? 0;
     const change = typeof out.change === "string" ? out.change.slice(0, 120) : "revised edit";
 
-    edl = parsed.edl;
+    // Never let an improvement pass silently drop the music bed / voiceover.
+    edl = restoreAudioTracks(parsed.edl, edl);
     fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
     const delta = prev == null ? 0 : score - prev;
     fs.appendFileSync(resultsPath, `${i}\t${score}\t${delta >= 0 ? "+" : ""}${delta}\t${change}\n`);
