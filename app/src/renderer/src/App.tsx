@@ -24,6 +24,23 @@ export function App(): JSX.Element {
   const panelSizes = useEditor((s) => s.panelSizes);
   const panelsHidden = useEditor((s) => s.panelsHidden);
   const togglePanels = useEditor((s) => s.togglePanels);
+  const playerCtl = useEditor((s) => s.playerCtl);
+
+  // Space toggles playback anywhere in the editor outside a text field —
+  // including Cmd+\ focus mode, where the timeline (and its transport) is
+  // unmounted.
+  useEffect(() => {
+    if (view !== "editor") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
+      e.preventDefault();
+      playerCtl?.toggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, playerCtl]);
 
   // Cmd+\ — focus mode: hide rails + timeline, keep only the canvas (Figma-style).
   useEffect(() => {

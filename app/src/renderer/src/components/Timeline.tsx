@@ -44,18 +44,8 @@ export function Timeline(): JSX.Element {
   const audioInput = useRef<HTMLInputElement>(null);
   const pendingSec = useRef<{ trackId: string; sec: number } | null>(null);
 
-  // Space toggles playback anywhere outside a text field.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space") return;
-      const t = e.target as HTMLElement;
-      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
-      e.preventDefault();
-      playerCtl?.toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [playerCtl]);
+  // NOTE: the Space play/pause shortcut lives in App.tsx (editor-level), not
+  // here — this component unmounts in Cmd+\ focus mode.
 
   if (!edl) return <section className="tl" />;
 
