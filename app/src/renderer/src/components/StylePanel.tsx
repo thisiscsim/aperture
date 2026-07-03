@@ -12,6 +12,7 @@ import type { StyleSummary } from "../../../preload";
 export function StylePanel(): JSX.Element {
   const slug = useEditor((s) => s.slug);
   const [styles, setStyles] = useState<StyleSummary[]>([]);
+  const [projectRefs, setProjectRefs] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [profile, setProfile] = useState<StyleProfile | null>(null);
   const [isProjectProfile, setIsProjectProfile] = useState(false);
@@ -23,6 +24,7 @@ export function StylePanel(): JSX.Element {
   const refresh = useCallback(() => {
     window.api?.listStyles().then(setStyles).catch(() => {});
     if (!slug) return;
+    window.api?.listReferences(slug).then(setProjectRefs).catch(() => {});
     window.api?.loadMeta(slug).then((m) => setActiveId(m.styleProfileId)).catch(() => {});
     window.api?.loadStyle(slug).then((p) => {
       setIsProjectProfile(Boolean(p));
@@ -127,6 +129,29 @@ export function StylePanel(): JSX.Element {
               e.target.value = "";
             }}
           />
+          {/* Videos uploaded here live in this project's references/ and
+              override the global library for this project. */}
+          {projectRefs.length > 0 && (
+            <div className="clip-list clip-list-capped">
+              {projectRefs.map((file) => (
+                <div key={file} className="clip-row" title={file}>
+                  <Icon name="multi-media" size={14} />
+                  <span className="name">{file}</span>
+                  <button
+                    className="clip-row-remove"
+                    title="Remove reference"
+                    aria-label={`Remove ${file}`}
+                    onClick={async () => {
+                      await window.api.removeReference(slug!, file);
+                      refresh();
+                    }}
+                  >
+                    <Icon name="trash-can" size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           {styles.map((s) => (
             <div key={s.id} className="clip-row" title={`${s.clips} clips`}>
               <Icon name="folder-alt" size={14} />

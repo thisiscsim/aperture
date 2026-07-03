@@ -121,6 +121,8 @@ const api = {
   importReferences: (slug: string, paths: string[]): Promise<ImportFilesResult> =>
     ipcRenderer.invoke("references:import", slug, paths),
   listReferences: (slug: string): Promise<string[]> => ipcRenderer.invoke("references:list", slug),
+  removeReference: (slug: string, file: string): Promise<SaveResult> =>
+    ipcRenderer.invoke("references:remove", slug, file),
   learnStyle: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("style:learn", slug),
   loadStyle: (slug: string): Promise<StyleProfile | null> => ipcRenderer.invoke("style:load", slug),
   patchStyle: (slug: string, patch: Partial<StyleProfile>): Promise<SaveResult> =>
