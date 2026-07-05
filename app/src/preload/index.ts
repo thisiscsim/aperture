@@ -11,6 +11,14 @@ export interface AppSettings {
   agentModel: string;
   agentApiKey?: string;
   reasoningEffort: "low" | "medium" | "high";
+  elevenLabsApiKey?: string;
+  defaultVoiceId?: string;
+}
+
+export interface VoiceSummary {
+  id: string;
+  name: string;
+  category: string;
 }
 
 export interface LoadProjectResult {
@@ -118,6 +126,22 @@ const api = {
   /** Fetch audio from a supported URL (SoundCloud, direct file) into assets/. */
   importAudioFromUrl: (slug: string, url: string): Promise<ImportResult> =>
     ipcRenderer.invoke("audio:fromUrl", slug, url),
+  // ElevenLabs voiceover
+  voicesStatus: (): Promise<{ configured: boolean; keyLocked: boolean }> => ipcRenderer.invoke("voices:status"),
+  listVoices: (): Promise<{ ok: boolean; voices: VoiceSummary[]; error?: string }> =>
+    ipcRenderer.invoke("voices:list"),
+  cloneVoice: (input: {
+    name: string;
+    paths: string[];
+    recording?: { name: string; data: Uint8Array };
+    consent: boolean;
+  }): Promise<{ ok: boolean; voiceId?: string; error?: string }> => ipcRenderer.invoke("voices:clone", input),
+  deleteVoice: (id: string): Promise<SaveResult> => ipcRenderer.invoke("voices:delete", id),
+  loadNarration: (slug: string): Promise<string> => ipcRenderer.invoke("narration:load", slug),
+  saveNarration: (slug: string, text: string): Promise<SaveResult> => ipcRenderer.invoke("narration:save", slug, text),
+  draftNarration: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("narration:draft", slug),
+  generateVoiceover: (slug: string, voiceId: string): Promise<ExportResult> =>
+    ipcRenderer.invoke("tts:start", slug, voiceId),
   listBundledMusic: (): Promise<string[]> => ipcRenderer.invoke("music:listBundled"),
   importBundledMusic: (slug: string, name: string): Promise<ImportResult> =>
     ipcRenderer.invoke("music:importBundled", slug, name),

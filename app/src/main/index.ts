@@ -58,6 +58,8 @@ function llmInfo(): { provider: string; model: string; configured: boolean } {
   return { provider, model, configured };
 }
 const EXTRACT_FRAMES_SCRIPT = join(SCRIPTS_DIR, "extract-frames.mjs");
+const WRITE_NARRATION_SCRIPT = join(SCRIPTS_DIR, "write-narration.mjs");
+const TTS_SCRIPT = join(SCRIPTS_DIR, "tts.mjs");
 const ANALYZE_STYLE_SCRIPT = join(SCRIPTS_DIR, "analyze-style.mjs");
 const ANALYZE_COLLECTION_SCRIPT = join(SCRIPTS_DIR, "analyze-collection.mjs");
 const ANALYZE_BENCHMARKS_SCRIPT = join(SCRIPTS_DIR, "analyze-benchmarks.mjs");
@@ -143,6 +145,9 @@ interface AppSettings {
   agentModel: string;
   agentApiKey?: string;
   reasoningEffort: ReasoningEffort;
+  /** ElevenLabs voiceover (env var wins, same as the LLM key). */
+  elevenLabsApiKey?: string;
+  defaultVoiceId?: string;
 }
 const SETTINGS_PATH = join(app.getPath("userData"), "settings.json");
 function readSettings(): AppSettings {
@@ -164,6 +169,8 @@ function readSettings(): AppSettings {
     agentModel: typeof s.agentModel === "string" && s.agentModel ? s.agentModel : "gpt-5.5",
     agentApiKey: typeof s.agentApiKey === "string" && s.agentApiKey ? s.agentApiKey : undefined,
     reasoningEffort: oneOf(s.reasoningEffort, ["low", "medium", "high"] as const, "low"),
+    elevenLabsApiKey: typeof s.elevenLabsApiKey === "string" && s.elevenLabsApiKey ? s.elevenLabsApiKey : undefined,
+    defaultVoiceId: typeof s.defaultVoiceId === "string" && s.defaultVoiceId ? s.defaultVoiceId : undefined,
   };
 }
 function writeSettings(patch: Partial<AppSettings>): AppSettings {
@@ -188,6 +195,7 @@ const envLocked = {
     process.env["APERTURE_LLM_API_KEY"] || process.env["OPENAI_API_KEY"] || process.env["ANTHROPIC_API_KEY"],
   ),
   effort: "APERTURE_REASONING_EFFORT" in process.env,
+  elevenLabsKey: Boolean(process.env["ELEVENLABS_API_KEY"]),
 };
 function applyAgentEnv(s: AppSettings): void {
   if (!envLocked.model) {
@@ -201,6 +209,10 @@ function applyAgentEnv(s: AppSettings): void {
     else delete process.env["APERTURE_LLM_API_KEY"];
   }
   if (!envLocked.effort) process.env["APERTURE_REASONING_EFFORT"] = s.reasoningEffort;
+  if (!envLocked.elevenLabsKey) {
+    if (s.elevenLabsApiKey) process.env["ELEVENLABS_API_KEY"] = s.elevenLabsApiKey;
+    else delete process.env["ELEVENLABS_API_KEY"];
+  }
 }
 applyAgentEnv(readSettings());
 
@@ -675,6 +687,121 @@ async function importBundledMusic(
   return importAssets(slug, [source]);
 }
 
+// ---- ElevenLabs voices (list / clone / delete) ----
+export interface VoiceSummary {
+  id: string;
+  name: string;
+  category: string;
+}
+
+const EL_API = "https://api.elevenlabs.io/v1";
+
+function elevenLabsKey(): string | undefined {
+  return process.env["ELEVENLABS_API_KEY"] || undefined;
+}
+
+async function elError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: { message?: string } | string };
+    const detail = typeof body.detail === "string" ? body.detail : body.detail?.message;
+    return detail || `ElevenLabs HTTP ${res.status}`;
+  } catch {
+    return `ElevenLabs HTTP ${res.status}`;
+  }
+}
+
+async function listVoices(): Promise<{ ok: boolean; voices: VoiceSummary[]; error?: string }> {
+  const key = elevenLabsKey();
+  if (!key) return { ok: false, voices: [], error: "No ElevenLabs API key configured." };
+  try {
+    const res = await fetch(`${EL_API}/voices`, { headers: { "xi-api-key": key } });
+    if (!res.ok) return { ok: false, voices: [], error: await elError(res) };
+    const data = (await res.json()) as { voices?: { voice_id: string; name: string; category?: string }[] };
+    return {
+      ok: true,
+      voices: (data.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name, category: v.category ?? "premade" })),
+    };
+  } catch (err) {
+    return { ok: false, voices: [], error: String(err) };
+  }
+}
+
+// Voice samples arrive as file paths and/or an in-memory mic recording (webm).
+// ElevenLabs is picky about container formats, so everything is transcoded to
+// mp3 with the bundled ffmpeg before upload.
+async function transcodeSampleToMp3(input: string, outDir: string, stem: string): Promise<string | null> {
+  if (!ffmpegPath) return null;
+  const out = join(outDir, `${stem}.mp3`);
+  const ok = await new Promise<boolean>((resolve) => {
+    const child = spawn(ffmpegPath as string, ["-y", "-i", input, "-ac", "1", "-b:a", "128k", out]);
+    child.on("close", (code) => resolve(code === 0));
+    child.on("error", () => resolve(false));
+  });
+  return ok ? out : null;
+}
+
+async function cloneVoice(input: {
+  name: string;
+  paths: string[];
+  recording?: { name: string; data: Uint8Array };
+  consent: boolean;
+}): Promise<{ ok: boolean; voiceId?: string; error?: string }> {
+  const key = elevenLabsKey();
+  if (!key) return { ok: false, error: "No ElevenLabs API key configured." };
+  if (!input.consent) return { ok: false, error: "Consent is required to clone a voice." };
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: "Give the voice a name." };
+
+  const tmp = mkdtempSync(join(tmpdir(), "aperture-voice-"));
+  try {
+    const staged: string[] = [];
+    for (const p of input.paths) {
+      if (assetKindFor(p) === "audio" || extname(p).toLowerCase() === ".webm") staged.push(p);
+    }
+    if (input.recording) {
+      const raw = join(tmp, input.recording.name);
+      writeFileSync(raw, Buffer.from(input.recording.data));
+      staged.push(raw);
+    }
+    if (staged.length === 0) return { ok: false, error: "Add at least one audio sample." };
+
+    const form = new FormData();
+    form.append("name", name);
+    for (let i = 0; i < staged.length; i++) {
+      const mp3 = await transcodeSampleToMp3(staged[i], tmp, `sample-${i + 1}`);
+      if (!mp3) return { ok: false, error: `Could not read sample: ${basename(staged[i])}` };
+      form.append("files", new Blob([readFileSync(mp3)], { type: "audio/mpeg" }), basename(mp3));
+    }
+
+    const res = await fetch(`${EL_API}/voices/add`, {
+      method: "POST",
+      headers: { "xi-api-key": key },
+      body: form,
+    });
+    if (!res.ok) return { ok: false, error: await elError(res) };
+    const data = (await res.json()) as { voice_id?: string };
+    if (!data.voice_id) return { ok: false, error: "ElevenLabs did not return a voice id." };
+    return { ok: true, voiceId: data.voice_id };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+async function deleteVoice(id: string): Promise<{ ok: boolean; error?: string }> {
+  const key = elevenLabsKey();
+  if (!key) return { ok: false, error: "No ElevenLabs API key configured." };
+  if (!/^[a-zA-Z0-9]{8,64}$/.test(id)) return { ok: false, error: "invalid voice id" };
+  try {
+    const res = await fetch(`${EL_API}/voices/${id}`, { method: "DELETE", headers: { "xi-api-key": key } });
+    if (!res.ok) return { ok: false, error: await elError(res) };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 // ---- Audio from URL (SoundCloud etc.) ----
 // yt-dlp does the extraction; like whisper.cpp it is fetched on first use
 // (~35MB universal macOS binary) and cached in userData/bin.
@@ -1064,6 +1191,42 @@ app.whenReady().then(() => {
     importAssetBuffer(slug, filename, data),
   );
   ipcMain.handle("audio:fromUrl", (event, slug: string, url: string) => importAudioFromUrl(slug, url, event));
+  // ---- ElevenLabs voiceover ----
+  ipcMain.handle("voices:status", () => ({
+    configured: Boolean(elevenLabsKey()),
+    keyLocked: envLocked.elevenLabsKey,
+  }));
+  ipcMain.handle("voices:list", () => listVoices());
+  ipcMain.handle(
+    "voices:clone",
+    (_event, input: { name: string; paths: string[]; recording?: { name: string; data: Uint8Array }; consent: boolean }) =>
+      cloneVoice(input),
+  );
+  ipcMain.handle("voices:delete", (_event, id: string) => deleteVoice(id));
+  ipcMain.handle("narration:load", (_event, slug: string) => {
+    try {
+      return readFileSync(safeProjectPath(slug, "narration.md"), "utf8");
+    } catch {
+      return "";
+    }
+  });
+  ipcMain.handle("narration:save", (_event, slug: string, text: string) => {
+    try {
+      writeFileSync(safeProjectPath(slug, "narration.md"), text);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+  ipcMain.handle("narration:draft", (event, slug: string) =>
+    runScript(WRITE_NARRATION_SCRIPT, slug, event, "narration"),
+  );
+  ipcMain.handle("tts:start", (event, slug: string, voiceId: string) => {
+    if (!/^[a-zA-Z0-9]{8,64}$/.test(voiceId)) {
+      return Promise.resolve({ ok: false, error: "invalid voice id" });
+    }
+    return runScript(TTS_SCRIPT, slug, event, "tts", ["--voice", voiceId]);
+  });
   ipcMain.handle("music:listBundled", () => listBundledMusic());
   ipcMain.handle("music:importBundled", (_event, slug: string, name: string) =>
     importBundledMusic(slug, name),

@@ -1,15 +1,16 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { Button, Icon, IconButton } from "./ui";
 import { useEscapeKey } from "./ui/useEscapeKey";
-import type { AppSettings } from "../../../preload";
+import type { AppSettings, VoiceSummary } from "../../../preload";
 
-type SettingsTab = "general" | "export" | "agent";
+type SettingsTab = "general" | "export" | "agent" | "voices";
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: "general", label: "General" },
   { id: "export", label: "Export Settings" },
   { id: "agent", label: "Agent Preferences" },
+  { id: "voices", label: "Voices" },
 ];
 
 const MODELS = ["gpt-5.5", "gpt-5.5-mini", "claude-fable-5", "claude-sonnet-5"];
@@ -212,6 +213,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
             </>
           )}
 
+          {tab === "voices" && <VoicesTab settings={settings} update={update} />}
         </div>
 
         <div className="settings-footer">
@@ -221,6 +223,260 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Voices tab: ElevenLabs key, the account's voice list (default-voice picker,
+ * delete for cloned ones), and an in-app Instant Voice Clone flow — record a
+ * mic sample and/or upload files, with an explicit consent gate.
+ */
+function VoicesTab({
+  settings,
+  update,
+}: {
+  settings: AppSettings;
+  update: (patch: Partial<AppSettings>) => Promise<void>;
+}): JSX.Element {
+  const [status, setStatus] = useState({ configured: false, keyLocked: false });
+  const [voices, setVoices] = useState<VoiceSummary[]>([]);
+  const [voicesError, setVoicesError] = useState<string | null>(null);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [cloneName, setCloneName] = useState("");
+  const [samplePaths, setSamplePaths] = useState<string[]>([]);
+  const [recording, setRecording] = useState<{ name: string; data: Uint8Array } | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const sampleInput = useRef<HTMLInputElement>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
+
+  const refresh = useCallback(() => {
+    window.api?.voicesStatus().then(setStatus).catch(() => {});
+    window.api
+      ?.listVoices()
+      .then((r) => {
+        setVoices(r.voices);
+        setVoicesError(r.ok ? null : (r.error ?? null));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(refresh, [refresh]);
+
+  const connectKey = async () => {
+    if (!keyDraft.trim()) return;
+    await update({ elevenLabsApiKey: keyDraft.trim() });
+    setKeyDraft("");
+    refresh();
+  };
+
+  const toggleRecord = async () => {
+    if (isRecording) {
+      recorder.current?.stop();
+      recorder.current = null;
+      setIsRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunks.current = [];
+      mr.ondataavailable = (e) => e.data.size > 0 && chunks.current.push(e.data);
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks.current, { type: "audio/webm" });
+        setRecording({ name: `sample-${Date.now()}.webm`, data: new Uint8Array(await blob.arrayBuffer()) });
+      };
+      mr.start();
+      recorder.current = mr;
+      setIsRecording(true);
+    } catch {
+      setCloneError("Microphone unavailable.");
+    }
+  };
+
+  const stageSamples = (files: FileList) => {
+    const next = [...samplePaths];
+    for (const f of Array.from(files)) {
+      try {
+        const p = window.api.getPathForFile(f);
+        if (p && !next.includes(p)) next.push(p);
+      } catch {
+        // skip
+      }
+    }
+    setSamplePaths(next);
+  };
+
+  const createVoice = async () => {
+    if (busy) return;
+    setBusy("Cloning voice…");
+    setCloneError(null);
+    try {
+      const res = await window.api.cloneVoice({
+        name: cloneName,
+        paths: samplePaths,
+        recording: recording ?? undefined,
+        consent,
+      });
+      if (res.ok && res.voiceId) {
+        setCloneName("");
+        setSamplePaths([]);
+        setRecording(null);
+        setConsent(false);
+        await update({ defaultVoiceId: res.voiceId });
+        refresh();
+      } else {
+        setCloneError(res.error ?? "Cloning failed.");
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="settings-key-row">
+        <input
+          className="settings-key-input"
+          type="password"
+          placeholder={
+            status.keyLocked
+              ? "API key configured via .env.local"
+              : status.configured
+                ? "Key saved — enter a new key to replace it"
+                : "Enter your ElevenLabs API Key"
+          }
+          value={keyDraft}
+          disabled={status.keyLocked}
+          onChange={(e) => setKeyDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void connectKey()}
+        />
+        <button
+          className="settings-select-btn"
+          onClick={() => void connectKey()}
+          disabled={status.keyLocked || !keyDraft.trim()}
+        >
+          Connect
+        </button>
+      </div>
+
+      {status.configured && (
+        <>
+          <SettingRow title="Narration voice" sub="Default voice for generated voiceovers">
+            <SettingSelect
+              value={settings.defaultVoiceId ?? ""}
+              onChange={(v) => void update({ defaultVoiceId: v || undefined })}
+              options={[
+                { value: "", label: "Pick a voice" },
+                ...voices.map((v) => ({ value: v.id, label: `${v.name}${v.category === "cloned" ? " (cloned)" : ""}` })),
+              ]}
+            />
+          </SettingRow>
+          {voicesError && <p className="settings-row-sub">{voicesError}</p>}
+          {voices.filter((v) => v.category === "cloned").length > 0 && (
+            <div className="clip-list clip-list-capped">
+              {voices
+                .filter((v) => v.category === "cloned")
+                .map((v) => (
+                  <div key={v.id} className="clip-row" title={v.id}>
+                    <Icon name="voice-high" size={14} />
+                    <span className="name">{v.name}</span>
+                    <button
+                      className="clip-row-remove"
+                      title="Delete this cloned voice from your ElevenLabs account"
+                      aria-label={`Delete ${v.name}`}
+                      onClick={async () => {
+                        await window.api.deleteVoice(v.id);
+                        refresh();
+                      }}
+                    >
+                      <Icon name="trash-can" size={12} />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
+          <Divider />
+
+          <SettingRow title="Clone a voice" sub="1-5 minutes of clean speech. Requires a paid ElevenLabs plan.">
+            <span />
+          </SettingRow>
+          <div className="settings-key-row">
+            <input
+              className="settings-key-input"
+              type="text"
+              placeholder="Voice name (e.g. Chris)"
+              value={cloneName}
+              onChange={(e) => setCloneName(e.target.value)}
+            />
+            <button className="settings-select-btn" onClick={() => void toggleRecord()}>
+              {isRecording ? "Stop" : recording ? "Re-record" : "Record"}
+            </button>
+            <button className="settings-select-btn" onClick={() => sampleInput.current?.click()}>
+              Upload
+            </button>
+          </div>
+          <input
+            ref={sampleInput}
+            type="file"
+            accept="audio/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) stageSamples(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          {(samplePaths.length > 0 || recording) && (
+            <div className="clip-list clip-list-capped">
+              {recording && (
+                <div className="clip-row">
+                  <Icon name="record" size={14} />
+                  <span className="name">Mic recording</span>
+                  <button
+                    className="clip-row-remove"
+                    aria-label="Remove recording"
+                    onClick={() => setRecording(null)}
+                  >
+                    <Icon name="trash-can" size={12} />
+                  </button>
+                </div>
+              )}
+              {samplePaths.map((p) => (
+                <div key={p} className="clip-row" title={p}>
+                  <Icon name="voice-high" size={14} />
+                  <span className="name">{p.split("/").pop()}</span>
+                  <button
+                    className="clip-row-remove"
+                    aria-label={`Remove ${p}`}
+                    onClick={() => setSamplePaths((prev) => prev.filter((x) => x !== p))}
+                  >
+                    <Icon name="trash-can" size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <label className="insp-check">
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+            I have the person&apos;s consent (or it&apos;s my own voice) and the rights to clone it.
+          </label>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => void createVoice()}
+            disabled={!!busy || !consent || !cloneName.trim() || (samplePaths.length === 0 && !recording)}
+          >
+            {busy ?? "Create voice"}
+          </Button>
+          {cloneError && <p className="settings-row-sub">{cloneError}</p>}
+        </>
+      )}
+    </>
   );
 }
 
