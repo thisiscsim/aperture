@@ -86,7 +86,9 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (view !== "editor" || !slug) return;
 
-    const load = () => {
+    // Returns the load promise so busy flows (Generate/Auto-improve) can keep
+    // their loading state up until the fresh cut is actually in the store.
+    const load = () =>
       window.api
         ?.loadProject(slug)
         .then((res) => {
@@ -97,7 +99,6 @@ export function App(): JSX.Element {
           }
         })
         .catch((err) => setLoadError(String(err)));
-    };
     setReload(load);
     load();
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { ImageGeneration } from "img-fx";
 import { durationFrames } from "@reel/edl";
@@ -9,8 +9,8 @@ import { useEditor } from "../store";
  * Centered floating device frame on the secondary background (Figma V0).
  * Playback is driven by the timeline transport (no built-in Player chrome);
  * clicking the video still toggles play. While Generate / Auto-improve runs,
- * the canvas shows img-fx's WebGL "generating" mosaic, revealing the
- * project's poster frame when one exists.
+ * the canvas shows ONLY img-fx's WebGL mosaic — no image reveals, no player —
+ * until the new cut has fully loaded (the busy flags outlive the reload).
  */
 export function PreviewStage(): JSX.Element {
   const edl = useEditor((s) => s.edl);
@@ -22,21 +22,8 @@ export function PreviewStage(): JSX.Element {
   const setPlaying = useEditor((s) => s.setPlaying);
   const setPlayerCtl = useEditor((s) => s.setPlayerCtl);
   const ref = useRef<PlayerRef>(null);
-  const [thumb, setThumb] = useState<string | null>(null);
 
   const busy = generating || autotuning;
-
-  useEffect(() => {
-    if (!slug || !busy) return;
-    let alive = true;
-    window.api
-      ?.projectThumbnail(slug)
-      .then((url) => alive && setThumb(url))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [slug, busy]);
 
   useEffect(() => {
     const player = ref.current;
@@ -72,14 +59,7 @@ export function PreviewStage(): JSX.Element {
       <div className="device-card" style={{ aspectRatio: aspect }}>
         {busy ? (
           <div className="gen-loader">
-            <ImageGeneration
-              preset="pixels-organic"
-              theme="auto"
-              images={thumb ? [thumb] : []}
-              autoReveal={Boolean(thumb)}
-              borderRadius={7}
-              className="gen-loader-fx"
-            >
+            <ImageGeneration preset="pixels-organic" theme="auto" borderRadius={7} className="gen-loader-fx">
               <div className="gen-loader-card" />
             </ImageGeneration>
             <span className="gen-loader-label">
