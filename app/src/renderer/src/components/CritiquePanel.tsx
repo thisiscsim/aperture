@@ -127,7 +127,7 @@ export function CritiquePanel(): JSX.Element {
     setNotice(null);
     try {
       const res = await window.api.autoTune(slug);
-      reloadProject();
+      await reloadProject();
       if (!res.ok) setNotice({ kind: "error", text: `Auto-improve failed: ${res.error ?? "unknown error"}` });
     } catch (err) {
       setNotice({ kind: "error", text: `Auto-improve failed: ${String(err)}` });

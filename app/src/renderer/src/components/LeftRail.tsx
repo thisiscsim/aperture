@@ -61,7 +61,8 @@ export function LeftRail(): JSX.Element {
     setNotice(null);
     try {
       const res = await window.api.generateProject(slug);
-      reloadProject();
+      // Keep the canvas loader up until the fresh cut is actually loaded.
+      await reloadProject();
       if (res.ok) {
         setNotice({
           kind: "info",

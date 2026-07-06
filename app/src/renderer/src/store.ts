@@ -114,7 +114,8 @@ interface EditorState {
   generating: boolean;
   autotuning: boolean;
   notice: { kind: "error" | "info"; text: string } | null;
-  reloadProject: () => void;
+  /** Returns a promise so callers can hold busy state until the load lands. */
+  reloadProject: () => void | Promise<void>;
 
   setView: (view: View) => void;
   setProjects: (projects: ProjectSummary[]) => void;
@@ -156,7 +157,7 @@ interface EditorState {
   setGenerating: (value: boolean) => void;
   setAutotuning: (value: boolean) => void;
   setNotice: (notice: { kind: "error" | "info"; text: string } | null) => void;
-  setReload: (fn: () => void) => void;
+  setReload: (fn: () => void | Promise<void>) => void;
 }
 
 export const useEditor = create<EditorState>()((set, get) => ({
