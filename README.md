@@ -79,6 +79,24 @@ APERTURE_LLM_API_KEY=                   # generic; overrides the provider-specif
 
 With no key set, Generate falls back to the deterministic baseline assembly and the Critique panel uses the offline heuristic; Auto-improve uses the deterministic fix loop.
 
+### Voiceover (ElevenLabs)
+
+Generated voiceovers (left rail → Audio → Generate voiceover) and in-app voice cloning use ElevenLabs. Add a key to the same env file (or paste it under Settings → Voices — the env var wins when both are set):
+
+```bash
+ELEVENLABS_API_KEY=sk_...
+```
+
+When creating the key in the ElevenLabs dashboard, scope it minimally — Aperture only needs:
+
+| Scope | Level | Used for |
+| --- | --- | --- |
+| Text to Speech | Access | Narration synthesis (also returns the word timings used for captions) |
+| Voices | Read | Listing your voices in the picker |
+| Voices | Write | Only if you clone/delete voices in-app |
+
+Everything else (Dubbing, Projects, Voice Generation, Forced Alignment, Speech to Text, …) can stay on No Access. Voice *cloning* requires a paid ElevenLabs plan and the consent of the person being cloned; without a key, recorded voiceovers and whisper captions still work fully offline.
+
 ### What leaves your machine
 
 Generation, critique, and auto-improve send **text** — the `edl.json` edit plan, your `prompt.md`, the resolved style profile, and benchmark feature stats — never your clips. The one exception is **Style Library analysis**, which sends *sampled still frames* of your reference videos to the model (once per profile) so it can see the aesthetic; your source video/audio files themselves are never uploaded. Clip probing, frame sampling, transcription (whisper.cpp), preview, and export all run locally. With no model configured, nothing leaves your machine.
