@@ -36,6 +36,10 @@ Per-project sidecar files (each has its own schema + `parse*` helper in `package
 
 `analyze.mjs` (baseline assembly), `transcribe.mjs` (captions, prefers the voiceover clip), `render.mjs` (export), `extract-frames.mjs` + `analyze-style.mjs` (aesthetic baseline), `analyze-benchmarks.mjs` (benchmark features), `autotune.mjs` (deterministic auto-improve).
 
+## Scoped conventions
+
+Area-specific rules live in `.cursor/rules/` (IPC/main-process, renderer design system, engine scripts, EDL schema, delivery workflow). They activate by file glob in Cursor; other agents should skim the relevant file before working in that area.
+
 ## Boundaries
 
 - Generated artifacts live under `projects/<slug>/`. In the app these resolve to the user's Aperture home (`~/Documents/Aperture/projects/`, configurable); the scripts honor `APERTURE_PROJECTS_DIR` and fall back to the repo's `projects/` in dev. Don't write outside a project folder except code changes you were explicitly asked to make.
