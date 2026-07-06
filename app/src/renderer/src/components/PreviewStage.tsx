@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
+import { ImageGeneration } from "img-fx";
 import { durationFrames } from "@reel/edl";
 import { SocialVideo } from "../motion/SocialVideo";
 import { useEditor } from "../store";
@@ -7,16 +8,35 @@ import { useEditor } from "../store";
 /**
  * Centered floating device frame on the secondary background (Figma V0).
  * Playback is driven by the timeline transport (no built-in Player chrome);
- * clicking the video still toggles play.
+ * clicking the video still toggles play. While Generate / Auto-improve runs,
+ * the canvas shows img-fx's WebGL "generating" mosaic, revealing the
+ * project's poster frame when one exists.
  */
 export function PreviewStage(): JSX.Element {
   const edl = useEditor((s) => s.edl);
   const slug = useEditor((s) => s.slug);
+  const generating = useEditor((s) => s.generating);
+  const autotuning = useEditor((s) => s.autotuning);
   const setCurrentFrame = useEditor((s) => s.setCurrentFrame);
   const setSeek = useEditor((s) => s.setSeek);
   const setPlaying = useEditor((s) => s.setPlaying);
   const setPlayerCtl = useEditor((s) => s.setPlayerCtl);
   const ref = useRef<PlayerRef>(null);
+  const [thumb, setThumb] = useState<string | null>(null);
+
+  const busy = generating || autotuning;
+
+  useEffect(() => {
+    if (!slug || !busy) return;
+    let alive = true;
+    window.api
+      ?.projectThumbnail(slug)
+      .then((url) => alive && setThumb(url))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [slug, busy]);
 
   useEffect(() => {
     const player = ref.current;
@@ -50,7 +70,23 @@ export function PreviewStage(): JSX.Element {
   return (
     <section className="preview-stage">
       <div className="device-card" style={{ aspectRatio: aspect }}>
-        {hasContent ? (
+        {busy ? (
+          <div className="gen-loader">
+            <ImageGeneration
+              preset="pixels-organic"
+              theme="auto"
+              images={thumb ? [thumb] : []}
+              autoReveal={Boolean(thumb)}
+              borderRadius={7}
+              className="gen-loader-fx"
+            >
+              <div className="gen-loader-card" />
+            </ImageGeneration>
+            <span className="gen-loader-label">
+              {autotuning ? "Improving your cut…" : "Generating your cut…"}
+            </span>
+          </div>
+        ) : hasContent ? (
           <Player
             ref={ref}
             component={SocialVideo}
