@@ -46,6 +46,36 @@ describe("Home albums", () => {
     await waitFor(() => expect(window.api.setProjectAlbum).toHaveBeenCalledWith("napa", "nyc"));
   });
 
+  it("New album opens a naming dialog and creates + moves on confirm", async () => {
+    vi.mocked(window.api.listProjects).mockResolvedValue([
+      {
+        slug: "napa",
+        title: "Birthday in Napa Valley",
+        platform: "reels",
+        status: "draft",
+        durationSec: 24.9,
+        assetCount: 3,
+        updatedAt: "2026-07-18T00:00:00Z",
+      },
+    ]);
+    vi.mocked(window.api.createAlbum).mockResolvedValue({ ok: true, id: "wine-country", name: "Wine Country" });
+    vi.mocked(window.api.setProjectAlbum).mockResolvedValue({ ok: true });
+    useEditor.setState({ view: "home", projects: [] });
+    render(<Home />);
+
+    fireEvent.click(await screen.findByLabelText("Options for Birthday in Napa Valley"));
+    fireEvent.click(screen.getByText("Move to album"));
+    fireEvent.click(await screen.findByText("New album"));
+
+    // No album is created until the dialog is confirmed with a name.
+    expect(window.api.createAlbum).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByPlaceholderText(/New York City/i), { target: { value: "Wine Country" } });
+    fireEvent.click(screen.getByText("Create album"));
+
+    await waitFor(() => expect(window.api.createAlbum).toHaveBeenCalledWith("Wine Country"));
+    await waitFor(() => expect(window.api.setProjectAlbum).toHaveBeenCalledWith("napa", "wine-country"));
+  });
+
   it("filters tiles by search query", async () => {
     vi.mocked(window.api.listProjects).mockResolvedValue([
       {
