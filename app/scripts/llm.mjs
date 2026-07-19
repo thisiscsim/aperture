@@ -15,11 +15,16 @@ export function llmConfig() {
   const provider = (process.env.APERTURE_LLM_PROVIDER || "openai").toLowerCase();
   const model = process.env.APERTURE_LLM_MODEL || "gpt-5.5";
   const baseURL = process.env.APERTURE_LLM_BASE_URL || undefined;
-  const apiKey =
-    process.env.APERTURE_LLM_API_KEY ||
-    (provider === "anthropic" ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) ||
-    process.env.OPENAI_API_KEY ||
-    process.env.ANTHROPIC_API_KEY;
+  // Only accept the generic key or the one matching this provider. The old
+  // cross-provider fallback would send, e.g., an Anthropic key to api.openai.com
+  // (a credential leak + a confusing 401).
+  const providerKey =
+    provider === "anthropic"
+      ? process.env.ANTHROPIC_API_KEY
+      : provider === "openai"
+        ? process.env.OPENAI_API_KEY
+        : undefined; // openai-compatible: only the generic key
+  const apiKey = process.env.APERTURE_LLM_API_KEY || providerKey;
   return { provider, model, baseURL, apiKey };
 }
 
