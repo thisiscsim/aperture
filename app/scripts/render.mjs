@@ -7,6 +7,7 @@ import fs from "node:fs";
 import { bundle } from "@remotion/bundler";
 import { ensureBrowser, renderMedia, selectComposition } from "@remotion/renderer";
 import { parseEdl } from "@reel/edl";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -20,7 +21,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   // edl.json is a shareable file and this render runs regardless of what the
   // editor thinks of it: validate before Infinity timings can wedge the
   // export or traversal paths can reach staticFile() in headless Chromium.

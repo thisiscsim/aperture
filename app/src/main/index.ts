@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   copyFileSync,
   createReadStream,
@@ -27,6 +28,7 @@ import {
   type IpcMainInvokeEvent,
   nativeImage,
   protocol,
+  session,
   shell,
 } from "electron";
 import ffmpegPath from "ffmpeg-static";
@@ -99,6 +101,15 @@ function safePath(root: string, rel: string[]): string {
   // Compare against root + separator so a sibling like "<root>-evil" can't pass.
   if (file !== base && !file.startsWith(base + sep)) throw new Error("path escapes storage dir");
   return file;
+}
+
+/** True only for real web links we're willing to hand to the OS handler. */
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function safeProjectPath(slug: string, ...rel: string[]): string {
@@ -336,7 +347,6 @@ function createWindow(): void {
     icon: ICON_PATH,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
-      sandbox: false,
     },
   });
 
@@ -349,9 +359,20 @@ function createWindow(): void {
     activeWatcher?.watcher.close();
     activeWatcher = null;
   });
+  // Only ever hand real web links to the OS. Denying the window is not enough:
+  // a compromised/injected renderer could otherwise ask shell.openExternal to
+  // launch file://, smb://, or a custom-scheme handler (a known RCE-adjacent
+  // vector).
   win.webContents.setWindowOpenHandler((details) => {
-    void shell.openExternal(details.url);
+    if (isSafeExternalUrl(details.url)) void shell.openExternal(details.url);
     return { action: "deny" };
+  });
+  // The app is a fixed local bundle; never let content navigate the top frame
+  // away from its own origin (dev server or the packaged file://).
+  win.webContents.on("will-navigate", (event, url) => {
+    const appOrigin = process.env["ELECTRON_RENDERER_URL"];
+    const sameApp = appOrigin ? url.startsWith(appOrigin) : url.startsWith("file://");
+    if (!sameApp) event.preventDefault();
   });
 
   if (process.env["ELECTRON_RENDERER_URL"]) {
@@ -1003,8 +1024,13 @@ async function deleteVoice(id: string): Promise<{ ok: boolean; error?: string }>
 
 // ---- Audio from URL (SoundCloud etc.) ----
 // yt-dlp does the extraction; like whisper.cpp it is fetched on first use
-// (~35MB universal macOS binary) and cached in userData/bin.
-const YTDLP_RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos";
+// (~35MB universal macOS binary) and cached in userData/bin. Pinned to a
+// specific release + SHA-256 so a hijacked "latest" tag, a swapped release
+// asset, or a MITM can't get arbitrary native code executed on the user's
+// machine. Bump both together (SHA2-256SUMS in the release).
+const YTDLP_VERSION = "2026.07.04";
+const YTDLP_SHA256 = "498bd0dae17855c599d371d68ec5bafc439a9d8640e838be25c765a9792f261b";
+const YTDLP_RELEASE_URL = `https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_macos`;
 const YTDLP_BIN = join(app.getPath("userData"), "bin", "yt-dlp");
 
 async function ensureYtDlp(): Promise<string> {
@@ -1012,7 +1038,14 @@ async function ensureYtDlp(): Promise<string> {
   mkdirSync(dirname(YTDLP_BIN), { recursive: true });
   const res = await fetch(YTDLP_RELEASE_URL);
   if (!res.ok) throw new Error(`could not fetch the audio downloader (HTTP ${res.status})`);
-  writeFileSync(YTDLP_BIN, Buffer.from(await res.arrayBuffer()), { mode: 0o755 });
+  const bytes = Buffer.from(await res.arrayBuffer());
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  if (digest !== YTDLP_SHA256) {
+    throw new Error(
+      `audio downloader failed integrity check (expected ${YTDLP_SHA256.slice(0, 12)}…, got ${digest.slice(0, 12)}…)`,
+    );
+  }
+  writeFileSync(YTDLP_BIN, bytes, { mode: 0o755 });
   return YTDLP_BIN;
 }
 
@@ -1316,6 +1349,31 @@ app.whenReady().then(() => {
     const dockIcon = nativeImage.createFromPath(ICON_PATH);
     if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon);
   }
+
+  // Content-Security-Policy backstop. The renderer loads only local content and
+  // project media over reel-asset://; there is no reason for it to reach the
+  // network or eval remote code. In dev, Vite/React-Refresh inject inline
+  // scripts and use a websocket for HMR, so the dev policy is looser.
+  const isDev = Boolean(process.env["ELECTRON_RENDERER_URL"]);
+  const csp = isDev
+    ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' reel-asset: data: blob: ws: http://localhost:*;"
+    : [
+        "default-src 'self'",
+        "img-src 'self' reel-asset: data: blob:",
+        "media-src 'self' reel-asset: blob:",
+        // Remotion/React styles are applied inline; scripts stay same-origin.
+        "style-src 'self' 'unsafe-inline'",
+        "script-src 'self'",
+        "connect-src 'self' reel-asset:",
+        "font-src 'self' data:",
+        "object-src 'none'",
+        "frame-src 'none'",
+      ].join("; ");
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [csp] },
+    });
+  });
 
   protocol.handle("reel-asset", (request) => {
     const url = new URL(request.url);
@@ -1642,7 +1700,14 @@ app.whenReady().then(() => {
       return null;
     }
   });
-  ipcMain.handle("shell:reveal", (_event, filePath: string) => shell.showItemInFolder(filePath));
+  ipcMain.handle("shell:reveal", (_event, filePath: string) => {
+    // Only reveal paths inside the app's own storage roots — never an arbitrary
+    // renderer-supplied path. (The one caller reveals an export under renders/.)
+    const target = normalize(filePath);
+    const roots = [PROJECTS_DIR, STYLES_DIR, APP_HOME].map(normalize);
+    if (!roots.some((r) => target === r || target.startsWith(r + sep))) return;
+    shell.showItemInFolder(target);
+  });
 
   createWindow();
   app.on("activate", () => {

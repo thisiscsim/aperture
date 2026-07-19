@@ -9,6 +9,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { generateText } from "ai";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -41,7 +42,7 @@ async function main() {
     process.exit(3);
   }
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const edl = JSON.parse(readMaybe(path.join(projectDir, "edl.json")) || "{}");
   const promptMd = readMaybe(path.join(projectDir, "prompt.md"));
   const style = readMaybe(path.join(projectDir, "style.json"));

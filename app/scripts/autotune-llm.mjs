@@ -12,6 +12,7 @@ import { generateText } from "ai";
 import { parseEdl } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { ANIM_NAMES, extractJson, metrics, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -70,7 +71,7 @@ async function main() {
   const maxIterations = Number(arg("iterations") ?? 3);
   const target = Number(arg("target") ?? 88);
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const edlPath = path.join(projectDir, "edl.json");
   if (!fs.existsSync(edlPath)) {
     console.error("ERROR no edl.json to improve");

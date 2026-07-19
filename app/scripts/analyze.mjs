@@ -12,6 +12,7 @@ import fs from "node:fs";
 import { parseMedia } from "@remotion/media-parser";
 import { nodeReader } from "@remotion/media-parser/node";
 import { parseEdl } from "@reel/edl";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -33,7 +34,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const assetsDir = path.join(projectDir, "assets");
   const edlPath = path.join(projectDir, "edl.json");
   // Start from a validated cut: theme/tracks from the existing (shareable)

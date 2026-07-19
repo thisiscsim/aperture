@@ -16,6 +16,7 @@ import {
   transcribe as whisperTranscribe,
 } from "@remotion/install-whisper-cpp";
 import { parseEdl } from "@reel/edl";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -32,7 +33,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const edlPath = path.join(projectDir, "edl.json");
   const parsedEdl = parseEdl(JSON.parse(fs.readFileSync(edlPath, "utf8")));
   if (!parsedEdl.ok || !parsedEdl.edl) {
