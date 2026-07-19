@@ -19,6 +19,8 @@ export function Home(): JSX.Element {
   const [sort, setSort] = useState<HomeSort>("newest");
   const [query, setQuery] = useState("");
   const [openAlbumId, setOpenAlbumId] = useState<string | null>(null);
+  /** Slug of the project awaiting a new album name (naming dialog open). */
+  const [namingFor, setNamingFor] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     window.api
@@ -109,6 +111,7 @@ export function Home(): JSX.Element {
                   inAlbum={Boolean(openAlbumId)}
                   onOpen={() => openProject(tile.project.slug)}
                   onChanged={refresh}
+                  onNewAlbum={() => setNamingFor(tile.project.slug)}
                 />
               ) : (
                 <AlbumTile
@@ -144,7 +147,64 @@ export function Home(): JSX.Element {
           }}
         />
       )}
+      {namingFor && (
+        <NewAlbumDialog
+          onClose={() => setNamingFor(null)}
+          onCreate={async (name) => {
+            const slug = namingFor;
+            setNamingFor(null);
+            const res = await window.api.createAlbum(name);
+            if (res.ok && res.id && slug) {
+              await window.api.setProjectAlbum(slug, res.id);
+              refresh();
+            }
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Name-an-album dialog — creating an album is always an explicit, named act. */
+function NewAlbumDialog({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (name: string) => void | Promise<void>;
+}): JSX.Element {
+  const [name, setName] = useState("");
+
+  const create = () => {
+    if (!name.trim()) return;
+    void onCreate(name.trim());
+  };
+
+  return (
+    <Modal
+      title="New album"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={create} disabled={!name.trim()}>
+            Create album
+          </Button>
+        </>
+      }
+    >
+      <Field label="Name">
+        <Input
+          autoFocus
+          value={name}
+          placeholder="e.g. New York City"
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && create()}
+        />
+      </Field>
+    </Modal>
   );
 }
 
@@ -212,12 +272,14 @@ function ProjectTile({
   inAlbum,
   onOpen,
   onChanged,
+  onNewAlbum,
 }: {
   project: ProjectSummary;
   albums: AlbumSummary[];
   inAlbum: boolean;
   onOpen: () => void;
   onChanged: () => void;
+  onNewAlbum: () => void;
 }): JSX.Element {
   const thumb = useThumb(project.slug);
   const [renaming, setRenaming] = useState(false);
@@ -265,7 +327,13 @@ function ProjectTile({
           label={`Options for ${project.title}`}
           items={(close) => (
             <>
-              <MoveToAlbumItem project={project} albums={albums} close={close} onChanged={onChanged} />
+              <MoveToAlbumItem
+                project={project}
+                albums={albums}
+                close={close}
+                onChanged={onChanged}
+                onNewAlbum={onNewAlbum}
+              />
               <button
                 className="menu-item"
                 onClick={(e) => {
@@ -320,11 +388,13 @@ function MoveToAlbumItem({
   albums,
   close,
   onChanged,
+  onNewAlbum,
 }: {
   project: ProjectSummary;
   albums: AlbumSummary[];
   close: () => void;
   onChanged: () => void;
+  onNewAlbum: () => void;
 }): JSX.Element {
   const [subOpen, setSubOpen] = useState(false);
 
@@ -355,10 +425,10 @@ function MoveToAlbumItem({
         <div className="menu-pop menu-sub" role="menu">
           <button
             className="menu-item"
-            onClick={async (e) => {
+            onClick={(e) => {
               e.stopPropagation();
-              const res = await window.api.createAlbum("New album");
-              if (res.ok && res.id) await move(res.id);
+              close();
+              onNewAlbum();
             }}
           >
             <Icon name="plus-large" size={16} />
