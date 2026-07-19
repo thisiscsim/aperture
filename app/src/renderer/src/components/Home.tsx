@@ -422,6 +422,10 @@ function ProjectTile({
                     return;
                   const res = await window.api.deleteProject(project.slug);
                   if (res.ok) onChanged();
+                  else
+                    useEditor
+                      .getState()
+                      .pushNotice("error", `Couldn't delete project: ${res.error ?? "unknown error"}`);
                 }}
               >
                 <Icon name="trash-can" size={16} />
@@ -611,6 +615,10 @@ function AlbumTile({
                     return;
                   const res = await window.api.deleteAlbum(album.id);
                   if (res.ok) onChanged();
+                  else
+                    useEditor
+                      .getState()
+                      .pushNotice("error", `Couldn't delete album: ${res.error ?? "unknown error"}`);
                 }}
               >
                 <Icon name="trash-can" size={16} />

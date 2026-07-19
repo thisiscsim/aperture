@@ -496,16 +496,29 @@ function RecordButton({
   const slug = useEditor((s) => s.slug);
   const [recording, setRecording] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
+  const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
+
+  // If this component unmounts mid-recording (e.g. Cmd+\ focus mode unmounts
+  // the rail), stop the recorder and release the mic — otherwise the mic stays
+  // hot and the MediaRecorder leaks.
+  useEffect(() => {
+    return () => {
+      recorder.current?.stop();
+      stream.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   const start = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.current = mediaStream;
+      const mr = new MediaRecorder(mediaStream);
       chunks.current = [];
       mr.ondataavailable = (e) => e.data.size > 0 && chunks.current.push(e.data);
       mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
+        mediaStream.getTracks().forEach((t) => t.stop());
+        stream.current = null;
         const blob = new Blob(chunks.current, { type: "audio/webm" });
         const buf = new Uint8Array(await blob.arrayBuffer());
         if (!slug) return;
