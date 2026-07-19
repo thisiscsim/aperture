@@ -99,15 +99,26 @@ export function Timeline(): JSX.Element {
     let preview = orig;
 
     let moved = false;
-    const onMove = (ev: globalThis.MouseEvent) => {
-      const dSec = (ev.clientX - startX) / PX_PER_SEC;
+    // rAF-coalesce the preview state updates (matches the ruler scrub handler):
+    // a raw mousemove stream drove one setDrag per event, re-rendering the lane
+    // repeatedly per frame.
+    let raf = 0;
+    let lastX = e.clientX;
+    const apply = () => {
+      raf = 0;
+      const dSec = (lastX - startX) / PX_PER_SEC;
       if (dSec !== 0) moved = true;
       preview = computePreview(track.type, mode, orig, dSec, assetDur);
       setDrag({ clipId: clip.id, trackType: track.type, preview });
     };
+    const onMove = (ev: globalThis.MouseEvent) => {
+      lastX = ev.clientX;
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      if (raf) cancelAnimationFrame(raf);
       // A plain click (no movement) is just a selection — committing would
       // push an identical EDL onto the undo stack and schedule a disk write.
       if (moved) commit(updateEdl, clip.id, track.type, preview);

@@ -101,13 +101,27 @@ export function splitUnits(text: string, target: AnimTarget): string[] {
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
+// Easing.bezier builds a sampling table; constructing it per unit per frame was
+// up to ~12k allocations/sec during preview. Cache one function per spec's
+// easing tuple (a handful of distinct curves total).
+const easingCache = new Map<string, (t: number) => number>();
+function easingFor(e: [number, number, number, number]): (t: number) => number {
+  const key = e.join(",");
+  let fn = easingCache.get(key);
+  if (!fn) {
+    fn = Easing.bezier(e[0], e[1], e[2], e[3]);
+    easingCache.set(key, fn);
+  }
+  return fn;
+}
+
 export function unitStyle(spec: AnimSpec, frame: number, fps: number, index: number): CSSProperties {
   const delay = ((index * spec.staggerMs) / 1000) * fps;
   const dur = Math.max(1, (spec.durationMs / 1000) * fps);
   const p = interpolate(frame, [delay, delay + dur], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.bezier(spec.easing[0], spec.easing[1], spec.easing[2], spec.easing[3]),
+    easing: easingFor(spec.easing),
   });
 
   const opacity = lerp(spec.from.opacity ?? 1, 1, p);

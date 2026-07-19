@@ -203,14 +203,26 @@ function PanelResizer({ panel }: { panel: PanelId }): JSX.Element {
     el.classList.add("active");
     document.body.style.cursor = horizontal ? "row-resize" : "col-resize";
 
+    // rAF-coalesce moves: a raw mousemove stream re-rendered the shell (and,
+    // pre-memoization, every panel) plus wrote localStorage per pixel. Now at
+    // most one store update per frame; localStorage is persisted once on mouseup.
+    let raf = 0;
+    let last = start;
+    const apply = () => {
+      raf = 0;
+      setPanelSize(panel, last, false); // don't touch localStorage mid-drag
+    };
     const onMove = (ev: MouseEvent) => {
-      if (panel === "left") setPanelSize("left", start + (ev.clientX - startX));
-      else if (panel === "right") setPanelSize("right", start - (ev.clientX - startX));
-      else setPanelSize("timeline", start - (ev.clientY - startY));
+      if (panel === "left") last = start + (ev.clientX - startX);
+      else if (panel === "right") last = start - (ev.clientX - startX);
+      else last = start - (ev.clientY - startY);
+      if (!raf) raf = requestAnimationFrame(apply);
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      if (raf) cancelAnimationFrame(raf);
+      setPanelSize(panel, last); // persist once on release
       el.classList.remove("active");
       document.body.style.cursor = "";
     };

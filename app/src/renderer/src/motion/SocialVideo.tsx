@@ -389,11 +389,28 @@ const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
   );
 };
 
+// Word timings are sorted and non-overlapping, so binary-search the active
+// word instead of a linear scan — a caption track can hold up to 20k words and
+// this runs every frame. Exported for unit testing.
+export function activeWordAt(words: CaptionTrack["words"], t: number): { text: string } | undefined {
+  if (!words || words.length === 0) return undefined;
+  let lo = 0;
+  let hi = words.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const w = words[mid];
+    if (t < w.start) hi = mid - 1;
+    else if (t >= w.end) lo = mid + 1;
+    else return w;
+  }
+  return undefined;
+}
+
 const CaptionView: FC<{ track: CaptionTrack; edl: Edl }> = ({ track, edl }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
-  const active = (track.words ?? []).find((w) => t >= w.start && t < w.end);
+  const active = activeWordAt(track.words, t);
   if (!active) return null;
   const m = edl.theme.safeMargins;
   const color = edl.theme.palette[0] ?? "#FAF6EE";
@@ -427,8 +444,12 @@ const CaptionView: FC<{ track: CaptionTrack; edl: Edl }> = ({ track, edl }) => {
   );
 };
 
+// The palette allows any CSS color literal (rgb()/hsl()/names), but this only
+// understands #hex. For a non-hex accent, fall back to a neutral tint instead
+// of emitting `rgba(NaN, NaN, NaN, a)` (which the gradient would silently drop).
 function hexToRgba(hex: string, alpha: number): string {
   const m = hex.replace("#", "");
+  if (!/^([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(m)) return `rgba(232, 176, 75, ${alpha})`;
   const full =
     m.length === 3
       ? m
