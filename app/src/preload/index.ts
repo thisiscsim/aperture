@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from "electron";
 import type { Benchmarks, Edl, Meta, StyleProfile } from "@reel/edl";
 
+/**
+ * The full settings shape as written to disk. API-key fields are write-only
+ * from the renderer's perspective: they can be SET via `setSettings`, but are
+ * never returned by `getSettings` (see `PublicSettings`).
+ */
 export interface AppSettings {
   hwDecode: boolean;
   hwEncode: boolean;
@@ -14,6 +19,16 @@ export interface AppSettings {
   elevenLabsApiKey?: string;
   defaultVoiceId?: string;
 }
+
+/**
+ * What the renderer actually receives: everything except the raw key values,
+ * plus booleans for whether each key is set. The UI only ever needs "is a key
+ * configured", never the secret itself, so the plaintext key never crosses IPC.
+ */
+export type PublicSettings = Omit<AppSettings, "agentApiKey" | "elevenLabsApiKey"> & {
+  hasAgentKey: boolean;
+  hasElevenLabsKey: boolean;
+};
 
 export interface VoiceSummary {
   id: string;
@@ -216,8 +231,8 @@ const api = {
   loadCritique: (slug: string): Promise<unknown> => ipcRenderer.invoke("critique:load", slug),
   runCritique: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("critique:run", slug),
   revealItem: (filePath: string): Promise<void> => ipcRenderer.invoke("shell:reveal", filePath),
-  getSettings: (): Promise<AppSettings> => ipcRenderer.invoke("settings:get"),
-  setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> =>
+  getSettings: (): Promise<PublicSettings> => ipcRenderer.invoke("settings:get"),
+  setSettings: (patch: Partial<AppSettings>): Promise<PublicSettings> =>
     ipcRenderer.invoke("settings:set", patch),
   getProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:get"),
   revealProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:reveal"),

@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { useEditor } from "../store";
 import { Button, Icon, IconButton } from "./ui";
 import { useEscapeKey } from "./ui/useEscapeKey";
-import type { AppSettings, VoiceSummary } from "../../../preload";
+import type { AppSettings, PublicSettings, VoiceSummary } from "../../../preload";
 
 type SettingsTab = "general" | "export" | "agent" | "voices";
 
@@ -15,7 +15,7 @@ const TABS: { id: SettingsTab; label: string }[] = [
 
 const MODELS = ["gpt-5.5", "gpt-5.5-mini", "claude-fable-5", "claude-sonnet-5"];
 
-const DEFAULTS: AppSettings = {
+const DEFAULTS: PublicSettings = {
   hwDecode: false,
   hwEncode: false,
   exportFps: "project",
@@ -23,6 +23,8 @@ const DEFAULTS: AppSettings = {
   exportCompression: "social",
   agentModel: "gpt-5.5",
   reasoningEffort: "low",
+  hasAgentKey: false,
+  hasElevenLabsKey: false,
 };
 
 /** Settings dialog (Figma 14:1597 / 17:652 / 17:1812). */
@@ -30,7 +32,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
   const theme = useEditor((s) => s.theme);
   const setTheme = useEditor((s) => s.setTheme);
   const [tab, setTab] = useState<SettingsTab>("general");
-  const [settings, setSettings] = useState<AppSettings>(DEFAULTS);
+  const [settings, setSettings] = useState<PublicSettings>(DEFAULTS);
   const [projectsDir, setProjectsDir] = useState<string>("");
   const [locks, setLocks] = useState({ modelLocked: false, keyLocked: false });
   const [keyDraft, setKeyDraft] = useState("");
@@ -190,7 +192,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
                   placeholder={
                     locks.keyLocked
                       ? "API key configured via .env.local"
-                      : keySaved || settings.agentApiKey
+                      : keySaved || settings.hasAgentKey
                         ? "API key saved — enter a new key to replace it"
                         : "Enter your OpenAI API Key"
                   }
@@ -244,7 +246,7 @@ function VoicesTab({
   settings,
   update,
 }: {
-  settings: AppSettings;
+  settings: PublicSettings;
   update: (patch: Partial<AppSettings>) => Promise<void>;
 }): JSX.Element {
   const [status, setStatus] = useState({ configured: false, keyLocked: false });

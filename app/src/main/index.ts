@@ -61,11 +61,15 @@ function llmInfo(): { provider: string; model: string; configured: boolean } {
   const provider = (process.env["APERTURE_LLM_PROVIDER"] || "openai").toLowerCase();
   const model = process.env["APERTURE_LLM_MODEL"] || "gpt-5.5";
   const baseURL = process.env["APERTURE_LLM_BASE_URL"];
-  const apiKey =
-    process.env["APERTURE_LLM_API_KEY"] ||
-    (provider === "anthropic" ? process.env["ANTHROPIC_API_KEY"] : process.env["OPENAI_API_KEY"]) ||
-    process.env["OPENAI_API_KEY"] ||
-    process.env["ANTHROPIC_API_KEY"];
+  // Mirror llm.mjs exactly: only the generic key or the provider-matching one
+  // (no cross-provider fallback that would misroute a key to the wrong host).
+  const providerKey =
+    provider === "anthropic"
+      ? process.env["ANTHROPIC_API_KEY"]
+      : provider === "openai"
+        ? process.env["OPENAI_API_KEY"]
+        : undefined;
+  const apiKey = process.env["APERTURE_LLM_API_KEY"] || providerKey;
   const configured = provider === "openai-compatible" ? Boolean(baseURL || apiKey) : Boolean(apiKey);
   return { provider, model, configured };
 }
@@ -169,6 +173,20 @@ interface AppSettings {
   /** ElevenLabs voiceover (env var wins, same as the LLM key). */
   elevenLabsApiKey?: string;
   defaultVoiceId?: string;
+}
+/**
+ * The renderer never needs raw key values — only whether a key is set — so we
+ * strip them at the IPC boundary. Keeping the plaintext main-side means a
+ * renderer compromise (or a future "attach settings to a report" feature)
+ * can't read them over `settings:get`.
+ */
+type PublicSettings = Omit<AppSettings, "agentApiKey" | "elevenLabsApiKey"> & {
+  hasAgentKey: boolean;
+  hasElevenLabsKey: boolean;
+};
+function publicSettings(s: AppSettings): PublicSettings {
+  const { agentApiKey, elevenLabsApiKey, ...rest } = s;
+  return { ...rest, hasAgentKey: Boolean(agentApiKey), hasElevenLabsKey: Boolean(elevenLabsApiKey) };
 }
 const SETTINGS_PATH = join(app.getPath("userData"), "settings.json");
 function readSettings(): AppSettings {
@@ -1577,8 +1595,10 @@ app.whenReady().then(() => {
     args.push("--compression", s.exportCompression);
     return runScript(RENDER_SCRIPT, slug, event, "export", args);
   });
-  ipcMain.handle("settings:get", () => readSettings());
-  ipcMain.handle("settings:set", (_event, patch: Partial<AppSettings>) => writeSettings(patch));
+  ipcMain.handle("settings:get", () => publicSettings(readSettings()));
+  ipcMain.handle("settings:set", (_event, patch: Partial<AppSettings>) =>
+    publicSettings(writeSettings(patch)),
+  );
   ipcMain.handle("home:get", () => PROJECTS_DIR);
   ipcMain.handle("home:reveal", () => shell.openPath(PROJECTS_DIR));
   ipcMain.handle("home:pick", async () => {
