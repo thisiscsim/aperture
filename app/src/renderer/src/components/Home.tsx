@@ -280,7 +280,7 @@ function SortMenu({ sort, onChange }: { sort: HomeSort; onChange: (s: HomeSort) 
           {SORTS.map((s) => (
             <button
               key={s}
-              className={`menu-item ${s === sort ? "selected" : ""}`}
+              className="menu-item"
               onClick={() => {
                 onChange(s);
                 setOpen(false);

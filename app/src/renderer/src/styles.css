@@ -885,8 +885,7 @@ button.brand:hover {
   text-align: left;
 }
 
-.menu-item:hover,
-.menu-item.selected {
+.menu-item:hover {
   background: var(--background-secondary);
 }
 
