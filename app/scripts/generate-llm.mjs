@@ -15,6 +15,7 @@ import { generateText } from "ai";
 import { parseEdl, parseStyleProfile } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { ANIM_NAMES, enforceStyle, extractJson, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -193,7 +194,7 @@ async function main() {
     process.exit(3);
   }
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const edlPath = path.join(projectDir, "edl.json");
 
   // 1) Deterministic baseline (probes clips, writes a valid edl.json skeleton).

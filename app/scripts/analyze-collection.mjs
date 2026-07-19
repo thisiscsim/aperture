@@ -16,6 +16,7 @@ import { generateText } from "ai";
 import { parseStyleProfile } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { extractJson } from "./edl-util.mjs";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -128,7 +129,7 @@ function resolvePaths() {
     return { sourcesDir: path.join(styleDir, "sources"), outDir: styleDir, profileName: "profile.json" };
   }
   if (slug) {
-    const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+    const projectDir = resolveProjectDir(repoRoot, slug);
     return { sourcesDir: path.join(projectDir, "references"), outDir: projectDir, profileName: "style.json" };
   }
   throw new Error("missing --styleDir or --slug");

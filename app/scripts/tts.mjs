@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { parseEdl } from "@reel/edl";
 import { alignmentToWords, preprocessForTts, synthesisHash } from "./tts-util.mjs";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -84,7 +85,7 @@ async function main() {
     process.exit(3);
   }
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const narration = fs.readFileSync(path.join(projectDir, "narration.md"), "utf8").trim();
   if (!narration) {
     console.error("ERROR narration.md is empty — write or draft a script first.");

@@ -9,6 +9,7 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { parseBenchmarks } from "@reel/edl";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -63,7 +64,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const benchDir = path.join(projectDir, "benchmarks");
   const metaPath = path.join(benchDir, "benchmarks.meta.json");
   const metrics = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, "utf8")) : {};

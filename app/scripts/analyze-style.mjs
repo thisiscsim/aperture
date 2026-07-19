@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { parseStyleProfile } from "@reel/edl";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -103,7 +104,7 @@ async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const refDir = path.join(projectDir, "references");
   const videos = (fs.existsSync(refDir) ? fs.readdirSync(refDir) : []).filter((f) =>
     VIDEO_EXT.has(path.extname(f).toLowerCase()),

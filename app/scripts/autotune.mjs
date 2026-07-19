@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
 import { parseBenchmarks, parseEdl } from "@reel/edl";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -156,7 +157,7 @@ async function main() {
   if (!slug) throw new Error("missing --slug");
   const iterations = Number(arg("iterations") ?? 4);
 
-  const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
+  const projectDir = resolveProjectDir(repoRoot, slug);
   const edlPath = path.join(projectDir, "edl.json");
   // Both inputs are shareable project files — validate before scoring math
   // (Infinity benchmark means yield NaN subscores) or mutating the cut.
