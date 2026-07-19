@@ -153,3 +153,14 @@ This project is pre-release; all notable changes are grouped below until we star
 
 ### Initial commit
 - Scaffold: Electron + Vite + React editor, shared `packages/edl` schema, Remotion preview/export spine, and the `create-social-video` / `critique-video` Claude Code skills.
+
+## Storybook
+
+The UI kit is cataloged in Storybook (`app/.storybook`): components render against the real design tokens with a light/dark toolbar toggle.
+
+```bash
+npm run storybook --workspace app   # dev server on :6006
+npm run build-storybook --workspace app
+```
+
+Stories live next to their components (`src/renderer/src/**/*.stories.tsx`). New UI-kit components should ship with a story.
