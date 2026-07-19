@@ -6,7 +6,7 @@ import { RightPanel } from "./components/RightPanel";
 import { Timeline } from "./components/Timeline";
 import { ExportModal } from "./components/ExportModal";
 import { Home } from "./components/Home";
-import { cancelPendingSave, useEditor, type PanelId } from "./store";
+import { cancelPendingSave, useEditor, type Notice, type PanelId } from "./store";
 
 // The shell re-renders on panel resize, playback, notices, etc. These panels
 // take no props and subscribe to the store themselves, so memoizing them keeps
@@ -25,8 +25,8 @@ export function App(): JSX.Element {
   // the whole object would re-render the shell on every keystroke.
   const hasEdl = useEditor((s) => s.edl !== null);
   const loadError = useEditor((s) => s.loadError);
-  const notice = useEditor((s) => s.notice);
-  const setNotice = useEditor((s) => s.setNotice);
+  const notices = useEditor((s) => s.notices);
+  const dismissNotice = useEditor((s) => s.dismissNotice);
   const setProject = useEditor((s) => s.setProject);
   const setLoadError = useEditor((s) => s.setLoadError);
   const setReload = useEditor((s) => s.setReload);
@@ -181,7 +181,13 @@ export function App(): JSX.Element {
           )}
         </div>
       )}
-      {notice && <Toast notice={notice} onClose={() => setNotice(null)} />}
+      {notices.length > 0 && (
+        <div className="toast-stack" role="region" aria-label="Notifications">
+          {notices.map((n) => (
+            <Toast key={n.id} notice={n} onClose={() => dismissNotice(n.id)} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
@@ -240,20 +246,21 @@ function PanelResizer({ panel }: { panel: PanelId }): JSX.Element {
   );
 }
 
-function Toast({
-  notice,
-  onClose,
-}: {
-  notice: { kind: "error" | "info"; text: string };
-  onClose: () => void;
-}): JSX.Element {
+function Toast({ notice, onClose }: { notice: Notice; onClose: () => void }): JSX.Element {
+  // Errors persist until dismissed (they were vanishing after 8s with no
+  // history); info auto-dismisses. Keyed on notice.id at the call site, so an
+  // App re-render no longer restarts the timer (the old dismiss-never bug).
   useEffect(() => {
-    const t = setTimeout(onClose, 8000);
+    if (notice.kind === "error") return;
+    const t = setTimeout(onClose, 6000);
     return () => clearTimeout(t);
-  }, [onClose]);
+  }, [notice.kind, onClose]);
   return (
-    <div className={`toast toast-${notice.kind}`} onClick={onClose}>
-      {notice.text}
+    <div className={`toast toast-${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>
+      <span className="toast-text">{notice.text}</span>
+      <button className="toast-close" onClick={onClose} aria-label="Dismiss" title="Dismiss">
+        ×
+      </button>
     </div>
   );
 }

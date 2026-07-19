@@ -7,7 +7,7 @@ const edl = parseEdl({ tracks: [{ id: "v", type: "video", clips: [] }] }).edl!;
 beforeEach(() => {
   vi.clearAllMocks();
   _dropPendingSave();
-  useEditor.setState({ view: "home", slug: null, edl: null, dirty: false, saveError: null, notice: null });
+  useEditor.setState({ view: "home", slug: null, edl: null, dirty: false, saveError: null, notices: [] });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -178,7 +178,8 @@ describe("autosave", () => {
     await vi.advanceTimersByTimeAsync(400);
     expect(useEditor.getState().dirty).toBe(true);
     expect(useEditor.getState().saveError).toBe("disk full");
-    expect(useEditor.getState().notice?.kind).toBe("error");
+    const ns = useEditor.getState().notices;
+    expect(ns[ns.length - 1]?.kind).toBe("error");
   });
 
   it("a successful save clears the dirty flag", async () => {

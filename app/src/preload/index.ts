@@ -231,6 +231,16 @@ const api = {
   loadCritique: (slug: string): Promise<unknown> => ipcRenderer.invoke("critique:load", slug),
   runCritique: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("critique:run", slug),
   revealItem: (filePath: string): Promise<void> => ipcRenderer.invoke("shell:reveal", filePath),
+  getAppInfo: (): Promise<{
+    version: string;
+    electron: string;
+    chrome: string;
+    node: string;
+    platform: string;
+    logsDir: string;
+  }> => ipcRenderer.invoke("app:info"),
+  logRenderer: (level: "info" | "warn" | "error", message: string): Promise<void> =>
+    ipcRenderer.invoke("log:renderer", level, message),
   getSettings: (): Promise<PublicSettings> => ipcRenderer.invoke("settings:get"),
   setSettings: (patch: Partial<AppSettings>): Promise<PublicSettings> =>
     ipcRenderer.invoke("settings:set", patch),
