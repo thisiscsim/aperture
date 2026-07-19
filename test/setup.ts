@@ -10,6 +10,7 @@ const ARRAY_RETURNING = new Set([
   "listReferences",
   "listStyles",
   "listBenchmarks",
+  "listAlbums",
   "autoTuneResults",
 ]);
 const SUBSCRIPTIONS = new Set([

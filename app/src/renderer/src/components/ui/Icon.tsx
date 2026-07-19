@@ -3,6 +3,7 @@ import apertureLogomark from "../../assets/icons/aperture-logomark.svg?raw";
 import arrowLeft from "../../assets/icons/arrow-left.svg?raw";
 import arrowOutOfBox from "../../assets/icons/arrow-out-of-box.svg?raw";
 import arrowRotate from "../../assets/icons/arrow-rotate.svg?raw";
+import chevronRightSmall from "../../assets/icons/chevron-right-small.svg?raw";
 import chevronTop from "../../assets/icons/chevron-top.svg?raw";
 import circleQuestionmark from "../../assets/icons/circle-questionmark.svg?raw";
 import clapboardSparkle from "../../assets/icons/clapboard-sparkle.svg?raw";
@@ -19,9 +20,12 @@ import horizontalAlignCenter from "../../assets/icons/horizontal-align-center.sv
 import horizontalAlignTop from "../../assets/icons/horizontal-align-top.svg?raw";
 import layoutAlignLeft from "../../assets/icons/layout-align-left.svg?raw";
 import linear from "../../assets/icons/linear.svg?raw";
+import inputForm from "../../assets/icons/input-form.svg?raw";
 import magicWand from "../../assets/icons/magic-wand.svg?raw";
+import moveFolder from "../../assets/icons/move-folder.svg?raw";
 import multiMedia from "../../assets/icons/multi-media.svg?raw";
 import playCircle from "../../assets/icons/play-circle.svg?raw";
+import plusLarge from "../../assets/icons/plus-large.svg?raw";
 import prompt from "../../assets/icons/prompt.svg?raw";
 import record from "../../assets/icons/record.svg?raw";
 import settingsGear from "../../assets/icons/settings-gear.svg?raw";
@@ -47,6 +51,7 @@ const ICONS = {
   "arrow-left": arrowLeft,
   "arrow-out-of-box": arrowOutOfBox,
   "arrow-rotate": arrowRotate,
+  "chevron-right-small": chevronRightSmall,
   "chevron-top": chevronTop,
   "circle-questionmark": circleQuestionmark,
   "clapboard-sparkle": clapboardSparkle,
@@ -63,9 +68,12 @@ const ICONS = {
   "horizontal-align-top": horizontalAlignTop,
   "layout-align-left": layoutAlignLeft,
   linear,
+  "input-form": inputForm,
   "magic-wand": magicWand,
+  "move-folder": moveFolder,
   "multi-media": multiMedia,
   "play-circle": playCircle,
+  "plus-large": plusLarge,
   prompt,
   record,
   "settings-gear": settingsGear,
