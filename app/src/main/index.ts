@@ -295,6 +295,11 @@ try {
 // Spawned scripts (render/analyze/generate/...) inherit these to find the same dirs.
 process.env["APERTURE_PROJECTS_DIR"] = PROJECTS_DIR;
 process.env["APERTURE_STYLES_DIR"] = STYLES_DIR;
+// Keep the whisper.cpp install + model out of the (read-only, when packaged)
+// app bundle; transcribe.mjs honors this override.
+if (!process.env["APERTURE_WHISPER_DIR"]) {
+  process.env["APERTURE_WHISPER_DIR"] = join(app.getPath("userData"), "whisper");
+}
 
 // Hardware-accelerated video decode (playback) is a Chromium switch that must be
 // set before the app is ready, so toggling it needs a restart.
@@ -1237,7 +1242,13 @@ function runScriptArgs(
   return new Promise((resolve) => {
     const runLog = openScriptLog(channelPrefix);
     logger.info(`script ${channelPrefix} start: ${basename(scriptPath)} ${args.join(" ")} -> ${runLog.path}`);
-    const child = spawn("node", [scriptPath, ...args], { cwd: REPO_ROOT, env: process.env });
+    // Run engine scripts with Electron's bundled Node (ELECTRON_RUN_AS_NODE)
+    // rather than a `node` on PATH — a packaged app has no system node, and
+    // this also lets nested spawns reuse process.execPath.
+    const child = spawn(process.execPath, [scriptPath, ...args], {
+      cwd: REPO_ROOT,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    });
     let output = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
