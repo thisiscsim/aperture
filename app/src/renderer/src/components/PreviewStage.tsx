@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { ImageGeneration } from "img-fx";
-import { durationFrames } from "@reel/edl";
+import { durationFrames, type Edl } from "@reel/edl";
 import { SocialVideo } from "../motion/SocialVideo";
 import { useEditor } from "../store";
 
@@ -25,6 +25,18 @@ export function PreviewStage(): JSX.Element {
 
   const busy = generating || autotuning;
 
+  // Whether a Player is mounted (vs the empty/busy placeholders). The wiring
+  // effect must re-run when the Player mounts/unmounts, but NOT on every EDL
+  // edit — the control closures below delegate through ref.current, so their
+  // identities can stay stable across edits (previously a fresh seek/playerCtl
+  // per keystroke forced a second app-wide render pass via subscribers).
+  const hasContent = edl
+    ? edl.tracks.some((t) =>
+        t.type === "text" ? t.clips.length > 0 : t.type === "caption" ? false : t.clips.length > 0,
+      )
+    : false;
+  const playerMounted = Boolean(edl) && !busy && hasContent;
+
   useEffect(() => {
     const player = ref.current;
     if (!player) return;
@@ -45,13 +57,20 @@ export function PreviewStage(): JSX.Element {
       player.removeEventListener("pause", onPause);
       setPlayerCtl(null);
     };
-  }, [edl, setCurrentFrame, setSeek, setPlaying, setPlayerCtl]);
+  }, [playerMounted, setCurrentFrame, setSeek, setPlaying, setPlayerCtl]);
+
+  // Stable inputProps identity across renders that don't change the EDL/asset
+  // base — a fresh object literal re-renders the whole SocialVideo composition.
+  // (Only read when a Player is mounted, i.e. edl is present.)
+  // `edl as Edl` is safe: the object is only consumed inside the `hasContent`
+  // branch below, which is unreachable when edl is null (early return).
+  const inputProps = useMemo(
+    () => ({ edl: edl as Edl, assetBaseUrl: slug ? `reel-asset://${slug}` : undefined, preview: true }),
+    [edl, slug],
+  );
 
   if (!edl) return <section className="preview-stage" />;
 
-  const hasContent = edl.tracks.some((t) =>
-    t.type === "text" ? t.clips.length > 0 : t.type === "caption" ? false : t.clips.length > 0,
-  );
   const aspect = `${edl.format.width} / ${edl.format.height}`;
 
   return (
@@ -70,7 +89,7 @@ export function PreviewStage(): JSX.Element {
           <Player
             ref={ref}
             component={SocialVideo}
-            inputProps={{ edl, assetBaseUrl: slug ? `reel-asset://${slug}` : undefined, preview: true }}
+            inputProps={inputProps}
             durationInFrames={durationFrames(edl)}
             fps={edl.format.fps}
             compositionWidth={edl.format.width}

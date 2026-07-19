@@ -27,7 +27,6 @@ interface DragState {
 export function Timeline(): JSX.Element {
   const edl = useEditor((s) => s.edl);
   const slug = useEditor((s) => s.slug);
-  const currentFrame = useEditor((s) => s.currentFrame);
   const seek = useEditor((s) => s.seek);
   const selectedClipId = useEditor((s) => s.selectedClipId);
   const select = useEditor((s) => s.select);
@@ -53,7 +52,6 @@ export function Timeline(): JSX.Element {
   // Clamp so a corrupt/hostile EDL can never drive the tick loop or lane width
   // unbounded (schema bounds timings too; this is belt-and-braces).
   const dur = Math.min(Math.max(durationSeconds(edl), 6), MAX_TIMELINE_SEC);
-  const currentSec = currentFrame / fps;
   const lanePx = dur * PX_PER_SEC;
   const tracks = edl.tracks.filter((t): t is LaneTrack => t.type !== "caption");
 
@@ -287,7 +285,7 @@ export function Timeline(): JSX.Element {
           />
         </div>
         <div className="tl-bar-side tl-time">
-          {currentSec.toFixed(2)}s <span className="muted">/ {dur.toFixed(1)}s</span>
+          <TimeReadout fps={fps} dur={dur} />
         </div>
       </div>
 
@@ -366,9 +364,7 @@ export function Timeline(): JSX.Element {
             </div>
           ))}
 
-          <div className="tl-playhead" style={{ left: LABEL_W + currentSec * PX_PER_SEC }}>
-            <div className="tl-playhead-head" />
-          </div>
+          <Playhead fps={fps} />
         </div>
       </div>
 
@@ -395,6 +391,27 @@ export function Timeline(): JSX.Element {
         }}
       />
     </section>
+  );
+}
+
+// Leaf components that subscribe to currentFrame themselves, so playback (a
+// per-frame store write at 30fps) re-renders only the playhead + time readout
+// instead of the entire Timeline (every lane, chip, and tick).
+function Playhead({ fps }: { fps: number }): JSX.Element {
+  const currentSec = useEditor((s) => s.currentFrame) / fps;
+  return (
+    <div className="tl-playhead" style={{ left: LABEL_W + currentSec * PX_PER_SEC }}>
+      <div className="tl-playhead-head" />
+    </div>
+  );
+}
+
+function TimeReadout({ fps, dur }: { fps: number; dur: number }): JSX.Element {
+  const currentSec = useEditor((s) => s.currentFrame) / fps;
+  return (
+    <>
+      {currentSec.toFixed(2)}s <span className="muted">/ {dur.toFixed(1)}s</span>
+    </>
   );
 }
 

@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect } from "react";
+import { type CSSProperties, memo, useEffect } from "react";
 import { EditorHeader } from "./components/EditorHeader";
 import { LeftRail } from "./components/LeftRail";
 import { PreviewStage } from "./components/PreviewStage";
@@ -8,10 +8,22 @@ import { ExportModal } from "./components/ExportModal";
 import { Home } from "./components/Home";
 import { cancelPendingSave, useEditor, type PanelId } from "./store";
 
+// The shell re-renders on panel resize, playback, notices, etc. These panels
+// take no props and subscribe to the store themselves, so memoizing them keeps
+// an App re-render (e.g. a per-pixel panel drag) from re-rendering all of them
+// — most importantly the Remotion Player subtree inside PreviewStage.
+const EditorHeaderM = memo(EditorHeader);
+const LeftRailM = memo(LeftRail);
+const PreviewStageM = memo(PreviewStage);
+const RightPanelM = memo(RightPanel);
+const TimelineM = memo(Timeline);
+
 export function App(): JSX.Element {
   const view = useEditor((s) => s.view);
   const slug = useEditor((s) => s.slug);
-  const edl = useEditor((s) => s.edl);
+  // Only the presence of an EDL matters here (the boot overlay); subscribing to
+  // the whole object would re-render the shell on every keystroke.
+  const hasEdl = useEditor((s) => s.edl !== null);
   const loadError = useEditor((s) => s.loadError);
   const notice = useEditor((s) => s.notice);
   const setNotice = useEditor((s) => s.setNotice);
@@ -139,30 +151,30 @@ export function App(): JSX.Element {
             } as CSSProperties
           }
         >
-          <EditorHeader />
+          <EditorHeaderM />
           <div className="editor-main">
             {!panelsHidden && (
               <>
-                <LeftRail />
+                <LeftRailM />
                 <PanelResizer panel="left" />
               </>
             )}
-            <PreviewStage />
+            <PreviewStageM />
             {!panelsHidden && (
               <>
                 <PanelResizer panel="right" />
-                <RightPanel />
+                <RightPanelM />
               </>
             )}
           </div>
           {!panelsHidden && (
             <>
               <PanelResizer panel="timeline" />
-              <Timeline />
+              <TimelineM />
             </>
           )}
           <ExportModal />
-          {!edl && (
+          {!hasEdl && (
             <div className="boot">
               {loadError ? `Could not load project: ${loadError}` : "Loading project…"}
             </div>
