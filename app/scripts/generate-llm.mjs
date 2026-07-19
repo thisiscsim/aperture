@@ -199,7 +199,10 @@ async function main() {
 
   // 1) Deterministic baseline (probes clips, writes a valid edl.json skeleton).
   console.log("PHASE assembling baseline");
-  const baseline = spawnSync("node", [path.join(__dirname, "analyze.mjs"), "--slug", slug], {
+  // process.execPath is a system node when run via CLI, or Electron's bundled
+  // node when spawned by the app (ELECTRON_RUN_AS_NODE is inherited) — so this
+  // works in a packaged app with no `node` on PATH.
+  const baseline = spawnSync(process.execPath, [path.join(__dirname, "analyze.mjs"), "--slug", slug], {
     cwd: repoRoot,
     encoding: "utf8",
   });
@@ -216,10 +219,11 @@ async function main() {
   const active = resolveActiveStyle(projectDir, slug);
   if (active.analyzeArgs && !isAnalyzed(active.profile)) {
     console.log("PHASE learning your style");
-    const r = spawnSync("node", [path.join(__dirname, "analyze-collection.mjs"), ...active.analyzeArgs], {
-      cwd: repoRoot,
-      encoding: "utf8",
-    });
+    const r = spawnSync(
+      process.execPath,
+      [path.join(__dirname, "analyze-collection.mjs"), ...active.analyzeArgs],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
     if (r.status === 0) active.profile = readStyleMaybe(active.profilePath) ?? active.profile;
     // If analysis fails (e.g. no source clips), continue with whatever profile exists.
   }

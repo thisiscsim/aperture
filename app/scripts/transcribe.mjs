@@ -20,7 +20,9 @@ import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
-const WHISPER_DIR = path.join(repoRoot, ".whisper");
+// The app points this at userData/whisper so a packaged (read-only) bundle
+// never gets written into; CLI runs fall back to a gitignored repo dir.
+const WHISPER_DIR = process.env.APERTURE_WHISPER_DIR || path.join(repoRoot, ".whisper");
 const MODEL = "base.en";
 
 function arg(name) {

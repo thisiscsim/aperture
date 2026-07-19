@@ -14,3 +14,10 @@ dist/
 
 .env
 .env.local
+
+# whisper.cpp + model, fetched on first transcription (dev fallback location).
+.whisper/
+
+# Storybook (WIP tooling).
+storybook-static/
+*storybook.log
