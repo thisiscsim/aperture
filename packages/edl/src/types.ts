@@ -3,16 +3,21 @@ import type {
   AssetSchema,
   AudioClipSchema,
   AudioTrackSchema,
+  BenchmarkCompareSchema,
   BenchmarkFeatureSchema,
+  BenchmarkMetricSchema,
   BenchmarksSchema,
   CaptionTrackSchema,
   CaptionWordSchema,
+  CritiqueSchema,
   EdlSchema,
   FormatSchema,
   GradeSchema,
   MetaSchema,
+  SafeMarginsSchema,
   StyleExemplarSchema,
   StyleProfileSchema,
+  SubScoreSchema,
   TextAlignmentSchema,
   TextAnimSchema,
   TextClipSchema,
@@ -46,8 +51,13 @@ export type AudioClip = z.infer<typeof AudioClipSchema>;
 
 export type Meta = z.infer<typeof MetaSchema>;
 export type Grade = z.infer<typeof GradeSchema>;
+export type SafeMargins = z.infer<typeof SafeMarginsSchema>;
 export type TextAlignment = z.infer<typeof TextAlignmentSchema>;
 export type StyleProfile = z.infer<typeof StyleProfileSchema>;
 export type StyleExemplar = z.infer<typeof StyleExemplarSchema>;
 export type Benchmarks = z.infer<typeof BenchmarksSchema>;
 export type BenchmarkFeature = z.infer<typeof BenchmarkFeatureSchema>;
+export type BenchmarkMetric = z.infer<typeof BenchmarkMetricSchema>;
+export type BenchmarkCompare = z.infer<typeof BenchmarkCompareSchema>;
+export type SubScore = z.infer<typeof SubScoreSchema>;
+export type Critique = z.infer<typeof CritiqueSchema>;

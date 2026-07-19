@@ -1,5 +1,5 @@
-import { BenchmarksSchema, EdlSchema, MetaSchema, StyleProfileSchema } from "./schema.js";
-import type { Benchmarks, Edl, Meta, StyleProfile, Track } from "./types.js";
+import { BenchmarksSchema, CritiqueSchema, EdlSchema, MetaSchema, StyleProfileSchema } from "./schema.js";
+import type { Benchmarks, Critique, Edl, Meta, StyleProfile, Track } from "./types.js";
 
 export * from "./schema.js";
 export * from "./types.js";
@@ -40,6 +40,15 @@ export function parseStyleProfile(input: unknown): StyleProfile {
 /** Parse + validate (with defaults) a benchmarks.json feature summary. */
 export function parseBenchmarks(input: unknown): Benchmarks {
   return BenchmarksSchema.parse(input ?? {});
+}
+
+/**
+ * Parse + validate a critique.json. Returns null (rather than defaults) for
+ * invalid input — a critique with no real score is not worth rendering.
+ */
+export function parseCritique(input: unknown): Critique | null {
+  const result = CritiqueSchema.safeParse(input);
+  return result.success ? result.data : null;
 }
 
 /** Total duration in seconds = the latest end time across all tracks/clips. */
