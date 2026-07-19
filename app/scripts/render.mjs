@@ -8,14 +8,10 @@ import { bundle } from "@remotion/bundler";
 import { ensureBrowser, renderMedia, selectComposition } from "@remotion/renderer";
 import { parseEdl } from "@reel/edl";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
 
 async function main() {
   const slug = arg("slug");

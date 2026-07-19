@@ -18,17 +18,13 @@ import ffmpegPath from "ffmpeg-static";
 import { parseEdl } from "@reel/edl";
 import { alignmentToWords, preprocessForTts, synthesisHash } from "./tts-util.mjs";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const MODEL_ID = "eleven_multilingual_v2";
 const TARGET_LUFS = -14;
 const TARGET_TP = -1.5;
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
 
 // Two-pass loudnorm (ported from Claudia's normalize-audio.mjs): pass 1
 // measures, pass 2 applies with linear=true so it's gain-only and word

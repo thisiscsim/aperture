@@ -12,21 +12,10 @@ import { parseCritique, parseEdl } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { extractJson, metrics } from "./edl-util.mjs";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, readMaybe } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-function readMaybe(file) {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return "";
-  }
-}
 
 const SHAPE = `{
   "score": <0-100 int = sum of subscore scores>,

@@ -17,6 +17,7 @@ import {
 } from "@remotion/install-whisper-cpp";
 import { parseEdl } from "@reel/edl";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, round } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -24,12 +25,6 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 // never gets written into; CLI runs fall back to a gitignored repo dir.
 const WHISPER_DIR = process.env.APERTURE_WHISPER_DIR || path.join(repoRoot, ".whisper");
 const MODEL = "base.en";
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-const round = (n) => Math.round(n * 100) / 100;
 
 async function main() {
   const slug = arg("slug");
