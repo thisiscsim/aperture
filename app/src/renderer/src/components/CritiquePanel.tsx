@@ -34,7 +34,7 @@ export function CritiquePanel(): JSX.Element {
   const autotuning = useEditor((s) => s.autotuning);
   const setAutotuning = useEditor((s) => s.setAutotuning);
   const reloadProject = useEditor((s) => s.reloadProject);
-  const setNotice = useEditor((s) => s.setNotice);
+  const pushNotice = useEditor((s) => s.pushNotice);
 
   useEffect(() => {
     window.api
@@ -130,7 +130,7 @@ export function CritiquePanel(): JSX.Element {
           setSource("agent");
         }
       } else {
-        setNotice({ kind: "error", text: `Critique failed: ${res.error ?? "unknown error"}` });
+        pushNotice("error", `Critique failed: ${res.error ?? "unknown error"}`);
       }
     } finally {
       offPhase();
@@ -141,13 +141,12 @@ export function CritiquePanel(): JSX.Element {
   const onAutoTune = async () => {
     if (!slug || autotuning) return;
     setAutotuning(true);
-    setNotice(null);
     try {
       const res = await window.api.autoTune(slug);
       await reloadProject();
-      if (!res.ok) setNotice({ kind: "error", text: `Auto-improve failed: ${res.error ?? "unknown error"}` });
+      if (!res.ok) pushNotice("error", `Auto-improve failed: ${res.error ?? "unknown error"}`);
     } catch (err) {
-      setNotice({ kind: "error", text: `Auto-improve failed: ${String(err)}` });
+      pushNotice("error", `Auto-improve failed: ${String(err)}`);
     } finally {
       setAutotuning(false);
     }

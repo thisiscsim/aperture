@@ -21,7 +21,7 @@ export function LeftRail(): JSX.Element {
   const reloadProject = useEditor((s) => s.reloadProject);
   const generating = useEditor((s) => s.generating);
   const setGenerating = useEditor((s) => s.setGenerating);
-  const setNotice = useEditor((s) => s.setNotice);
+  const pushNotice = useEditor((s) => s.pushNotice);
 
   const [busy, setBusy] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -58,21 +58,20 @@ export function LeftRail(): JSX.Element {
   const onGenerate = async () => {
     if (!slug || generating) return;
     setGenerating(true);
-    setNotice(null);
     try {
       const res = await window.api.generateProject(slug);
       // Keep the canvas loader up until the fresh cut is actually loaded.
       await reloadProject();
       if (res.ok) {
-        setNotice({
-          kind: "info",
-          text: genMode.mode === "llm" ? `Generated with ${genMode.model}.` : "Assembled a baseline cut.",
-        });
+        pushNotice(
+          "info",
+          genMode.mode === "llm" ? `Generated with ${genMode.model}.` : "Assembled a baseline cut.",
+        );
       } else {
-        setNotice({ kind: "error", text: `Generate failed: ${res.error ?? "unknown error"}` });
+        pushNotice("error", `Generate failed: ${res.error ?? "unknown error"}`);
       }
     } catch (err) {
-      setNotice({ kind: "error", text: `Generate failed: ${String(err)}` });
+      pushNotice("error", `Generate failed: ${String(err)}`);
     } finally {
       setGenerating(false);
     }
@@ -139,10 +138,10 @@ export function LeftRail(): JSX.Element {
         });
         setAudioUrl("");
       } else {
-        setNotice({ kind: "error", text: `Couldn't fetch audio: ${res.error ?? "unknown error"}` });
+        pushNotice("error", `Couldn't fetch audio: ${res.error ?? "unknown error"}`);
       }
     } catch (err) {
-      setNotice({ kind: "error", text: `Couldn't fetch audio: ${String(err)}` });
+      pushNotice("error", `Couldn't fetch audio: ${String(err)}`);
     } finally {
       offPhase();
       offProgress();
@@ -361,7 +360,7 @@ export function LeftRail(): JSX.Element {
 function VoiceoverModal({ onClose }: { onClose: () => void }): JSX.Element {
   const slug = useEditor((s) => s.slug);
   const reloadProject = useEditor((s) => s.reloadProject);
-  const setNotice = useEditor((s) => s.setNotice);
+  const pushNotice = useEditor((s) => s.pushNotice);
   const [voices, setVoices] = useState<VoiceSummary[]>([]);
   const [voiceId, setVoiceId] = useState("");
   const [configured, setConfigured] = useState(true);
@@ -404,7 +403,7 @@ function VoiceoverModal({ onClose }: { onClose: () => void }): JSX.Element {
       if (res.ok) {
         setScript(await window.api.loadNarration(slug));
       } else {
-        setNotice({ kind: "error", text: `Drafting failed: ${res.error ?? "unknown error"}` });
+        pushNotice("error", `Drafting failed: ${res.error ?? "unknown error"}`);
       }
     } finally {
       offPhase();
@@ -422,10 +421,10 @@ function VoiceoverModal({ onClose }: { onClose: () => void }): JSX.Element {
       const res = await window.api.generateVoiceover(slug, voiceId);
       if (res.ok) {
         reloadProject();
-        setNotice({ kind: "info", text: "Voiceover added with captions." });
+        pushNotice("info", "Voiceover added with captions.");
         onClose();
       } else {
-        setNotice({ kind: "error", text: `Voiceover failed: ${res.error ?? "unknown error"}` });
+        pushNotice("error", `Voiceover failed: ${res.error ?? "unknown error"}`);
       }
     } finally {
       offPhase();

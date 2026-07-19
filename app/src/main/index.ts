@@ -32,6 +32,7 @@ import {
   shell,
 } from "electron";
 import ffmpegPath from "ffmpeg-static";
+import { installCrashHandlers, logger, logsDir, openScriptLog } from "./logger";
 import {
   type Benchmarks,
   durationSeconds,
@@ -127,6 +128,10 @@ let mainWindow: BrowserWindow | null = null;
 // to "Electron" in dev. Set it before the default menu is built. (Packaging
 // later should also set productName in the builder config.)
 app.setName("Aperture");
+
+// Record throws/rejections to the log file before anything else runs.
+installCrashHandlers();
+logger.info(`Aperture ${app.getVersion()} starting (electron ${process.versions.electron})`);
 
 // Two instances would both watch and write the same edl.json/settings.json/
 // albums.json; refuse to start a second one and focus the first instead.
@@ -352,6 +357,10 @@ function createWindow(): void {
 
   mainWindow = win;
   win.on("ready-to-show", () => win.show());
+  win.webContents.on("render-process-gone", (_e, details) => {
+    logger.error(`render-process-gone: ${details.reason} (exitCode ${details.exitCode})`);
+  });
+  win.webContents.on("unresponsive", () => logger.warn("renderer unresponsive"));
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
     // On macOS the process outlives the window; don't leave the last
@@ -1139,11 +1148,15 @@ function runScriptArgs(
   channelPrefix: string,
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
   return new Promise((resolve) => {
+    const runLog = openScriptLog(channelPrefix);
+    logger.info(`script ${channelPrefix} start: ${basename(scriptPath)} ${args.join(" ")} -> ${runLog.path}`);
     const child = spawn("node", [scriptPath, ...args], { cwd: REPO_ROOT, env: process.env });
     let output = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
-      for (const line of chunk.toString().split("\n")) {
+      const text = chunk.toString();
+      runLog.append(text);
+      for (const line of text.split("\n")) {
         const progress = line.match(/PROGRESS (\d+)/);
         if (progress) event.sender.send(`${channelPrefix}:progress`, Number(progress[1]));
         const phase = line.match(/PHASE (.+)/);
@@ -1152,12 +1165,28 @@ function runScriptArgs(
         if (done) output = done[1].trim();
       }
     });
-    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-    child.on("close", (code) => {
-      if (code === 0) resolve({ ok: true, output });
-      else resolve({ ok: false, error: stderr.trim() || `Process exited with code ${code}` });
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderr += text;
+      runLog.append(text);
     });
-    child.on("error", (err) => resolve({ ok: false, error: String(err) }));
+    child.on("close", (code) => {
+      runLog.close(code);
+      if (code === 0) {
+        logger.info(`script ${channelPrefix} ok`);
+        resolve({ ok: true, output });
+      } else {
+        logger.warn(
+          `script ${channelPrefix} failed (exit ${code}): ${stderr.trim().split("\n").pop() ?? ""}`,
+        );
+        resolve({ ok: false, error: stderr.trim() || `Process exited with code ${code}` });
+      }
+    });
+    child.on("error", (err) => {
+      runLog.close(null);
+      logger.error(`script ${channelPrefix} spawn error`, err);
+      resolve({ ok: false, error: String(err) });
+    });
   });
 }
 
@@ -1707,6 +1736,21 @@ app.whenReady().then(() => {
     const roots = [PROJECTS_DIR, STYLES_DIR, APP_HOME].map(normalize);
     if (!roots.some((r) => target === r || target.startsWith(r + sep))) return;
     shell.showItemInFolder(target);
+  });
+  // Runtime build metadata so a bug report can be correlated to a version.
+  ipcMain.handle("app:info", () => ({
+    version: app.getVersion(),
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+    platform: `${process.platform} ${process.arch}`,
+    logsDir: logsDir(),
+  }));
+  // Let the renderer persist its own errors (window.onerror, boundary) to the
+  // shared log file — otherwise they only reach a usually-closed DevTools.
+  ipcMain.handle("log:renderer", (_event, level: string, message: string) => {
+    const fn = level === "error" ? logger.error : level === "warn" ? logger.warn : logger.info;
+    fn(`[renderer] ${message}`);
   });
 
   createWindow();

@@ -93,13 +93,13 @@ async function persist(slug: string, edl: Edl): Promise<void> {
   if (res && res.ok === false) {
     // The edit only exists in memory; keep the dirty flag and tell the user
     // instead of silently diverging from disk.
-    useEditor.setState({
-      saveError: res.error ?? "unknown error",
-      notice: {
-        kind: "error",
-        text: `Autosave failed — latest edits are not on disk (${res.error ?? "unknown error"})`,
-      },
-    });
+    useEditor.setState({ saveError: res.error ?? "unknown error" });
+    useEditor
+      .getState()
+      .pushNotice(
+        "error",
+        `Autosave failed — latest edits are not on disk (${res.error ?? "unknown error"})`,
+      );
     return;
   }
   // Clear dirty only if nothing newer is in flight and the store still holds
@@ -199,7 +199,8 @@ interface EditorState {
 
   generating: boolean;
   autotuning: boolean;
-  notice: { kind: "error" | "info"; text: string } | null;
+  /** Toast queue: concurrent operations no longer overwrite each other's messages. */
+  notices: Notice[];
   /** Returns a promise so callers can hold busy state until the load lands. */
   reloadProject: () => void | Promise<void>;
 
@@ -250,9 +251,18 @@ interface EditorState {
 
   setGenerating: (value: boolean) => void;
   setAutotuning: (value: boolean) => void;
-  setNotice: (notice: { kind: "error" | "info"; text: string } | null) => void;
+  /** Enqueue a toast; returns its id. Errors persist until dismissed, info auto-dismisses. */
+  pushNotice: (kind: "error" | "info", text: string) => number;
+  dismissNotice: (id: number) => void;
   setReload: (fn: () => void | Promise<void>) => void;
 }
+
+export interface Notice {
+  id: number;
+  kind: "error" | "info";
+  text: string;
+}
+let noticeSeq = 0;
 
 export const useEditor = create<EditorState>()((set, get) => ({
   view: "home",
@@ -284,7 +294,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   generating: false,
   autotuning: false,
-  notice: null,
+  notices: [],
   reloadProject: () => {},
 
   setView: (view) => set({ view }),
@@ -302,7 +312,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       selectedClipId: null,
       currentFrame: 0,
       playing: false,
-      notice: null,
+      notices: [],
       rightTab: "inspector",
     });
   },
@@ -323,7 +333,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       selectedClipId: null,
       currentFrame: 0,
       playing: false,
-      notice: null,
+      notices: [],
       rightTab: "inspector",
       edlPast: [],
       edlFuture: [],
@@ -440,7 +450,13 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   setGenerating: (value) => set({ generating: value }),
   setAutotuning: (value) => set({ autotuning: value }),
-  setNotice: (notice) => set({ notice }),
+  pushNotice: (kind, text) => {
+    const id = ++noticeSeq;
+    // Cap the queue so a runaway error loop can't grow it without bound.
+    set((s) => ({ notices: [...s.notices, { id, kind, text }].slice(-5) }));
+    return id;
+  },
+  dismissNotice: (id) => set((s) => ({ notices: s.notices.filter((n) => n.id !== id) })),
   setReload: (fn) => set({ reloadProject: fn }),
 }));
 
