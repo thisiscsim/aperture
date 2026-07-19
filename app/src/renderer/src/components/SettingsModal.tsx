@@ -262,6 +262,7 @@ function VoicesTab({
   const [cloneError, setCloneError] = useState<string | null>(null);
   const sampleInput = useRef<HTMLInputElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
+  const micStream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
 
   const refresh = useCallback(() => {
@@ -287,6 +288,15 @@ function VoicesTab({
     refresh();
   };
 
+  // Closing the Settings modal while recording must release the mic and the
+  // MediaRecorder instead of leaking them.
+  useEffect(() => {
+    return () => {
+      recorder.current?.stop();
+      micStream.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
   const toggleRecord = async () => {
     if (isRecording) {
       recorder.current?.stop();
@@ -296,11 +306,13 @@ function VoicesTab({
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream.current = stream;
       const mr = new MediaRecorder(stream);
       chunks.current = [];
       mr.ondataavailable = (e) => e.data.size > 0 && chunks.current.push(e.data);
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        micStream.current = null;
         const blob = new Blob(chunks.current, { type: "audio/webm" });
         setRecording({ name: `sample-${Date.now()}.webm`, data: new Uint8Array(await blob.arrayBuffer()) });
       };

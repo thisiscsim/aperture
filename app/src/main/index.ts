@@ -16,6 +16,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { mkdtempSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
@@ -115,6 +116,12 @@ function isSafeExternalUrl(url: string): boolean {
 
 function safeProjectPath(slug: string, ...rel: string[]): string {
   return safePath(PROJECTS_DIR, [slug, ...rel]);
+}
+
+const SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+/** Throw on a malformed renderer-supplied slug (handlers convert to {ok,error}). */
+function assertSlug(slug: string): void {
+  if (typeof slug !== "string" || !SLUG_RE.test(slug)) throw new Error("invalid project id");
 }
 
 function safeStylePath(id: string, ...rel: string[]): string {
@@ -464,7 +471,9 @@ function writeEdl(slug: string, edl: Edl): { ok: boolean; error?: string } {
 
 function touchMeta(slug: string, patch: Partial<ReturnType<typeof readMeta>>): void {
   try {
-    const meta = { ...readMeta(slug), ...patch, updatedAt: new Date().toISOString() };
+    // Re-validate the merged result so an arbitrary renderer patch can't write
+    // unknown keys / out-of-range values into meta.json (parseMeta drops them).
+    const meta = parseMeta({ ...readMeta(slug), ...patch, updatedAt: new Date().toISOString() });
     writeFileAtomic(safeProjectPath(slug, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
   } catch {
     // meta is best-effort
@@ -615,47 +624,61 @@ function slugify(name: string): string {
   );
 }
 
-function listProjects(): ProjectSummary[] {
+// Async + parallel: every ipcMain handler runs on the main (UI) thread, and
+// this reads/parses every project's edl.json + meta.json. Doing it serially
+// with sync fs blocked the event loop (janking the window) once a user had
+// many projects. fs/promises + Promise.all yields between reads.
+async function listProjects(): Promise<ProjectSummary[]> {
   let entries: string[];
   try {
-    entries = readdirSync(PROJECTS_DIR);
+    entries = await readdir(PROJECTS_DIR);
   } catch {
     return [];
   }
-  const summaries: ProjectSummary[] = [];
-  for (const slug of entries) {
-    const edlFile = join(PROJECTS_DIR, slug, "edl.json");
-    if (!existsSync(edlFile)) continue;
-    let durationSec = 0;
-    let assetCount = 0;
-    try {
-      const parsed = parseEdl(readJson(edlFile));
-      if (parsed.ok && parsed.edl) {
-        durationSec = durationSeconds(parsed.edl);
-        assetCount = parsed.edl.assets.length;
+  const summaries = await Promise.all(
+    entries.map(async (slug): Promise<ProjectSummary | null> => {
+      const edlFile = join(PROJECTS_DIR, slug, "edl.json");
+      let durationSec = 0;
+      let assetCount = 0;
+      try {
+        const parsed = parseEdl(JSON.parse(await readFile(edlFile, "utf8")));
+        if (parsed.ok && parsed.edl) {
+          durationSec = durationSeconds(parsed.edl);
+          assetCount = parsed.edl.assets.length;
+        }
+      } catch {
+        // no edl.json (not a project dir) or unreadable — skip listing it
+        if (!existsSync(edlFile)) return null;
       }
-    } catch {
-      // skip unreadable edl, still list the project
-    }
-    const meta = readMeta(slug);
-    let updatedAt = meta.updatedAt;
-    try {
-      if (!updatedAt) updatedAt = statSync(edlFile).mtime.toISOString();
-    } catch {
-      // ignore
-    }
-    summaries.push({
-      slug,
-      title: meta.title || slug,
-      platform: meta.platform,
-      status: meta.status,
-      durationSec,
-      assetCount,
-      updatedAt,
-      albumId: meta.albumId,
-    });
-  }
-  return summaries.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+      let meta: ReturnType<typeof readMeta>;
+      try {
+        meta = parseMeta(JSON.parse(await readFile(join(PROJECTS_DIR, slug, "meta.json"), "utf8")));
+      } catch {
+        meta = parseMeta({});
+      }
+      let updatedAt = meta.updatedAt;
+      if (!updatedAt) {
+        try {
+          updatedAt = (await stat(edlFile)).mtime.toISOString();
+        } catch {
+          // leave undefined
+        }
+      }
+      return {
+        slug,
+        title: meta.title || slug,
+        platform: meta.platform,
+        status: meta.status,
+        durationSec,
+        assetCount,
+        updatedAt,
+        albumId: meta.albumId,
+      };
+    }),
+  );
+  return summaries
+    .filter((s): s is ProjectSummary => s !== null)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 }
 
 function createProject(input: {
@@ -729,8 +752,57 @@ function findFirstVideoSrc(slug: string): string | null {
   return null;
 }
 
+/**
+ * Run ffmpeg with an argv array (never a shell string) and a hard timeout so a
+ * malformed/hostile media file can't hang a spawn forever (a stuck process was
+ * otherwise never reaped). Resolves true on exit code 0.
+ */
+function runFfmpeg(args: string[], timeoutMs = 120_000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!ffmpegPath) return resolve(false);
+    const child = spawn(ffmpegPath as string, args);
+    const timer = setTimeout(() => {
+      logger.warn(`ffmpeg timed out after ${timeoutMs}ms; killing`);
+      child.kill("SIGKILL");
+      resolve(false);
+    }, timeoutMs);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve(code === 0);
+    });
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      logger.warn("ffmpeg spawn error", err);
+      resolve(false);
+    });
+  });
+}
+
+// Bound concurrent proxy encodes: importing N videos previously fired N
+// ffmpeg processes at once, saturating CPU/memory. Run at most 2 at a time.
+const PROXY_CONCURRENCY = 2;
+let proxyActive = 0;
+const proxyQueue: (() => void)[] = [];
+function enqueueProxy(task: () => Promise<void>): void {
+  const run = () => {
+    proxyActive++;
+    void task().finally(() => {
+      proxyActive--;
+      const next = proxyQueue.shift();
+      if (next) next();
+    });
+  };
+  if (proxyActive < PROXY_CONCURRENCY) run();
+  else proxyQueue.push(run);
+}
+
 // Generate (and cache) a poster frame for the project's first video clip.
 async function ensureThumbnail(slug: string): Promise<string | null> {
+  try {
+    assertSlug(slug);
+  } catch {
+    return null;
+  }
   const thumb = safeProjectPath(slug, ".thumb.jpg");
   const edlFile = safeProjectPath(slug, "edl.json");
   try {
@@ -743,22 +815,10 @@ async function ensureThumbnail(slug: string): Promise<string | null> {
   const src = findFirstVideoSrc(slug);
   if (!src || !ffmpegPath) return null;
   const input = safeProjectPath(slug, src);
-  const ok = await new Promise<boolean>((resolve) => {
-    const child = spawn(ffmpegPath as string, [
-      "-y",
-      "-ss",
-      "0.8",
-      "-i",
-      input,
-      "-frames:v",
-      "1",
-      "-vf",
-      "scale=360:-1",
-      thumb,
-    ]);
-    child.on("close", (code) => resolve(code === 0));
-    child.on("error", () => resolve(false));
-  });
+  const ok = await runFfmpeg(
+    ["-y", "-ss", "0.8", "-i", input, "-frames:v", "1", "-vf", "scale=360:-1", thumb],
+    30_000,
+  );
   return ok ? `reel-asset://${slug}/.thumb.jpg` : null;
 }
 
@@ -776,12 +836,23 @@ function probeDurationSec(file: string): Promise<number | undefined> {
     if (!ffmpegPath) return resolve(undefined);
     const child = spawn(ffmpegPath as string, ["-i", file]);
     let err = "";
+    let settled = false;
+    const finish = (v: number | undefined) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(undefined);
+    }, 30_000);
     child.stderr.on("data", (c: Buffer) => (err += c.toString()));
     child.on("close", () => {
       const m = err.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-      resolve(m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : undefined);
+      finish(m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : undefined);
     });
-    child.on("error", () => resolve(undefined));
+    child.on("error", () => finish(undefined));
   });
 }
 
@@ -818,8 +889,9 @@ async function generateProxy(slug: string, assetSrc: string, id: string): Promis
   const outDir = safeProjectPath(slug, "assets", ".proxies");
   mkdirSync(outDir, { recursive: true });
   const out = join(outDir, `${id}.mp4`);
-  const ok = await new Promise<boolean>((resolve) => {
-    const child = spawn(ffmpegPath as string, [
+  // Proxy transcodes are the heaviest ffmpeg job here; give them a longer cap.
+  const ok = await runFfmpeg(
+    [
       "-y",
       "-i",
       input,
@@ -835,10 +907,9 @@ async function generateProxy(slug: string, assetSrc: string, id: string): Promis
       "-movflags",
       "+faststart",
       out,
-    ]);
-    child.on("close", (code) => resolve(code === 0));
-    child.on("error", () => resolve(false));
-  });
+    ],
+    600_000,
+  );
   if (ok) patchAssetProxy(slug, id, proxyRel(id));
 }
 // Retry-patch: the renderer's autosave may not have written the new asset yet.
@@ -863,34 +934,45 @@ function patchAssetProxy(slug: string, id: string, proxySrc: string, attempt = 0
 async function importAssets(
   slug: string,
   paths: string[],
-): Promise<{ ok: boolean; assets: ImportedAsset[] }> {
-  const dir = safeProjectPath(slug, "assets");
-  mkdirSync(dir, { recursive: true });
-  const added: ImportedAsset[] = [];
-  for (const p of paths) {
-    if (!assetKindFor(p)) continue;
-    const { name, dest } = uniqueDest(dir, basename(p));
-    copyFileSync(p, dest);
-    const desc = await describeAsset(dir, name);
-    if (desc) {
-      added.push(desc);
-      if (desc.kind === "video") void generateProxy(slug, desc.src, desc.id);
+): Promise<{ ok: boolean; assets: ImportedAsset[]; error?: string }> {
+  try {
+    assertSlug(slug);
+    const dir = safeProjectPath(slug, "assets");
+    mkdirSync(dir, { recursive: true });
+    const added: ImportedAsset[] = [];
+    for (const p of paths) {
+      if (!assetKindFor(p)) continue;
+      const { name, dest } = uniqueDest(dir, basename(p));
+      copyFileSync(p, dest);
+      const desc = await describeAsset(dir, name);
+      if (desc) {
+        added.push(desc);
+        if (desc.kind === "video") enqueueProxy(() => generateProxy(slug, desc.src, desc.id));
+      }
     }
+    return { ok: true, assets: added };
+  } catch (err) {
+    return { ok: false, assets: [], error: String(err) };
   }
-  return { ok: true, assets: added };
 }
 
 async function importAssetBuffer(
   slug: string,
   filename: string,
   data: Uint8Array,
-): Promise<{ ok: boolean; assets: ImportedAsset[] }> {
-  const dir = safeProjectPath(slug, "assets");
-  mkdirSync(dir, { recursive: true });
-  const { name, dest } = uniqueDest(dir, filename);
-  writeFileSync(dest, Buffer.from(data));
-  const desc = await describeAsset(dir, name);
-  return { ok: true, assets: desc ? [desc] : [] };
+): Promise<{ ok: boolean; assets: ImportedAsset[]; error?: string }> {
+  try {
+    assertSlug(slug);
+    if (basename(filename) !== filename) throw new Error("invalid filename");
+    const dir = safeProjectPath(slug, "assets");
+    mkdirSync(dir, { recursive: true });
+    const { name, dest } = uniqueDest(dir, filename);
+    writeFileSync(dest, Buffer.from(data));
+    const desc = await describeAsset(dir, name);
+    return { ok: true, assets: desc ? [desc] : [] };
+  } catch (err) {
+    return { ok: false, assets: [], error: String(err) };
+  }
 }
 
 function listBundledMusic(): string[] {
@@ -961,11 +1043,7 @@ async function listVoices(): Promise<{ ok: boolean; voices: VoiceSummary[]; erro
 async function transcodeSampleToMp3(input: string, outDir: string, stem: string): Promise<string | null> {
   if (!ffmpegPath) return null;
   const out = join(outDir, `${stem}.mp3`);
-  const ok = await new Promise<boolean>((resolve) => {
-    const child = spawn(ffmpegPath as string, ["-y", "-i", input, "-ac", "1", "-b:a", "128k", out]);
-    child.on("close", (code) => resolve(code === 0));
-    child.on("error", () => resolve(false));
-  });
+  const ok = await runFfmpeg(["-y", "-i", input, "-ac", "1", "-b:a", "128k", out], 120_000);
   return ok ? out : null;
 }
 
@@ -1126,17 +1204,26 @@ async function importAudioFromUrl(
   }
 }
 
-function importInto(slug: string, sub: string, paths: string[]): { ok: boolean; files: string[] } {
-  const dir = safeProjectPath(slug, sub);
-  mkdirSync(dir, { recursive: true });
-  const files: string[] = [];
-  for (const p of paths) {
-    if (assetKindFor(p) !== "video") continue;
-    const { name, dest } = uniqueDest(dir, basename(p));
-    copyFileSync(p, dest);
-    files.push(name);
+function importInto(
+  slug: string,
+  sub: string,
+  paths: string[],
+): { ok: boolean; files: string[]; error?: string } {
+  try {
+    assertSlug(slug);
+    const dir = safeProjectPath(slug, sub);
+    mkdirSync(dir, { recursive: true });
+    const files: string[] = [];
+    for (const p of paths) {
+      if (assetKindFor(p) !== "video") continue;
+      const { name, dest } = uniqueDest(dir, basename(p));
+      copyFileSync(p, dest);
+      files.push(name);
+    }
+    return { ok: true, files };
+  } catch (err) {
+    return { ok: false, files: [], error: String(err) };
   }
-  return { ok: true, files };
 }
 
 // Spawn a Node script with arbitrary args, streaming its PHASE/PROGRESS/DONE
@@ -1468,8 +1555,13 @@ app.whenReady().then(() => {
   ipcMain.handle("project:delete", (_event, slug: string) => deleteProject(slug));
   ipcMain.handle("project:load", (_event, slug: string) => loadProject(slug));
   ipcMain.handle("project:watch", (event, slug: string) => {
-    watchProject(slug, event);
-    return { ok: true };
+    try {
+      assertSlug(slug);
+      watchProject(slug, event);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
   });
   ipcMain.handle("edl:save", (_event, slug: string, edl: Edl) => writeEdl(slug, edl));
   ipcMain.handle("prompt:save", (_event, slug: string, text: string) => {
@@ -1584,7 +1676,9 @@ app.whenReady().then(() => {
         if (id && existsSync(safeStylePath(id, "profile.json"))) file = safeStylePath(id, "profile.json");
       }
       if (!file) return { ok: false, error: "no active style profile" };
-      const profile = { ...(readJson(file) as Record<string, unknown>), ...patch };
+      // Validate the merged profile before persisting — its values are stamped
+      // into EDL themes, so a bad patch (e.g. a url() palette) must be rejected.
+      const profile = parseStyleProfile({ ...(readJson(file) as Record<string, unknown>), ...patch });
       writeFileAtomic(file, `${JSON.stringify(profile, null, 2)}\n`);
       return { ok: true };
     } catch (err) {
