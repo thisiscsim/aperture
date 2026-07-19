@@ -76,6 +76,39 @@ describe("Home albums", () => {
     await waitFor(() => expect(window.api.setProjectAlbum).toHaveBeenCalledWith("napa", "wine-country"));
   });
 
+  it("Rename project opens the dialog and saves the new title", async () => {
+    vi.mocked(window.api.listProjects).mockResolvedValue([
+      {
+        slug: "napa",
+        title: "Birthday in Napa Valley",
+        platform: "reels",
+        status: "draft",
+        durationSec: 24.9,
+        assetCount: 3,
+        updatedAt: "2026-07-18T00:00:00Z",
+      },
+    ]);
+    vi.mocked(window.api.saveMeta).mockResolvedValue({ ok: true });
+    useEditor.setState({ view: "home", projects: [] });
+    render(<Home />);
+
+    fireEvent.click(await screen.findByLabelText("Options for Birthday in Napa Valley"));
+    fireEvent.click(screen.getByText("Rename project"));
+    const input = screen.getByDisplayValue("Birthday in Napa Valley");
+    fireEvent.change(input, { target: { value: "Napa, day one" } });
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(window.api.saveMeta).toHaveBeenCalledWith("napa", { title: "Napa, day one" }));
+  });
+
+  it("shows a centered empty state on the Albums tab", async () => {
+    vi.mocked(window.api.listProjects).mockResolvedValue([]);
+    vi.mocked(window.api.listAlbums).mockResolvedValue([]);
+    useEditor.setState({ view: "home", projects: [] });
+    render(<Home />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Albums" }));
+    expect(screen.getByText("No albums yet")).toBeInTheDocument();
+  });
+
   it("filters tiles by search query", async () => {
     vi.mocked(window.api.listProjects).mockResolvedValue([
       {
