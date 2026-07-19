@@ -8,97 +8,21 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
-import { spawnSync } from "node:child_process";
-import ffmpegPath from "ffmpeg-static";
 import { parseStyleProfile } from "@reel/edl";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, round } from "./lib/cli.mjs";
+import { avgPalette, durationSec, countCuts, paletteAt } from "./lib/ffmpeg.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
 
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-
-const round = (n) => Math.round(n * 100) / 100;
 const median = (xs) => {
   if (xs.length === 0) return undefined;
   const s = [...xs].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
-const toHex = (r, g, b) =>
-  "#" + [r, g, b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("");
-
-function durationSec(file) {
-  const res = spawnSync(ffmpegPath, ["-i", file], { encoding: "utf8" });
-  const m = (res.stderr || "").match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
-}
-
-// Count hard cuts via ffmpeg scene-change detection.
-function countCuts(file) {
-  const res = spawnSync(
-    ffmpegPath,
-    ["-i", file, "-vf", "select='gt(scene,0.4)',showinfo", "-f", "null", "-"],
-    { encoding: "utf8", maxBuffer: 1 << 26 },
-  );
-  const matches = (res.stderr || "").match(/pts_time:/g);
-  return matches ? matches.length : 0;
-}
-
-// Crude 3-swatch palette: one mid-clip frame downscaled to 3x1 raw RGB.
-function paletteFor(file, atSec) {
-  try {
-    const res = spawnSync(
-      ffmpegPath,
-      [
-        "-ss",
-        String(atSec),
-        "-i",
-        file,
-        "-frames:v",
-        "1",
-        "-vf",
-        "scale=3:1",
-        "-f",
-        "rawvideo",
-        "-pix_fmt",
-        "rgb24",
-        "-",
-      ],
-      { maxBuffer: 1 << 20 },
-    );
-    const buf = res.stdout;
-    if (!buf || buf.length < 9) return [];
-    return [0, 3, 6].map((o) => toHex(buf[o], buf[o + 1], buf[o + 2]));
-  } catch {
-    return [];
-  }
-}
-
-function avgPalette(palettes) {
-  const valid = palettes.filter((p) => p.length === 3);
-  if (valid.length === 0) return [];
-  const acc = [
-    [0, 0, 0],
-    [0, 0, 0],
-    [0, 0, 0],
-  ];
-  for (const p of valid) {
-    p.forEach((hex, i) => {
-      const n = parseInt(hex.slice(1), 16);
-      acc[i][0] += (n >> 16) & 255;
-      acc[i][1] += (n >> 8) & 255;
-      acc[i][2] += n & 255;
-    });
-  }
-  return acc.map(([r, g, b]) =>
-    toHex(Math.round(r / valid.length), Math.round(g / valid.length), Math.round(b / valid.length)),
-  );
-}
 
 async function main() {
   const slug = arg("slug");
@@ -126,7 +50,7 @@ async function main() {
       cutsPer10s.push((cuts / dur) * 10);
       shotLens.push(dur / (cuts + 1));
       lengths.push(dur);
-      palettes.push(paletteFor(file, Math.max(0.5, dur / 2)));
+      palettes.push(paletteAt(file, Math.max(0.5, dur / 2)));
     }
     done++;
     console.log(`PROGRESS ${Math.round((done / videos.length) * 100)}`);

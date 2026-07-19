@@ -16,32 +16,13 @@ import { parseEdl, parseStyleProfile } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { ANIM_NAMES, enforceStyle, extractJson, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, readMaybe, readJsonMaybe } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 // Reasoning models spend tokens on hidden reasoning before the JSON, so give
 // the completion generous headroom.
 const MAX_OUTPUT_TOKENS = 16000;
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-
-function readMaybe(file) {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return "";
-  }
-}
-function readJsonMaybe(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return null;
-  }
-}
 
 // style.json / profile.json are shareable files whose values get stamped into
 // the EDL (enforceStyle) and spliced into prompts — never use one unvalidated.

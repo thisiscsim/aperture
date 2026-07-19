@@ -6,46 +6,14 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
-import { spawnSync } from "node:child_process";
-import ffmpegPath from "ffmpeg-static";
 import { parseBenchmarks } from "@reel/edl";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, round } from "./lib/cli.mjs";
+import { durationSec, loudnessLufs, sceneTimes } from "./lib/ffmpeg.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-const round = (n) => Math.round(n * 100) / 100;
-
-function durationSec(file) {
-  const res = spawnSync(ffmpegPath, ["-i", file], { encoding: "utf8" });
-  const m = (res.stderr || "").match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
-}
-
-// Scene-change timestamps (seconds) via ffmpeg detection.
-function sceneTimes(file) {
-  const res = spawnSync(
-    ffmpegPath,
-    ["-i", file, "-vf", "select='gt(scene,0.4)',showinfo", "-f", "null", "-"],
-    { encoding: "utf8", maxBuffer: 1 << 26 },
-  );
-  return [...(res.stderr || "").matchAll(/pts_time:(\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
-}
-
-// Integrated loudness (LUFS) via ebur128.
-function loudnessLufs(file) {
-  const res = spawnSync(ffmpegPath, ["-i", file, "-af", "ebur128", "-f", "null", "-"], {
-    encoding: "utf8",
-    maxBuffer: 1 << 26,
-  });
-  const matches = [...(res.stderr || "").matchAll(/I:\s*(-?\d+(?:\.\d+)?)\s*LUFS/g)];
-  return matches.length ? Number(matches[matches.length - 1][1]) : undefined;
-}
 
 function stats(xs) {
   const vals = xs.filter((x) => typeof x === "number" && Number.isFinite(x));

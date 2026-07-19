@@ -12,6 +12,7 @@ import fs from "node:fs";
 import { parseMedia } from "@remotion/media-parser";
 import { nodeReader } from "@remotion/media-parser/node";
 import { parseEdl } from "@reel/edl";
+import { arg, round, sanitizeAssetId } from "./lib/cli.mjs";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,13 +23,6 @@ const VIDEO_EXT = new Set([".mp4", ".mov", ".m4v"]);
 const AUDIO_EXT = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg"]);
 const AMBIGUOUS_EXT = new Set([".webm"]);
 const CAP_SEC = 4;
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-
-const round = (n) => Math.round(n * 100) / 100;
 
 async function main() {
   const slug = arg("slug");
@@ -77,7 +71,8 @@ async function main() {
       reader: nodeReader,
       acknowledgeRemotionLicense: true,
     });
-    const id = path.basename(f, path.extname(f));
+    // Match the app importer's id derivation so re-probing doesn't fork assets.
+    const id = sanitizeAssetId(f);
     assets.push({
       id,
       kind: "video",
@@ -123,7 +118,7 @@ async function main() {
       acknowledgeRemotionLicense: true,
     });
     assets.push({
-      id: path.basename(f, path.extname(f)),
+      id: sanitizeAssetId(f),
       kind: "audio",
       src: `assets/${f}`,
       durationSec: meta.durationInSeconds ?? undefined,

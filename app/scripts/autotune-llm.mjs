@@ -13,21 +13,11 @@ import { parseEdl } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { ANIM_NAMES, extractJson, metrics, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, readMaybe, tsvCell } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-function readMaybe(file) {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return "";
-  }
-}
+const clampScore = (n) => Math.min(100, Math.max(0, Math.round(n)));
 
 function buildPrompt({ edlJson, metricsJson, promptMd, styleJson, benchmarksJson }) {
   return [
@@ -96,6 +86,10 @@ async function main() {
   let edl = initial.edl;
   let prev = null;
   let stagnant = 0;
+  // Deterministic plateau signal: the model's self-reported score can't be
+  // trusted (a hostile/confused cut could claim 100 to stop early), so also
+  // track whether the structural metrics actually changed between iterations.
+  let prevSig = JSON.stringify(metrics(edl));
 
   for (let i = 1; i <= maxIterations; i++) {
     console.log(`PHASE iteration ${i}/${maxIterations} (${provider}/${model})`);
@@ -127,8 +121,10 @@ async function main() {
       console.log(`PHASE iteration ${i} produced invalid edl, stopping`);
       break;
     }
-    const score = typeof out.score === "number" ? Math.round(out.score) : (prev ?? 0);
-    const change = typeof out.change === "string" ? out.change.slice(0, 120) : "revised edit";
+    // Clamp the model's self-reported score to a sane range, and escape the
+    // change note so tabs/newlines can't shift results.tsv columns.
+    const score = typeof out.score === "number" ? clampScore(out.score) : (prev ?? 0);
+    const change = tsvCell(typeof out.change === "string" ? out.change.slice(0, 120) : "revised edit");
 
     // Never let an improvement pass silently drop the music bed / voiceover.
     // restoreAudioTracks runs after the schema gate, so re-validate before the
@@ -150,10 +146,15 @@ async function main() {
       prev = score;
       break;
     }
-    if (prev != null && delta < 2) {
+    // Stop when the cut stops actually changing (deterministic) OR the reported
+    // score plateaus — whichever fires first.
+    const sig = JSON.stringify(metrics(edl));
+    const unchanged = sig === prevSig;
+    prevSig = sig;
+    if (unchanged || (prev != null && delta < 2)) {
       stagnant++;
       if (stagnant >= 2) {
-        console.log("PHASE score plateaued");
+        console.log(unchanged ? "PHASE no structural change" : "PHASE score plateaued");
         prev = score;
         break;
       }

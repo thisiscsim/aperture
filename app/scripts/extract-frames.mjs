@@ -8,23 +8,23 @@ import path from "node:path";
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
+import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
 const FRAMES_PER_CLIP = 8;
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
+// --dir is restricted to the known media subfolders so it can't traverse.
+const SUBDIRS = new Set(["references", "benchmarks", "assets"]);
 
 async function main() {
   const slug = arg("slug");
   if (!slug) throw new Error("missing --slug");
   const sub = arg("dir") ?? "references";
+  if (!SUBDIRS.has(sub)) throw new Error(`invalid --dir: ${sub}`);
 
-  const dir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug, sub);
+  const dir = path.join(resolveProjectDir(repoRoot, slug), sub);
   const framesDir = path.join(dir, ".frames");
   fs.mkdirSync(framesDir, { recursive: true });
 

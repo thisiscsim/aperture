@@ -9,15 +9,10 @@ import path from "node:path";
 import fs from "node:fs";
 import { parseBenchmarks, parseEdl } from "@reel/edl";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, round, tsvCell } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-const round = (n) => Math.round(n * 100) / 100;
 
 function videoClips(edl) {
   return edl.tracks.filter((t) => t.type === "video").flatMap((t) => t.clips);
@@ -210,7 +205,7 @@ async function main() {
     fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
     fs.appendFileSync(
       resultsPath,
-      `${i}\t${changed.next}\t${changed.next - prev >= 0 ? "+" : ""}${changed.next - prev}\t${changed.label}\n`,
+      `${i}\t${changed.next}\t${changed.next - prev >= 0 ? "+" : ""}${changed.next - prev}\t${tsvCell(changed.label)}\n`,
     );
     console.log(`PHASE ${changed.label} -> ${changed.next}`);
     console.log(`PROGRESS ${Math.round((i / iterations) * 100)}`);

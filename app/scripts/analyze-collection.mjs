@@ -17,6 +17,8 @@ import { parseStyleProfile } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { extractJson } from "./edl-util.mjs";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, round } from "./lib/cli.mjs";
+import { durationSec, sceneTimes } from "./lib/ffmpeg.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -24,11 +26,6 @@ const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
 const FRAMES_PER_CLIP = 6;
 const MAX_VISION_FRAMES = 12;
 
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-const round = (n) => Math.round(n * 100) / 100;
 const median = (xs) => {
   if (xs.length === 0) return undefined;
   const s = [...xs].sort((a, b) => a - b);
@@ -45,22 +42,6 @@ const toHex = (r, g, b) =>
     )
     .join("");
 
-function durationSec(file) {
-  const res = spawnSync(ffmpegPath, ["-i", file], { encoding: "utf8" });
-  const m = (res.stderr || "").match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
-}
-function sceneTimes(file) {
-  const res = spawnSync(
-    ffmpegPath,
-    ["-i", file, "-vf", "select='gt(scene,0.4)',showinfo", "-f", "null", "-"],
-    {
-      encoding: "utf8",
-      maxBuffer: 1 << 26,
-    },
-  );
-  return [...(res.stderr || "").matchAll(/pts_time:(\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
-}
 function paletteFor(file, atSec) {
   try {
     const res = spawnSync(

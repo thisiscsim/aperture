@@ -10,22 +10,11 @@ import fs from "node:fs";
 import { generateText } from "ai";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { resolveProjectDir } from "./lib/project-dir.mjs";
+import { arg, readMaybe } from "./lib/cli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const WORDS_PER_SEC = 2.5;
-
-function arg(name) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-function readMaybe(file) {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return "";
-  }
-}
 
 function videoLengthSec(edl) {
   return (edl.tracks ?? [])
