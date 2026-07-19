@@ -46,6 +46,18 @@
   color: var(--foreground-disabled);
 }
 
+/* Autosave health: only rendered while the last save failed. */
+.editor-header-title .save-state.error {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--foreground-danger);
+  border: 1px solid color-mix(in srgb, var(--foreground-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--foreground-danger) 10%, transparent);
+}
+
 .editor-header-actions {
   display: flex;
   align-items: center;

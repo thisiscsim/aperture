@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseEdl } from "@reel/edl";
-import { useEditor } from "./store";
+import { _dropPendingSave, useEditor } from "./store";
 
 const edl = parseEdl({ tracks: [{ id: "v", type: "video", clips: [] }] }).edl!;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useEditor.setState({ view: "home", slug: null, edl: null });
+  _dropPendingSave();
+  useEditor.setState({ view: "home", slug: null, edl: null, dirty: false, saveError: null, notice: null });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -133,5 +134,60 @@ describe("autosave", () => {
     useEditor.getState().updateEdl((d) => (d.theme.fontFamily = "Mono"));
     vi.advanceTimersByTime(400);
     expect(window.api.saveEdl).not.toHaveBeenCalled();
+  });
+
+  it("flushes the pending save when switching projects (no lost edit)", () => {
+    vi.useFakeTimers();
+    useEditor.setState({ edl, slug: "demo", view: "editor" });
+    useEditor.getState().updateEdl((d) => (d.theme.fontFamily = "Edited"));
+    // Switch before the 400 ms debounce fires: the edit must be written, not dropped.
+    useEditor.getState().openProject("other");
+    expect(window.api.saveEdl).toHaveBeenCalledTimes(1);
+    expect(window.api.saveEdl).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({ theme: expect.objectContaining({ fontFamily: "Edited" }) }),
+    );
+  });
+
+  it("goHome flushes the pending save", () => {
+    vi.useFakeTimers();
+    useEditor.setState({ edl, slug: "demo", view: "editor" });
+    useEditor.getState().updateEdl((d) => (d.theme.fontFamily = "Edited"));
+    useEditor.getState().goHome();
+    expect(window.api.saveEdl).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the pending save when an external reload replaces the same project", () => {
+    vi.useFakeTimers();
+    useEditor.setState({ edl, slug: "demo", view: "editor" });
+    useEditor.getState().updateEdl((d) => (d.theme.fontFamily = "Stale"));
+    // Agent wrote edl.json; the watcher reload lands before the debounce fires.
+    // The stale save must NOT overwrite the newer file.
+    useEditor.getState().setProject({ edl, slug: "demo" });
+    vi.advanceTimersByTime(1000);
+    expect(window.api.saveEdl).not.toHaveBeenCalled();
+    expect(useEditor.getState().dirty).toBe(false);
+  });
+
+  it("a failed save keeps the dirty flag and surfaces a persistent error", async () => {
+    vi.useFakeTimers();
+    vi.mocked(window.api.saveEdl).mockResolvedValueOnce({ ok: false, error: "disk full" });
+    useEditor.setState({ edl, slug: "demo", view: "editor" });
+    useEditor.getState().updateEdl((d) => (d.theme.fontFamily = "Unsaved"));
+    expect(useEditor.getState().dirty).toBe(true);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useEditor.getState().dirty).toBe(true);
+    expect(useEditor.getState().saveError).toBe("disk full");
+    expect(useEditor.getState().notice?.kind).toBe("error");
+  });
+
+  it("a successful save clears the dirty flag", async () => {
+    vi.useFakeTimers();
+    vi.mocked(window.api.saveEdl).mockResolvedValueOnce({ ok: true });
+    useEditor.setState({ edl, slug: "demo", view: "editor" });
+    useEditor.getState().updateEdl((d) => (d.theme.fontFamily = "Saved"));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useEditor.getState().dirty).toBe(false);
+    expect(useEditor.getState().saveError).toBeNull();
   });
 });
