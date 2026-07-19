@@ -62,10 +62,9 @@ export function Home(): JSX.Element {
 
         <div className="home-toolbar">
           {openAlbum ? (
-            <button className="home-back" onClick={() => setOpenAlbumId(null)}>
-              <Icon name="arrow-left" size={16} />
-              <span>{openAlbum.name}</span>
-            </button>
+            <Button variant="secondary" size="sm" onClick={() => setOpenAlbumId(null)}>
+              Back
+            </Button>
           ) : (
             <div className="home-tabs" role="tablist">
               <button
