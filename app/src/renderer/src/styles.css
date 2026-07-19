@@ -719,15 +719,18 @@ button.brand:hover {
   background: var(--background-secondary);
 }
 
-/* Hover lift lives on the media only — titles/metadata stay put. */
+/* Hover lift lives on the media only — titles/metadata stay put.
+   Spring-shaped curve (slight overshoot, then settle) so the lift feels
+   alive rather than stiff; the return eases out quickly without bounce. */
 .tile-thumb,
 .album-cover {
-  transition: transform 150ms ease;
+  transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .tile:hover .tile-thumb,
 .tile:hover .album-cover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  transition: transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .tile-thumb img {
@@ -834,13 +837,16 @@ button.brand:hover {
 }
 
 .tile-new {
-  transition: border-color 120ms ease, background 120ms ease, transform 150ms ease;
+  transition: border-color 120ms ease, background 120ms ease,
+    transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .tile-new:hover {
   border-color: var(--foreground-muted);
   background: var(--background-secondary);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  transition: border-color 120ms ease, background 120ms ease,
+    transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ---------- Tile menus (Figma popover spec) ---------- */
