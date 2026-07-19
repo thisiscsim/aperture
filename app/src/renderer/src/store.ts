@@ -239,7 +239,7 @@ interface EditorState {
   setPlaying: (v: boolean) => void;
   toggleMuted: () => void;
   setPlayerCtl: (ctl: { toggle: () => void; setMuted: (m: boolean) => void } | null) => void;
-  setPanelSize: (panel: PanelId, px: number) => void;
+  setPanelSize: (panel: PanelId, px: number, persist?: boolean) => void;
   togglePanels: () => void;
 
   startExport: () => void;
@@ -416,10 +416,13 @@ export const useEditor = create<EditorState>()((set, get) => ({
     set({ muted });
   },
   setPlayerCtl: (ctl) => set({ playerCtl: ctl }),
-  setPanelSize: (panel, px) => {
+  setPanelSize: (panel, px, persist = true) => {
     const [min, max] = PANEL_LIMITS[panel];
     const next = { ...get().panelSizes, [panel]: Math.round(Math.min(Math.max(px, min), max)) };
     set({ panelSizes: next });
+    // During a drag the resizer passes persist=false and writes once on
+    // release, so we don't hit localStorage on every animation frame.
+    if (!persist) return;
     try {
       localStorage.setItem(LAYOUT_KEY, JSON.stringify(next));
     } catch {
