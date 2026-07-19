@@ -17,7 +17,16 @@ import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
 import { resolveAudioSource } from "./audio-sources";
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, protocol, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  type IpcMainInvokeEvent,
+  nativeImage,
+  protocol,
+  shell,
+} from "electron";
 import ffmpegPath from "ffmpeg-static";
 import {
   type Benchmarks,
@@ -57,10 +66,8 @@ function llmInfo(): { provider: string; model: string; configured: boolean } {
   const configured = provider === "openai-compatible" ? Boolean(baseURL || apiKey) : Boolean(apiKey);
   return { provider, model, configured };
 }
-const EXTRACT_FRAMES_SCRIPT = join(SCRIPTS_DIR, "extract-frames.mjs");
 const WRITE_NARRATION_SCRIPT = join(SCRIPTS_DIR, "write-narration.mjs");
 const TTS_SCRIPT = join(SCRIPTS_DIR, "tts.mjs");
-const ANALYZE_STYLE_SCRIPT = join(SCRIPTS_DIR, "analyze-style.mjs");
 const ANALYZE_COLLECTION_SCRIPT = join(SCRIPTS_DIR, "analyze-collection.mjs");
 const ANALYZE_BENCHMARKS_SCRIPT = join(SCRIPTS_DIR, "analyze-benchmarks.mjs");
 const AUTOTUNE_SCRIPT = join(SCRIPTS_DIR, "autotune.mjs");
@@ -169,7 +176,8 @@ function readSettings(): AppSettings {
     agentModel: typeof s.agentModel === "string" && s.agentModel ? s.agentModel : "gpt-5.5",
     agentApiKey: typeof s.agentApiKey === "string" && s.agentApiKey ? s.agentApiKey : undefined,
     reasoningEffort: oneOf(s.reasoningEffort, ["low", "medium", "high"] as const, "low"),
-    elevenLabsApiKey: typeof s.elevenLabsApiKey === "string" && s.elevenLabsApiKey ? s.elevenLabsApiKey : undefined,
+    elevenLabsApiKey:
+      typeof s.elevenLabsApiKey === "string" && s.elevenLabsApiKey ? s.elevenLabsApiKey : undefined,
     defaultVoiceId: typeof s.defaultVoiceId === "string" && s.defaultVoiceId ? s.defaultVoiceId : undefined,
   };
 }
@@ -413,7 +421,9 @@ function readAlbums(): AlbumRecord[] {
     const raw = JSON.parse(readFileSync(ALBUMS_FILE(), "utf8")) as { albums?: unknown[] };
     return (raw.albums ?? []).filter(
       (a): a is AlbumRecord =>
-        typeof a === "object" && a !== null && typeof (a as AlbumRecord).id === "string" &&
+        typeof a === "object" &&
+        a !== null &&
+        typeof (a as AlbumRecord).id === "string" &&
         typeof (a as AlbumRecord).name === "string",
     );
   } catch {
@@ -574,7 +584,10 @@ function createProject(input: {
       styleProfileId: input.styleProfileId,
     });
     writeFileSync(join(dir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
-    writeFileSync(join(dir, "prompt.md"), input.prompt?.trim() ? `${input.prompt.trim()}\n` : `# ${meta.title}\n`);
+    writeFileSync(
+      join(dir, "prompt.md"),
+      input.prompt?.trim() ? `${input.prompt.trim()}\n` : `# ${meta.title}\n`,
+    );
     const emptyEdl = parseEdlOrThrow({ tracks: [{ id: "v", type: "video", clips: [] }] });
     writeFileSync(join(dir, "edl.json"), `${JSON.stringify(emptyEdl, null, 2)}\n`);
     return { ok: true, slug };
@@ -708,9 +721,20 @@ async function generateProxy(slug: string, assetSrc: string, id: string): Promis
   const out = join(outDir, `${id}.mp4`);
   const ok = await new Promise<boolean>((resolve) => {
     const child = spawn(ffmpegPath as string, [
-      "-y", "-i", input, "-an",
-      "-vf", "scale='min(720,iw)':-2",
-      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+      "-y",
+      "-i",
+      input,
+      "-an",
+      "-vf",
+      "scale='min(720,iw)':-2",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
       out,
     ]);
     child.on("close", (code) => resolve(code === 0));
@@ -737,7 +761,10 @@ function patchAssetProxy(slug: string, id: string, proxySrc: string, attempt = 0
   if (attempt < 12) setTimeout(() => patchAssetProxy(slug, id, proxySrc, attempt + 1), 800);
 }
 
-async function importAssets(slug: string, paths: string[]): Promise<{ ok: boolean; assets: ImportedAsset[] }> {
+async function importAssets(
+  slug: string,
+  paths: string[],
+): Promise<{ ok: boolean; assets: ImportedAsset[] }> {
   const dir = safeProjectPath(slug, "assets");
   mkdirSync(dir, { recursive: true });
   const added: ImportedAsset[] = [];
@@ -818,7 +845,11 @@ async function listVoices(): Promise<{ ok: boolean; voices: VoiceSummary[]; erro
     const data = (await res.json()) as { voices?: { voice_id: string; name: string; category?: string }[] };
     return {
       ok: true,
-      voices: (data.voices ?? []).map((v) => ({ id: v.voice_id, name: v.name, category: v.category ?? "premade" })),
+      voices: (data.voices ?? []).map((v) => ({
+        id: v.voice_id,
+        name: v.name,
+        category: v.category ?? "premade",
+      })),
     };
   } catch (err) {
     return { ok: false, voices: [], error: String(err) };
@@ -937,12 +968,17 @@ async function importAudioFromUrl(
       "--no-playlist",
       "--no-warnings",
       "--newline",
-      "--max-filesize", "200m",
-      "-f", "bestaudio/best",
+      "--max-filesize",
+      "200m",
+      "-f",
+      "bestaudio/best",
       "-x",
-      "--audio-format", "m4a",
-      "--ffmpeg-location", ffmpegPath as string,
-      "-o", join(tmp, "%(title).120B.%(ext)s"),
+      "--audio-format",
+      "m4a",
+      "--ffmpeg-location",
+      ffmpegPath as string,
+      "-o",
+      join(tmp, "%(title).120B.%(ext)s"),
       source.url,
     ];
     await new Promise<void>((resolve, reject) => {
@@ -979,11 +1015,7 @@ async function importAudioFromUrl(
   }
 }
 
-function importInto(
-  slug: string,
-  sub: string,
-  paths: string[],
-): { ok: boolean; files: string[] } {
+function importInto(slug: string, sub: string, paths: string[]): { ok: boolean; files: string[] } {
   const dir = safeProjectPath(slug, sub);
   mkdirSync(dir, { recursive: true });
   const files: string[] = [];
@@ -1147,9 +1179,14 @@ async function addStyleSourcesFromDialog(
 
 // Open the native picker and create a new style in one step, named after the
 // chosen folder (no name prompt needed — window.prompt isn't supported in Electron).
-async function createStyleFromDialog(
-  mode: "files" | "folder",
-): Promise<{ ok: boolean; id?: string; name?: string; files?: string[]; canceled?: boolean; error?: string }> {
+async function createStyleFromDialog(mode: "files" | "folder"): Promise<{
+  ok: boolean;
+  id?: string;
+  name?: string;
+  files?: string[];
+  canceled?: boolean;
+  error?: string;
+}> {
   try {
     const win = mainWindow ?? BrowserWindow.getFocusedWindow();
     const opts: Electron.OpenDialogOptions = {
@@ -1305,8 +1342,15 @@ app.whenReady().then(() => {
   ipcMain.handle("voices:list", () => listVoices());
   ipcMain.handle(
     "voices:clone",
-    (_event, input: { name: string; paths: string[]; recording?: { name: string; data: Uint8Array }; consent: boolean }) =>
-      cloneVoice(input),
+    (
+      _event,
+      input: {
+        name: string;
+        paths: string[];
+        recording?: { name: string; data: Uint8Array };
+        consent: boolean;
+      },
+    ) => cloneVoice(input),
   );
   ipcMain.handle("voices:delete", (_event, id: string) => deleteVoice(id));
   ipcMain.handle("narration:load", (_event, slug: string) => {
@@ -1450,7 +1494,10 @@ app.whenReady().then(() => {
   // LLM critique writes critique.json; requires a configured model.
   ipcMain.handle("critique:run", (event, slug: string) => {
     if (!llmInfo().configured) {
-      return Promise.resolve({ ok: false, error: "No model configured (set OPENAI_API_KEY in app/.env.local)." });
+      return Promise.resolve({
+        ok: false,
+        error: "No model configured (set OPENAI_API_KEY in app/.env.local).",
+      });
     }
     return runScript(CRITIQUE_LLM_SCRIPT, slug, event, "critique");
   });

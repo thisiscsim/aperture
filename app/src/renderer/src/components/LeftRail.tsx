@@ -369,21 +369,30 @@ function VoiceoverModal({ onClose }: { onClose: () => void }): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    window.api?.voicesStatus().then((s) => setConfigured(s.configured)).catch(() => {});
+    window.api
+      ?.voicesStatus()
+      .then((s) => setConfigured(s.configured))
+      .catch(() => {});
     window.api
       ?.listVoices()
       .then((r) => {
         setVoices(r.voices);
         if (r.voices.length > 0) {
           window.api.getSettings().then((s) => {
-            setVoiceId(s.defaultVoiceId && r.voices.some((v) => v.id === s.defaultVoiceId)
-              ? s.defaultVoiceId
-              : r.voices[0].id);
+            setVoiceId(
+              s.defaultVoiceId && r.voices.some((v) => v.id === s.defaultVoiceId)
+                ? s.defaultVoiceId
+                : r.voices[0].id,
+            );
           });
         }
       })
       .catch(() => {});
-    if (slug) window.api?.loadNarration(slug).then(setScript).catch(() => {});
+    if (slug)
+      window.api
+        ?.loadNarration(slug)
+        .then(setScript)
+        .catch(() => {});
   }, [slug]);
 
   const draft = async () => {

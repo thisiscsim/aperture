@@ -61,7 +61,14 @@ describe("buildTiles", () => {
   });
 
   it("album tile aggregates members newest-first with latest-member timestamp", () => {
-    const [albumTile] = buildTiles({ projects, albums, tab: "albums", openAlbumId: null, sort: "newest", query: "" });
+    const [albumTile] = buildTiles({
+      projects,
+      albums,
+      tab: "albums",
+      openAlbumId: null,
+      sort: "newest",
+      query: "",
+    });
     if (albumTile.kind !== "album") throw new Error("expected album tile");
     expect(albumTile.members.map((m) => m.slug)).toEqual(["b", "c"]);
     expect(albumTile.updatedAt).toBe("2026-07-03T00:00:00Z");
@@ -70,19 +77,40 @@ describe("buildTiles", () => {
   it("drill-in lists only the album's members and respects search", () => {
     const tiles = buildTiles({ projects, albums, tab: "all", openAlbumId: "trip", sort: "az", query: "" });
     expect(tiles.map((t) => (t.kind === "project" ? t.project.slug : ""))).toEqual(["b", "c"]);
-    const filtered = buildTiles({ projects, albums, tab: "all", openAlbumId: "trip", sort: "az", query: "brav" });
+    const filtered = buildTiles({
+      projects,
+      albums,
+      tab: "all",
+      openAlbumId: "trip",
+      sort: "az",
+      query: "brav",
+    });
     expect(filtered).toHaveLength(1);
   });
 
   it("search matches album names on the top level", () => {
-    const tiles = buildTiles({ projects, albums, tab: "all", openAlbumId: null, sort: "newest", query: "road" });
+    const tiles = buildTiles({
+      projects,
+      albums,
+      tab: "all",
+      openAlbumId: null,
+      sort: "newest",
+      query: "road",
+    });
     expect(tiles).toHaveLength(1);
     expect(tiles[0].kind).toBe("album");
   });
 
   it("projects pointing at a deleted album are treated as ungrouped", () => {
     const orphan = [proj("d", "Delta", "2026-07-04T00:00:00Z", "gone")];
-    const tiles = buildTiles({ projects: orphan, albums: [], tab: "all", openAlbumId: null, sort: "newest", query: "" });
+    const tiles = buildTiles({
+      projects: orphan,
+      albums: [],
+      tab: "all",
+      openAlbumId: null,
+      sort: "newest",
+      query: "",
+    });
     expect(tiles).toEqual([{ kind: "project", project: orphan[0] }]);
   });
 });

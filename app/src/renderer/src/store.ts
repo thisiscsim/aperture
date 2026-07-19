@@ -316,7 +316,8 @@ export const useEditor = create<EditorState>()((set, get) => ({
   },
   togglePanels: () => set({ panelsHidden: !get().panelsHidden }),
 
-  startExport: () => set({ exporting: true, exportProgress: 0, exportPhase: "preparing", exportResult: null }),
+  startExport: () =>
+    set({ exporting: true, exportProgress: 0, exportPhase: "preparing", exportResult: null }),
   setExportProgress: (pct) => set({ exportProgress: pct }),
   setExportPhase: (phase) => set({ exportPhase: phase }),
   finishExport: (result) => set({ exporting: false, exportResult: result }),

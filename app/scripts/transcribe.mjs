@@ -42,9 +42,7 @@ async function main() {
     .find((c) => c.role === "voiceover");
   const voAsset = voClip ? edl.assets.find((a) => a.id === voClip.assetId) : undefined;
   const asset =
-    voAsset ??
-    edl.assets.find((a) => a.kind === "audio") ??
-    edl.assets.find((a) => a.kind === "video");
+    voAsset ?? edl.assets.find((a) => a.kind === "audio") ?? edl.assets.find((a) => a.kind === "video");
   if (!asset) throw new Error("no audio/video asset to transcribe");
 
   // edl.json is untrusted (shareable project file): the transcode input must

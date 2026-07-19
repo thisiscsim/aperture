@@ -257,12 +257,15 @@ export function Timeline(): JSX.Element {
     <section className="tl">
       <div className="tl-bar">
         <div className="tl-bar-side">
-          <LayerButton
-            onAdd={(type) => updateEdl((d) => addTrack(d, type, undefined))}
-          />
+          <LayerButton onAdd={(type) => updateEdl((d) => addTrack(d, type, undefined))} />
         </div>
         <div className="tl-bar-center">
-          <IconButton icon="skip" label="Jump to start" onClick={() => seek(0)} style={{ transform: "scaleX(-1)" }} />
+          <IconButton
+            icon="skip"
+            label="Jump to start"
+            onClick={() => seek(0)}
+            style={{ transform: "scaleX(-1)" }}
+          />
           <button
             className="ui-icon-btn"
             onClick={() => playerCtl?.toggle()}
@@ -333,10 +336,16 @@ export function Timeline(): JSX.Element {
                       onMouseDown={(e) => startDrag(e, clip, track, "move")}
                       title={labelOf(track.type, clip)}
                     >
-                      <div className="tl-chip-handle left" onMouseDown={(e) => startDrag(e, clip, track, "left")} />
+                      <div
+                        className="tl-chip-handle left"
+                        onMouseDown={(e) => startDrag(e, clip, track, "left")}
+                      />
                       <Icon name={chipIcon(track.type)} size={12} />
                       <span className="tl-chip-label">{labelOf(track.type, clip)}</span>
-                      <div className="tl-chip-handle right" onMouseDown={(e) => startDrag(e, clip, track, "right")} />
+                      <div
+                        className="tl-chip-handle right"
+                        onMouseDown={(e) => startDrag(e, clip, track, "right")}
+                      />
                     </div>
                   );
                 })}
@@ -346,7 +355,9 @@ export function Timeline(): JSX.Element {
                     style={{ left: ghost.start * PX_PER_SEC, width: Math.max(8, ghost.dur * PX_PER_SEC) }}
                   />
                 )}
-                {track.clips.length === 0 && !ghost && <div className="tl-lane-hint">{emptyHint(track.type)}</div>}
+                {track.clips.length === 0 && !ghost && (
+                  <div className="tl-lane-hint">{emptyHint(track.type)}</div>
+                )}
               </div>
             </div>
           ))}
@@ -388,13 +399,17 @@ export function Timeline(): JSX.Element {
  * rail's role-routed add). Role is inferred from the lane; a music drop while
  * a voiceover exists ducks by default.
  */
-function placeAudioOnTrack(edl: Edl, trackId: string, assetId: string, durationSec: number | undefined, at: number): void {
+function placeAudioOnTrack(
+  edl: Edl,
+  trackId: string,
+  assetId: string,
+  durationSec: number | undefined,
+  at: number,
+): void {
   const track = edl.tracks.find((t) => t.id === trackId);
   if (track?.type !== "audio") return;
   const role = track.id === "vo" || track.name?.toLowerCase().includes("voice") ? "voiceover" : "music";
-  const hasVoice = edl.tracks.some(
-    (t) => t.type === "audio" && t.clips.some((c) => c.role === "voiceover"),
-  );
+  const hasVoice = edl.tracks.some((t) => t.type === "audio" && t.clips.some((c) => c.role === "voiceover"));
   track.clips = track.clips.filter((c) => c.assetId !== assetId);
   track.clips.push({
     id: `a-${assetId}-${Date.now().toString(36)}`,
@@ -478,10 +493,13 @@ function TrackLabel({
   };
 
   return (
-    <div className="tl-row-label" onDoubleClick={() => {
-      setDraft(name);
-      setEditing(true);
-    }}>
+    <div
+      className="tl-row-label"
+      onDoubleClick={() => {
+        setDraft(name);
+        setEditing(true);
+      }}
+    >
       <Icon name={chipIcon(track.type)} size={14} />
       {editing ? (
         <input
@@ -501,7 +519,12 @@ function TrackLabel({
         </span>
       )}
       {onDelete && !editing && (
-        <button className="tl-row-delete" onClick={onDelete} title="Remove empty layer" aria-label="Remove layer">
+        <button
+          className="tl-row-delete"
+          onClick={onDelete}
+          title="Remove empty layer"
+          aria-label="Remove layer"
+        >
           <Icon name="trash-can" size={12} />
         </button>
       )}
@@ -609,7 +632,12 @@ function computePreview(
   return { start: orig.start, in: inV, out: clamp(outV + dSec, inV + MIN_DUR, maxOut) };
 }
 
-function commit(updateEdl: (fn: (edl: Edl) => void) => void, id: string, type: Track["type"], preview: Preview): void {
+function commit(
+  updateEdl: (fn: (edl: Edl) => void) => void,
+  id: string,
+  type: Track["type"],
+  preview: Preview,
+): void {
   updateEdl((d) => {
     for (const track of d.tracks) {
       if (track.type === "caption") continue;

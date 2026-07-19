@@ -50,7 +50,12 @@ function stats(xs) {
   if (vals.length === 0) return undefined;
   const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
   const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
-  return { mean: round(mean), std: round(Math.sqrt(variance)), min: round(Math.min(...vals)), max: round(Math.max(...vals)) };
+  return {
+    mean: round(mean),
+    std: round(Math.sqrt(variance)),
+    min: round(Math.min(...vals)),
+    max: round(Math.max(...vals)),
+  };
 }
 
 async function main() {

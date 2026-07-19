@@ -121,7 +121,10 @@ describe("autosave", () => {
     expect(window.api.saveEdl).not.toHaveBeenCalled();
     vi.advanceTimersByTime(400);
     expect(window.api.saveEdl).toHaveBeenCalledTimes(1);
-    expect(window.api.saveEdl).toHaveBeenCalledWith("demo", expect.objectContaining({ theme: expect.any(Object) }));
+    expect(window.api.saveEdl).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({ theme: expect.any(Object) }),
+    );
   });
 
   it("does not save when there is no slug", () => {

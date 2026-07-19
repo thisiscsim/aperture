@@ -102,7 +102,7 @@ export function splitUnits(text: string, target: AnimTarget): string[] {
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export function unitStyle(spec: AnimSpec, frame: number, fps: number, index: number): CSSProperties {
-  const delay = (index * spec.staggerMs) / 1000 * fps;
+  const delay = ((index * spec.staggerMs) / 1000) * fps;
   const dur = Math.max(1, (spec.durationMs / 1000) * fps);
   const p = interpolate(frame, [delay, delay + dur], [0, 1], {
     extrapolateLeft: "clamp",

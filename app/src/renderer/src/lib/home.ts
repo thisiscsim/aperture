@@ -68,18 +68,27 @@ export function buildTiles(input: {
 
   if (openAlbumId) {
     const members = projects.filter((p) => p.albumId === openAlbumId && matchesQuery(p.title, query));
-    return sortTiles(members.map((project) => ({ kind: "project", project })), sort);
+    return sortTiles(
+      members.map((project) => ({ kind: "project", project })),
+      sort,
+    );
   }
 
   const albumIds = new Set(albums.map((a) => a.id));
   const albumTiles: HomeTile[] = albums.map((album) => {
     // Newest members first so the 2x2 cover shows the freshest thumbnails.
     const members = sortTiles(
-      projects.filter((p) => p.albumId === album.id).map((project) => ({ kind: "project" as const, project })),
+      projects
+        .filter((p) => p.albumId === album.id)
+        .map((project) => ({ kind: "project" as const, project })),
       "newest",
     ).map((t) => (t as Extract<HomeTile, { kind: "project" }>).project);
     const updatedAt =
-      members.map((m) => m.updatedAt).filter(Boolean).sort().pop() ?? album.createdAt;
+      members
+        .map((m) => m.updatedAt)
+        .filter(Boolean)
+        .sort()
+        .pop() ?? album.createdAt;
     return { kind: "album", album, members, updatedAt };
   });
 
@@ -94,7 +103,10 @@ export function buildTiles(input: {
           ...albumTiles,
         ];
 
-  return sortTiles(tiles.filter((t) => matchesQuery(tileName(t), query)), sort);
+  return sortTiles(
+    tiles.filter((t) => matchesQuery(tileName(t), query)),
+    sort,
+  );
 }
 
 export function relativeTime(iso?: string): string | null {

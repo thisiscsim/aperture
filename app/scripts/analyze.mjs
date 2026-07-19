@@ -37,7 +37,10 @@ async function main() {
   const edlPath = path.join(projectDir, "edl.json");
   const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
 
-  const all = fs.readdirSync(assetsDir).filter((f) => !f.startsWith(".")).sort();
+  const all = fs
+    .readdirSync(assetsDir)
+    .filter((f) => !f.startsWith("."))
+    .sort();
   const videoFiles = all.filter((f) => VIDEO_EXT.has(path.extname(f).toLowerCase()));
   const audioFiles = all.filter((f) => AUDIO_EXT.has(path.extname(f).toLowerCase()));
   for (const f of all.filter((x) => AMBIGUOUS_EXT.has(path.extname(x).toLowerCase()))) {
@@ -75,7 +78,9 @@ async function main() {
       height: meta.dimensions?.height,
     });
     probes.push({ file: f, ...meta });
-    console.log(`CLIP ${f} ${round(meta.durationInSeconds ?? 0)}s ${meta.dimensions?.width}x${meta.dimensions?.height}`);
+    console.log(
+      `CLIP ${f} ${round(meta.durationInSeconds ?? 0)}s ${meta.dimensions?.width}x${meta.dimensions?.height}`,
+    );
   }
 
   // Deterministic assembly: clips on one absolute timeline, overlapping by the
@@ -134,7 +139,7 @@ async function main() {
   // preserved untouched, and a voiceover's own audio file never becomes music.
   const voAssetIds = new Set(
     edl.tracks
-      .flatMap((tr) => (tr.type === "audio" ? tr.clips ?? [] : []))
+      .flatMap((tr) => (tr.type === "audio" ? (tr.clips ?? []) : []))
       .filter((c) => c.role === "voiceover")
       .map((c) => c.assetId),
   );
@@ -145,7 +150,16 @@ async function main() {
     const out = round(Math.min(music.durationSec ?? span, span)) || 1;
     const duckUnderVoice = voAssetIds.size > 0;
     const audioClips = [
-      { id: `a-${music.id}`, assetId: music.id, start: 0, in: 0, out, gain: -12, duckUnderVoice, role: "music" },
+      {
+        id: `a-${music.id}`,
+        assetId: music.id,
+        start: 0,
+        in: 0,
+        out,
+        gain: -12,
+        duckUnderVoice,
+        role: "music",
+      },
     ];
     const audioTrack = edl.tracks.find((tr) => tr.type === "audio" && tr.id !== "vo");
     if (audioTrack) audioTrack.clips = audioClips;

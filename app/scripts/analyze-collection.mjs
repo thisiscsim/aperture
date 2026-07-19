@@ -34,7 +34,14 @@ const median = (xs) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 const toHex = (r, g, b) =>
-  "#" + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+  "#" +
+  [r, g, b]
+    .map((v) =>
+      Math.max(0, Math.min(255, Math.round(v)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("");
 
 function durationSec(file) {
   const res = spawnSync(ffmpegPath, ["-i", file], { encoding: "utf8" });
@@ -42,17 +49,35 @@ function durationSec(file) {
   return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
 }
 function sceneTimes(file) {
-  const res = spawnSync(ffmpegPath, ["-i", file, "-vf", "select='gt(scene,0.4)',showinfo", "-f", "null", "-"], {
-    encoding: "utf8",
-    maxBuffer: 1 << 26,
-  });
+  const res = spawnSync(
+    ffmpegPath,
+    ["-i", file, "-vf", "select='gt(scene,0.4)',showinfo", "-f", "null", "-"],
+    {
+      encoding: "utf8",
+      maxBuffer: 1 << 26,
+    },
+  );
   return [...(res.stderr || "").matchAll(/pts_time:(\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
 }
 function paletteFor(file, atSec) {
   try {
     const res = spawnSync(
       ffmpegPath,
-      ["-ss", String(atSec), "-i", file, "-frames:v", "1", "-vf", "scale=4:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+      [
+        "-ss",
+        String(atSec),
+        "-i",
+        file,
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=4:1",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-",
+      ],
       { maxBuffer: 1 << 20 },
     );
     const buf = res.stdout;
@@ -81,7 +106,16 @@ function avgPalette(palettes) {
 function sampleFrames(file, framesDir, base) {
   execFileSync(
     ffmpegPath,
-    ["-y", "-i", file, "-vf", "fps=1/2,scale=512:-1", "-frames:v", String(FRAMES_PER_CLIP), path.join(framesDir, `${base}-%02d.jpg`)],
+    [
+      "-y",
+      "-i",
+      file,
+      "-vf",
+      "fps=1/2,scale=512:-1",
+      "-frames:v",
+      String(FRAMES_PER_CLIP),
+      path.join(framesDir, `${base}-%02d.jpg`),
+    ],
     { stdio: "ignore" },
   );
 }
@@ -171,12 +205,19 @@ async function main() {
     palette: avgPalette(perVideo.map((v) => v.palette)),
     pacing: {
       cutsPer10s: round(medianCuts),
-      avgShotSec: round(median(perVideo.map((v) => (v.cutsPer10s ? 10 / v.cutsPer10s : 0)).filter(Boolean)) ?? 0),
+      avgShotSec: round(
+        median(perVideo.map((v) => (v.cutsPer10s ? 10 / v.cutsPer10s : 0)).filter(Boolean)) ?? 0,
+      ),
     },
     hookSec: round(median(perVideo.map((v) => v.hookSec).filter((x) => x != null)) ?? 0),
     targetLengthSec: round(median(lengths) ?? 0),
     energy: Math.max(0, Math.min(1, round((medianCuts - 1) / 11))),
-    perVideo: perVideo.map(({ file, durationSec, cutsPer10s, hookSec }) => ({ file, durationSec, cutsPer10s, hookSec })),
+    perVideo: perVideo.map(({ file, durationSec, cutsPer10s, hookSec }) => ({
+      file,
+      durationSec,
+      cutsPer10s,
+      hookSec,
+    })),
   };
 
   const existing = (() => {
@@ -207,7 +248,10 @@ async function main() {
     const { provider, model } = llmConfig();
     console.log(`PHASE distilling style with ${provider}/${model}`);
     // Gather a capped, spread-out set of frames across videos for vision.
-    const frameFiles = fs.readdirSync(framesDir).filter((f) => f.endsWith(".jpg")).sort();
+    const frameFiles = fs
+      .readdirSync(framesDir)
+      .filter((f) => f.endsWith(".jpg"))
+      .sort();
     const step = Math.max(1, Math.floor(frameFiles.length / MAX_VISION_FRAMES));
     const chosen = frameFiles.filter((_, i) => i % step === 0).slice(0, MAX_VISION_FRAMES);
     const images = chosen.map((f) => ({ type: "image", image: fs.readFileSync(path.join(framesDir, f)) }));

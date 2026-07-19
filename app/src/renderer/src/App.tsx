@@ -34,7 +34,8 @@ export function App(): JSX.Element {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Space") return;
       const t = e.target as HTMLElement;
-      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)
+        return;
       e.preventDefault();
       playerCtl?.toggle();
     };
@@ -60,7 +61,8 @@ export function App(): JSX.Element {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "t" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const t = e.target as HTMLElement;
-      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)
+        return;
       toggleTheme();
     };
     window.addEventListener("keydown", onKey);
@@ -93,7 +95,13 @@ export function App(): JSX.Element {
         ?.loadProject(slug)
         .then((res) => {
           if (res.ok && res.edl) {
-            setProject({ edl: res.edl, slug: res.slug, dir: res.dir, promptText: res.promptText, meta: res.meta });
+            setProject({
+              edl: res.edl,
+              slug: res.slug,
+              dir: res.dir,
+              promptText: res.promptText,
+              meta: res.meta,
+            });
           } else {
             setLoadError((res.errors ?? ["unknown error"]).join("; "));
           }

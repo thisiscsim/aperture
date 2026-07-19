@@ -55,7 +55,8 @@ function score(edl, benchmarks) {
   const margins = edl.theme.safeMargins ?? {};
   const hasMargins = (margins.top ?? 0) > 0 && (margins.bottom ?? 0) > 0;
   const hook = vids.some((c) => c.start <= 0.1) || txt.some((c) => c.start <= 2);
-  const ending = vids.some((c) => c.start + (c.out - c.in) >= dur - 1.5) || txt.some((c) => c.end >= dur - 1.5);
+  const ending =
+    vids.some((c) => c.start + (c.out - c.in) >= dur - 1.5) || txt.some((c) => c.end >= dur - 1.5);
   const cutsPer10s = dur > 0 ? (vids.length / dur) * 10 : 0;
   const dist = benchmarks?.distribution;
 
@@ -184,7 +185,10 @@ async function main() {
       break;
     }
     fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
-    fs.appendFileSync(resultsPath, `${i}\t${changed.next}\t${changed.next - prev >= 0 ? "+" : ""}${changed.next - prev}\t${changed.label}\n`);
+    fs.appendFileSync(
+      resultsPath,
+      `${i}\t${changed.next}\t${changed.next - prev >= 0 ? "+" : ""}${changed.next - prev}\t${changed.label}\n`,
+    );
     console.log(`PHASE ${changed.label} -> ${changed.next}`);
     console.log(`PROGRESS ${Math.round((i / iterations) * 100)}`);
     prev = changed.next;

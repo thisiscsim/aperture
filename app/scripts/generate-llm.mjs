@@ -66,7 +66,12 @@ function safeStyleId(id) {
 function resolveActiveStyle(projectDir, slug) {
   const localPath = path.join(projectDir, "style.json");
   if (fs.existsSync(localPath)) {
-    return { profile: readJsonMaybe(localPath), kind: "project", analyzeArgs: ["--slug", slug], profilePath: localPath };
+    return {
+      profile: readJsonMaybe(localPath),
+      kind: "project",
+      analyzeArgs: ["--slug", slug],
+      profilePath: localPath,
+    };
   }
   const meta = readJsonMaybe(path.join(projectDir, "meta.json")) ?? {};
   const dir = stylesDir();
@@ -75,7 +80,10 @@ function resolveActiveStyle(projectDir, slug) {
     try {
       const dirs = fs
         .readdirSync(dir)
-        .filter((d) => fs.existsSync(path.join(dir, d, "sources")) || fs.existsSync(path.join(dir, d, "profile.json")));
+        .filter(
+          (d) =>
+            fs.existsSync(path.join(dir, d, "sources")) || fs.existsSync(path.join(dir, d, "profile.json")),
+        );
       if (dirs.length === 1) id = dirs[0];
     } catch {
       // no library
@@ -204,7 +212,9 @@ async function main() {
   const profile = active.profile;
 
   const { provider, model } = llmConfig();
-  console.log(`PHASE editing with ${provider}/${model}${profile ? ` (style: ${profile.name ?? profile.id})` : ""}`);
+  console.log(
+    `PHASE editing with ${provider}/${model}${profile ? ` (style: ${profile.name ?? profile.id})` : ""}`,
+  );
 
   const llm = resolveModel();
   const base = buildPrompt(baselineJson, promptMd, profile);
