@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
 import { generateText } from "ai";
+import { parseCritique, parseEdl } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { extractJson, metrics } from "./edl-util.mjs";
 
@@ -87,7 +88,12 @@ async function main() {
     console.error("ERROR no edl.json to critique");
     process.exit(2);
   }
-  const edl = JSON.parse(edlRaw);
+  const parsedEdl = parseEdl(JSON.parse(edlRaw));
+  if (!parsedEdl.ok || !parsedEdl.edl) {
+    console.error(`ERROR invalid edl.json: ${(parsedEdl.errors ?? []).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  const edl = parsedEdl.edl;
   const metricsJson = JSON.stringify(metrics(edl), null, 2);
   const promptMd = readMaybe(path.join(projectDir, "prompt.md"));
   const styleJson = readMaybe(path.join(projectDir, "style.json"));
@@ -103,15 +109,18 @@ async function main() {
     providerOptions: { openai: { reasoningEffort: reasoningEffort() } },
   });
 
-  let critique;
+  let raw;
   try {
-    critique = extractJson(text);
+    raw = extractJson(text);
   } catch (err) {
     console.error(`ERROR could not parse critique JSON: ${err}`);
     process.exit(2);
   }
-  if (typeof critique.score !== "number" || !Array.isArray(critique.subscores)) {
-    console.error("ERROR critique JSON missing score/subscores");
+  // Validate against CritiqueSchema (score 0-100, sane subscores/fixes) so
+  // the Critique panel never renders unchecked model output.
+  const critique = parseCritique(raw);
+  if (!critique) {
+    console.error("ERROR critique JSON failed schema validation (score/subscores out of bounds)");
     process.exit(2);
   }
 

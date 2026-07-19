@@ -8,6 +8,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
+import { parseBenchmarks } from "@reel/edl";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -105,7 +106,16 @@ async function main() {
     videos,
     distribution,
   };
-  fs.writeFileSync(path.join(projectDir, "benchmarks.json"), `${JSON.stringify(out, null, 2)}\n`);
+  // benchmarks.json feeds z-score math in the critic; never persist stats the
+  // schema would reject (non-finite values from a failed ffmpeg parse).
+  let validated;
+  try {
+    validated = parseBenchmarks(out);
+  } catch (err) {
+    console.error(`ERROR benchmark stats failed validation: ${err}`);
+    process.exit(2);
+  }
+  fs.writeFileSync(path.join(projectDir, "benchmarks.json"), `${JSON.stringify(validated, null, 2)}\n`);
   console.log(`DONE ${videos.length} benchmarks analyzed`);
 }
 

@@ -85,7 +85,14 @@ async function main() {
 
   const { provider, model } = llmConfig();
   const llm = resolveModel();
-  let edl = JSON.parse(readMaybe(edlPath));
+  // The current cut is untrusted input too (shareable file, or a prior tool's
+  // output): don't iterate on — or interpolate into prompts — an invalid EDL.
+  const initial = parseEdl(JSON.parse(readMaybe(edlPath)));
+  if (!initial.ok || !initial.edl) {
+    console.error(`ERROR invalid edl.json: ${(initial.errors ?? []).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  let edl = initial.edl;
   let prev = null;
   let stagnant = 0;
 
@@ -123,7 +130,14 @@ async function main() {
     const change = typeof out.change === "string" ? out.change.slice(0, 120) : "revised edit";
 
     // Never let an improvement pass silently drop the music bed / voiceover.
-    edl = restoreAudioTracks(parsed.edl, edl);
+    // restoreAudioTracks runs after the schema gate, so re-validate before the
+    // result is allowed to replace edl.json.
+    const restored = parseEdl(restoreAudioTracks(parsed.edl, edl));
+    if (!restored.ok || !restored.edl) {
+      console.log(`PHASE iteration ${i} post-processing produced invalid edl, stopping`);
+      break;
+    }
+    edl = restored.edl;
     fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
     const delta = prev == null ? 0 : score - prev;
     fs.appendFileSync(resultsPath, `${i}\t${score}\t${delta >= 0 ? "+" : ""}${delta}\t${change}\n`);

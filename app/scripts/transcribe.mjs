@@ -15,6 +15,7 @@ import {
   toCaptions,
   transcribe as whisperTranscribe,
 } from "@remotion/install-whisper-cpp";
+import { parseEdl } from "@reel/edl";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -33,7 +34,11 @@ async function main() {
 
   const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edlPath = path.join(projectDir, "edl.json");
-  const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
+  const parsedEdl = parseEdl(JSON.parse(fs.readFileSync(edlPath, "utf8")));
+  if (!parsedEdl.ok || !parsedEdl.edl) {
+    throw new Error(`invalid edl.json: ${(parsedEdl.errors ?? []).slice(0, 5).join("; ")}`);
+  }
+  const edl = parsedEdl.edl;
 
   // Prefer the voiceover clip's asset (that's the speech we want captioned),
   // then any audio asset, then fall back to the video's own audio.
@@ -73,14 +78,23 @@ async function main() {
   });
   const { captions } = toCaptions({ whisperCppOutput });
   const words = captions
-    .map((c) => ({ text: String(c.text).trim(), start: round(c.startMs / 1000), end: round(c.endMs / 1000) }))
-    .filter((w) => w.text);
+    .map((c) => ({
+      text: String(c.text).trim().slice(0, 256),
+      start: round(c.startMs / 1000),
+      end: round(c.endMs / 1000),
+    }))
+    .filter((w) => w.text)
+    .slice(0, 20_000); // schema cap on caption words
 
   const capTrack = edl.tracks.find((t) => t.type === "caption");
   if (capTrack) capTrack.words = words;
   else edl.tracks.push({ id: "cap", type: "caption", style: "karaoke", words });
 
-  fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
+  const final = parseEdl(edl);
+  if (!final.ok || !final.edl) {
+    throw new Error(`captions produced an invalid edl: ${(final.errors ?? []).slice(0, 5).join("; ")}`);
+  }
+  fs.writeFileSync(edlPath, `${JSON.stringify(final.edl, null, 2)}\n`);
   console.log(`DONE ${words.length} caption words`);
 }
 

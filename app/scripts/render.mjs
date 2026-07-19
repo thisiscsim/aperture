@@ -6,6 +6,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { bundle } from "@remotion/bundler";
 import { ensureBrowser, renderMedia, selectComposition } from "@remotion/renderer";
+import { parseEdl } from "@reel/edl";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -20,7 +21,15 @@ async function main() {
   if (!slug) throw new Error("missing --slug");
 
   const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
-  const edl = JSON.parse(fs.readFileSync(path.join(projectDir, "edl.json"), "utf8"));
+  // edl.json is a shareable file and this render runs regardless of what the
+  // editor thinks of it: validate before Infinity timings can wedge the
+  // export or traversal paths can reach staticFile() in headless Chromium.
+  const parsed = parseEdl(JSON.parse(fs.readFileSync(path.join(projectDir, "edl.json"), "utf8")));
+  if (!parsed.ok || !parsed.edl) {
+    console.error(`ERROR invalid edl.json: ${(parsed.errors ?? ["unknown"]).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  const edl = parsed.edl;
 
   // Export overrides from Settings. Frame rate re-times nothing (EDL timing is
   // in seconds); resolution renders the same layout at a scale factor.

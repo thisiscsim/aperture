@@ -12,7 +12,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { generateText } from "ai";
-import { parseEdl } from "@reel/edl";
+import { parseEdl, parseStyleProfile } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { ANIM_NAMES, enforceStyle, extractJson, restoreAudioTracks, sanitizeEdl } from "./edl-util.mjs";
 
@@ -42,6 +42,19 @@ function readJsonMaybe(file) {
   }
 }
 
+// style.json / profile.json are shareable files whose values get stamped into
+// the EDL (enforceStyle) and spliced into prompts — never use one unvalidated.
+function readStyleMaybe(file) {
+  const raw = readJsonMaybe(file);
+  if (raw == null) return null;
+  try {
+    return parseStyleProfile(raw);
+  } catch (err) {
+    console.error(`ERROR ignoring invalid style profile ${path.basename(file)}: ${err}`);
+    return null;
+  }
+}
+
 function stylesDir() {
   return process.env.APERTURE_STYLES_DIR || path.join(repoRoot, "styles");
 }
@@ -67,7 +80,7 @@ function resolveActiveStyle(projectDir, slug) {
   const localPath = path.join(projectDir, "style.json");
   if (fs.existsSync(localPath)) {
     return {
-      profile: readJsonMaybe(localPath),
+      profile: readStyleMaybe(localPath),
       kind: "project",
       analyzeArgs: ["--slug", slug],
       profilePath: localPath,
@@ -94,7 +107,7 @@ function resolveActiveStyle(projectDir, slug) {
     // Belt-and-braces containment: the id regex already forbids traversal.
     if (!styleDir.startsWith(path.resolve(dir) + path.sep)) return { profile: null };
     return {
-      profile: readJsonMaybe(path.join(styleDir, "profile.json")),
+      profile: readStyleMaybe(path.join(styleDir, "profile.json")),
       kind: "library",
       analyzeArgs: ["--styleDir", styleDir],
       profilePath: path.join(styleDir, "profile.json"),
@@ -206,7 +219,7 @@ async function main() {
       cwd: repoRoot,
       encoding: "utf8",
     });
-    if (r.status === 0) active.profile = readJsonMaybe(active.profilePath) ?? active.profile;
+    if (r.status === 0) active.profile = readStyleMaybe(active.profilePath) ?? active.profile;
     // If analysis fails (e.g. no source clips), continue with whatever profile exists.
   }
   const profile = active.profile;
@@ -260,8 +273,18 @@ async function main() {
     // baseline unreadable — keep the model's cut as-is
   }
 
+  // enforceStyle/restoreAudioTracks ran AFTER the schema gate; re-validate so
+  // nothing post-validation can land an invalid edl.json on disk.
+  const final = parseEdl(edl);
+  if (!final.ok || !final.edl) {
+    console.error(
+      `ERROR post-processing produced an invalid edl (${(final.errors ?? []).slice(0, 3).join("; ")}). Baseline was kept.`,
+    );
+    process.exit(2);
+  }
+
   console.log("PHASE writing edl.json");
-  fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
+  fs.writeFileSync(edlPath, `${JSON.stringify(final.edl, null, 2)}\n`);
   console.log(`DONE generated ${slug}/edl.json`);
 }
 
