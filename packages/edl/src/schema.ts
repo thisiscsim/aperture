@@ -237,6 +237,8 @@ export const MetaSchema = z.object({
   status: z.enum(["draft", "generated", "critiqued", "exported"]).default("draft"),
   /** Id of the learned/selected style profile that seeds generation. */
   styleProfileId: z.string().optional(),
+  /** Home-page album this project belongs to (registry lives at the projects root). */
+  albumId: z.string().max(64).optional(),
 });
 
 /**

@@ -50,6 +50,13 @@ export interface ProjectSummary {
   durationSec: number;
   assetCount: number;
   updatedAt?: string;
+  albumId?: string;
+}
+
+export interface AlbumSummary {
+  id: string;
+  name: string;
+  createdAt: string;
 }
 
 export interface CreateProjectResult {
@@ -107,6 +114,13 @@ const api = {
   }): Promise<CreateProjectResult> => ipcRenderer.invoke("project:create", input),
   projectThumbnail: (slug: string): Promise<string | null> =>
     ipcRenderer.invoke("project:thumbnail", slug),
+  listAlbums: (): Promise<AlbumSummary[]> => ipcRenderer.invoke("albums:list"),
+  createAlbum: (name: string): Promise<{ ok: boolean; id?: string; name?: string; error?: string }> =>
+    ipcRenderer.invoke("albums:create", name),
+  renameAlbum: (id: string, name: string): Promise<SaveResult> => ipcRenderer.invoke("albums:rename", id, name),
+  deleteAlbum: (id: string): Promise<SaveResult> => ipcRenderer.invoke("albums:delete", id),
+  setProjectAlbum: (slug: string, albumId: string | null): Promise<SaveResult> =>
+    ipcRenderer.invoke("project:setAlbum", slug, albumId),
   deleteProject: (slug: string): Promise<SaveResult> => ipcRenderer.invoke("project:delete", slug),
   loadProject: (slug: string): Promise<LoadProjectResult> =>
     ipcRenderer.invoke("project:load", slug),

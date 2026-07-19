@@ -1,26 +1,38 @@
-import { type DragEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets } from "../lib/edl-edit";
+import { buildTiles, relativeTime, SORT_LABELS, type HomeSort, type HomeTile } from "../lib/home";
 import { SettingsButton } from "./SettingsModal";
-import { Badge, Button, Field, Icon, IconButton, Input, Modal, TextArea } from "./ui";
-import type { ProjectSummary } from "../../../preload";
+import { Button, Field, Icon, IconButton, Input, Modal, TextArea, useEscapeKey } from "./ui";
+import type { AlbumSummary, ProjectSummary } from "../../../preload";
+
+const SORTS: HomeSort[] = ["newest", "oldest", "az", "za"];
 
 export function Home(): JSX.Element {
   const projects = useEditor((s) => s.projects);
   const setProjects = useEditor((s) => s.setProjects);
   const openProject = useEditor((s) => s.openProject);
+  const [albums, setAlbums] = useState<AlbumSummary[]>([]);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"all" | "albums">("all");
+  const [sort, setSort] = useState<HomeSort>("newest");
+  const [query, setQuery] = useState("");
+  const [openAlbumId, setOpenAlbumId] = useState<string | null>(null);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     window.api
       ?.listProjects()
       .then((list) => setProjects(list))
       .catch(() => setProjects([]))
       .finally(() => setLoading(false));
-  };
+    window.api?.listAlbums().then(setAlbums).catch(() => {});
+  }, [setProjects]);
 
-  useEffect(refresh, [setProjects]);
+  useEffect(refresh, [refresh]);
+
+  const openAlbum = openAlbumId ? albums.find((a) => a.id === openAlbumId) ?? null : null;
+  const tiles = buildTiles({ projects, albums, tab, openAlbumId, sort, query });
 
   return (
     <div className="home">
@@ -46,17 +58,78 @@ export function Home(): JSX.Element {
           </p>
         </div>
 
+        <div className="home-toolbar">
+          {openAlbum ? (
+            <button className="home-back" onClick={() => setOpenAlbumId(null)}>
+              <Icon name="arrow-left" size={16} />
+              <span>{openAlbum.name}</span>
+            </button>
+          ) : (
+            <div className="home-tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={tab === "all"}
+                className={`home-tab ${tab === "all" ? "active" : ""}`}
+                onClick={() => setTab("all")}
+              >
+                All
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === "albums"}
+                className={`home-tab ${tab === "albums" ? "active" : ""}`}
+                onClick={() => setTab("albums")}
+              >
+                Albums
+              </button>
+            </div>
+          )}
+          <div className="home-toolbar-right">
+            <SortMenu sort={sort} onChange={setSort} />
+            <input
+              className="home-search"
+              type="text"
+              placeholder="Search..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
         {loading ? (
           <p className="home-loading">Loading projects…</p>
         ) : (
-          <div className="project-grid">
-            {projects.map((p) => (
-              <ProjectCard key={p.slug} project={p} onOpen={() => openProject(p.slug)} onDeleted={refresh} />
-            ))}
-            <button className="project-card project-card--new" onClick={() => setCreating(true)}>
-              <Icon name="clapboard-wide" size={16} />
-              <span>New project</span>
-            </button>
+          <div className="tile-grid">
+            {tiles.map((tile) =>
+              tile.kind === "project" ? (
+                <ProjectTile
+                  key={tile.project.slug}
+                  project={tile.project}
+                  albums={albums}
+                  inAlbum={Boolean(openAlbumId)}
+                  onOpen={() => openProject(tile.project.slug)}
+                  onChanged={refresh}
+                />
+              ) : (
+                <AlbumTile
+                  key={tile.album.id}
+                  album={tile.album}
+                  members={tile.members}
+                  updatedAt={tile.updatedAt}
+                  onOpen={() => setOpenAlbumId(tile.album.id)}
+                  onChanged={refresh}
+                />
+              ),
+            )}
+            {tiles.length === 0 && tab === "albums" && !openAlbum && query.trim() === "" && (
+              <p className="home-loading">No albums yet — use a project&apos;s menu → Move to album.</p>
+            )}
+            {!openAlbum && tab === "all" && (
+              <button className="tile tile-new" onClick={() => setCreating(true)}>
+                <Icon name="clapboard-wide" size={16} />
+                <span>New project</span>
+              </button>
+            )}
           </div>
         )}
       </main>
@@ -75,123 +148,397 @@ export function Home(): JSX.Element {
   );
 }
 
-function statusBadge(status: string): { label: string; variant: "neutral" | "accent" } {
-  switch (status) {
-    case "exported":
-      return { label: "Published", variant: "accent" };
-    case "generated":
-      return { label: "Generated", variant: "neutral" };
-    case "critiqued":
-      return { label: "Critiqued", variant: "neutral" };
-    default:
-      return { label: "Draft", variant: "neutral" };
-  }
+/* ---------------- toolbar sort ---------------- */
+
+function SortMenu({ sort, onChange }: { sort: HomeSort; onChange: (s: HomeSort) => void }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEscapeKey(open ? () => setOpen(false) : null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="sort-wrap" ref={ref}>
+      <button className="sort-btn" onClick={() => setOpen((v) => !v)}>
+        {SORT_LABELS[sort]}
+        <Icon name="chevron-top" size={16} style={{ transform: "rotate(180deg)" }} />
+      </button>
+      {open && (
+        <div className="menu-pop sort-pop" role="menu">
+          {SORTS.map((s) => (
+            <button
+              key={s}
+              className={`menu-item ${s === sort ? "selected" : ""}`}
+              onClick={() => {
+                onChange(s);
+                setOpen(false);
+              }}
+            >
+              <span className="menu-item-label">{SORT_LABELS[s]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function relativeTime(iso?: string): string | null {
-  if (!iso) return null;
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  const min = Math.floor(ms / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min} min ago`;
-  const hours = Math.floor(min / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
-  const months = Math.floor(days / 30);
-  return `${months} month${months === 1 ? "" : "s"} ago`;
-}
+/* ---------------- tiles ---------------- */
 
-function ProjectCard({
-  project,
-  onOpen,
-  onDeleted,
-}: {
-  project: ProjectSummary;
-  onOpen: () => void;
-  onDeleted: () => void;
-}): JSX.Element {
+function useThumb(slug: string): string | null {
   const [thumb, setThumb] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     let alive = true;
     window.api
-      ?.projectThumbnail(project.slug)
+      ?.projectThumbnail(slug)
       .then((url) => alive && setThumb(url))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [project.slug]);
+  }, [slug]);
+  return thumb;
+}
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [menuOpen]);
+function ProjectTile({
+  project,
+  albums,
+  inAlbum,
+  onOpen,
+  onChanged,
+}: {
+  project: ProjectSummary;
+  albums: AlbumSummary[];
+  inAlbum: boolean;
+  onOpen: () => void;
+  onChanged: () => void;
+}): JSX.Element {
+  const thumb = useThumb(project.slug);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(project.title);
 
-  const onDelete = async () => {
-    setMenuOpen(false);
-    if (!window.confirm(`Delete "${project.title}"? This permanently removes the project folder.`)) return;
-    const res = await window.api.deleteProject(project.slug);
-    if (res.ok) onDeleted();
+  const commitRename = async () => {
+    setRenaming(false);
+    const title = draft.trim();
+    if (title && title !== project.title) {
+      await window.api.saveMeta(project.slug, { title });
+      onChanged();
+    }
   };
 
-  const badge = statusBadge(project.status);
-  const when = relativeTime(project.updatedAt);
-  const meta = [`${project.durationSec.toFixed(1)}s`, when].filter(Boolean).join(" ⋅ ");
+  const meta = [`${project.durationSec.toFixed(1)}s`, relativeTime(project.updatedAt)]
+    .filter(Boolean)
+    .join(" ⋅ ");
 
   return (
-    <div className="project-card" onClick={onOpen} role="button" tabIndex={0}>
-      <div className="project-card-media">
-        {thumb ? <img src={thumb} alt="" /> : <div className="project-card-placeholder">No clips yet</div>}
+    <div className="tile" role="button" tabIndex={0} onClick={() => !renaming && onOpen()}>
+      <div className="tile-thumb">
+        {thumb ? <img src={thumb} alt="" /> : <div className="tile-thumb-empty">No clips yet</div>}
       </div>
-      <Badge variant={badge.variant} className="project-card-badge">
-        {badge.label}
-      </Badge>
-      <div className="project-card-footer">
-        <div className="project-card-info">
-          <div className="project-card-title">{project.title}</div>
-          <div className="project-card-meta">{meta}</div>
+      <div className="tile-info">
+        <div className="tile-text">
+          {renaming ? (
+            <input
+              className="tile-rename"
+              value={draft}
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => void commitRename()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void commitRename();
+                if (e.key === "Escape") setRenaming(false);
+              }}
+            />
+          ) : (
+            <div className="tile-title">{project.title}</div>
+          )}
+          <div className="tile-meta">{meta}</div>
         </div>
-        <div className="project-card-menu" ref={menuRef}>
-          <IconButton
-            icon="ellipsis"
-            size={12}
-            label="Project options"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen((v) => !v);
-            }}
-          />
-          {menuOpen && (
-            <div className="card-menu">
+        <TileMenu
+          label={`Options for ${project.title}`}
+          items={(close) => (
+            <>
+              <MoveToAlbumItem project={project} albums={albums} close={close} onChanged={onChanged} />
               <button
-                className="card-menu-item danger"
+                className="menu-item"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void onDelete();
+                  close();
+                  setDraft(project.title);
+                  setRenaming(true);
                 }}
               >
-                Delete project
+                <Icon name="input-form" size={16} />
+                <span className="menu-item-label">Rename project</span>
               </button>
-            </div>
+              {inAlbum && (
+                <button
+                  className="menu-item"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    close();
+                    await window.api.setProjectAlbum(project.slug, null);
+                    onChanged();
+                  }}
+                >
+                  <Icon name="move-folder" size={16} />
+                  <span className="menu-item-label">Remove from album</span>
+                </button>
+              )}
+              <button
+                className="menu-item danger"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  close();
+                  if (!window.confirm(`Delete "${project.title}"? This permanently removes the project folder.`))
+                    return;
+                  const res = await window.api.deleteProject(project.slug);
+                  if (res.ok) onChanged();
+                }}
+              >
+                <Icon name="trash-can" size={16} />
+                <span className="menu-item-label">Delete project</span>
+              </button>
+            </>
           )}
-        </div>
+        />
       </div>
+    </div>
+  );
+}
+
+/** "Move to album ›" row with the albums submenu (new album + existing albums). */
+function MoveToAlbumItem({
+  project,
+  albums,
+  close,
+  onChanged,
+}: {
+  project: ProjectSummary;
+  albums: AlbumSummary[];
+  close: () => void;
+  onChanged: () => void;
+}): JSX.Element {
+  const [subOpen, setSubOpen] = useState(false);
+
+  const move = async (albumId: string) => {
+    close();
+    await window.api.setProjectAlbum(project.slug, albumId);
+    onChanged();
+  };
+
+  return (
+    <div
+      className="menu-item-wrap"
+      onMouseEnter={() => setSubOpen(true)}
+      onMouseLeave={() => setSubOpen(false)}
+    >
+      <button
+        className="menu-item"
+        onClick={(e) => {
+          e.stopPropagation();
+          setSubOpen((v) => !v);
+        }}
+      >
+        <Icon name="move-folder" size={16} />
+        <span className="menu-item-label">Move to album</span>
+        <Icon name="chevron-right-small" size={16} className="menu-item-chevron" />
+      </button>
+      {subOpen && (
+        <div className="menu-pop menu-sub" role="menu">
+          <button
+            className="menu-item"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const res = await window.api.createAlbum("New album");
+              if (res.ok && res.id) await move(res.id);
+            }}
+          >
+            <Icon name="plus-large" size={16} />
+            <span className="menu-item-label">New album</span>
+          </button>
+          {albums.map((a) => (
+            <AlbumSubmenuRow key={a.id} album={a} onPick={() => void move(a.id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlbumSubmenuRow({ album, onPick }: { album: AlbumSummary; onPick: () => void }): JSX.Element {
+  const projects = useEditor((s) => s.projects);
+  const first = projects.find((p) => p.albumId === album.id);
+  const thumb = useThumb(first?.slug ?? "");
+  return (
+    <button
+      className="menu-item"
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick();
+      }}
+    >
+      {first && thumb ? (
+        <img className="menu-item-thumb" src={thumb} alt="" />
+      ) : (
+        <span className="menu-item-thumb menu-item-thumb-empty" />
+      )}
+      <span className="menu-item-label">{album.name}</span>
+    </button>
+  );
+}
+
+function AlbumTile({
+  album,
+  members,
+  updatedAt,
+  onOpen,
+  onChanged,
+}: {
+  album: AlbumSummary;
+  members: ProjectSummary[];
+  updatedAt?: string;
+  onOpen: () => void;
+  onChanged: () => void;
+}): JSX.Element {
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(album.name);
+
+  const commitRename = async () => {
+    setRenaming(false);
+    const name = draft.trim();
+    if (name && name !== album.name) {
+      await window.api.renameAlbum(album.id, name);
+      onChanged();
+    }
+  };
+
+  const meta = [`${members.length} item${members.length === 1 ? "" : "s"}`, relativeTime(updatedAt)]
+    .filter(Boolean)
+    .join(" ⋅ ");
+
+  return (
+    <div className="tile" role="button" tabIndex={0} onClick={() => !renaming && onOpen()}>
+      <div className="album-cover">
+        {[0, 1, 2, 3].map((i) =>
+          members[i] ? (
+            <AlbumCoverCell key={members[i].slug} slug={members[i].slug} />
+          ) : (
+            <span key={`empty-${i}`} className="album-cover-cell album-cover-empty" />
+          ),
+        )}
+      </div>
+      <div className="tile-info">
+        <div className="tile-text">
+          {renaming ? (
+            <input
+              className="tile-rename"
+              value={draft}
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => void commitRename()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void commitRename();
+                if (e.key === "Escape") setRenaming(false);
+              }}
+            />
+          ) : (
+            <div className="tile-title">{album.name}</div>
+          )}
+          <div className="tile-meta">{meta}</div>
+        </div>
+        <TileMenu
+          label={`Options for ${album.name}`}
+          items={(close) => (
+            <>
+              <button
+                className="menu-item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  setDraft(album.name);
+                  setRenaming(true);
+                }}
+              >
+                <Icon name="input-form" size={16} />
+                <span className="menu-item-label">Rename album</span>
+              </button>
+              <button
+                className="menu-item danger"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  close();
+                  if (!window.confirm(`Delete the album "${album.name}"? Its projects are kept and ungrouped.`))
+                    return;
+                  const res = await window.api.deleteAlbum(album.id);
+                  if (res.ok) onChanged();
+                }}
+              >
+                <Icon name="trash-can" size={16} />
+                <span className="menu-item-label">Delete album</span>
+              </button>
+            </>
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AlbumCoverCell({ slug }: { slug: string }): JSX.Element {
+  const thumb = useThumb(slug);
+  return (
+    <span className="album-cover-cell">
+      {thumb ? <img src={thumb} alt="" /> : <span className="album-cover-empty" />}
+    </span>
+  );
+}
+
+/** Ellipsis icon-button + anchored popover, closing on Escape/outside click. */
+function TileMenu({
+  label,
+  items,
+}: {
+  label: string;
+  items: (close: () => void) => React.ReactNode;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEscapeKey(open ? () => setOpen(false) : null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="tile-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
+      <IconButton
+        icon="ellipsis"
+        size={12}
+        className={`tile-menu-btn ${open ? "open" : ""}`}
+        label={label}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      />
+      {open && (
+        <div className="menu-pop tile-menu-pop" role="menu">
+          {items(() => setOpen(false))}
+        </div>
+      )}
     </div>
   );
 }

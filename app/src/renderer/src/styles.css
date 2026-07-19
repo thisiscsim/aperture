@@ -572,27 +572,24 @@ button.brand:hover {
 .home-content {
   flex: 1;
   overflow-y: auto;
-  padding: 64px 16px;
+  padding: 64px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-24);
+  gap: 24px;
 }
 
 .home-hero {
-  width: 100%;
-  max-width: 1264px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: 6px;
 }
 
 .home-hero h1 {
+  margin: 0;
   font-family: var(--font-brand);
   font-size: 24px;
   font-weight: 400;
   line-height: 1;
-  margin: 0;
   color: var(--foreground-primary);
 }
 
@@ -604,90 +601,175 @@ button.brand:hover {
 }
 
 .home-loading {
-  width: 100%;
-  max-width: 1264px;
-  color: var(--foreground-secondary);
   font-size: 14px;
+  color: var(--foreground-secondary);
 }
 
-.project-grid {
-  width: 100%;
-  max-width: 1264px;
+/* ---------- Toolbar: tabs / back + sort + search ---------- */
+.home-toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-16);
+  justify-content: space-between;
+  gap: var(--space-8);
 }
 
-.project-card {
+.home-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.home-tab {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--foreground-disabled);
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.home-tab:hover {
+  color: var(--foreground-secondary);
+}
+
+.home-tab.active {
+  color: var(--foreground-primary);
+}
+
+.home-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--foreground-primary);
+  cursor: pointer;
+}
+
+.home-back:hover {
+  color: var(--foreground-secondary);
+}
+
+.home-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+}
+
+.sort-wrap {
   position: relative;
+  height: 100%;
+}
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 100%;
+  padding: 4px 8px;
+  border: 0.5px solid var(--border-secondary);
+  border-radius: 8px;
+  background: none;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.sort-btn:hover {
+  background: var(--background-secondary);
+}
+
+.sort-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+}
+
+.home-search {
   width: 240px;
-  height: 300px;
+  height: 28px;
+  padding: 6.5px 8.5px;
+  border: 0.5px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--foreground-primary);
+  outline: none;
+}
+
+.home-search::placeholder {
+  color: var(--foreground-muted);
+}
+
+/* ---------- Tile grid ---------- */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.tile {
   display: flex;
   flex-direction: column;
-  background: var(--background-primary);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-lg);
-  /* No overflow:hidden — the ⋯ dropdown must escape the card. The media
-     clips its own corners instead. */
+  min-width: 0;
   cursor: pointer;
-  padding: 0;
-  color: var(--foreground-primary);
   text-align: left;
-  transition: border-color 120ms ease, box-shadow 120ms ease, transform 150ms ease;
 }
 
-.project-card:hover {
-  border-color: var(--border-secondary);
-  box-shadow: var(--shadow-card);
-  transform: translateY(-2px);
-  /* The hover transform creates a stacking context; lift it above sibling
-     cards so an open dropdown never paints underneath a neighbor. */
-  z-index: 2;
-}
-
-.project-card-media {
-  flex: 1;
-  min-height: 0;
-  background: var(--background-secondary);
-  display: grid;
-  place-items: center;
+.tile-thumb {
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
   overflow: hidden;
-  /* card radius (10) minus its 1px border */
-  border-radius: 9px 9px 0 0;
+  background: var(--background-secondary);
 }
 
-.project-card-media img {
+.tile-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
-.project-card-placeholder {
+.tile-thumb-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
   font-size: 12px;
   color: var(--foreground-muted);
 }
 
-.project-card-badge {
-  position: absolute;
-  top: 7px;
-  left: 7px;
-}
-
-.project-card-footer {
-  flex: none;
+.tile-info {
   display: flex;
   align-items: flex-start;
-  padding: var(--space-12);
+  padding-top: 12px;
   gap: var(--space-4);
 }
 
-.project-card-info {
+.tile-text {
   flex: 1;
   min-width: 0;
 }
 
-.project-card-title {
+.tile-title {
   font-size: 14px;
   line-height: 20px;
   color: var(--foreground-primary);
@@ -696,72 +778,186 @@ button.brand:hover {
   text-overflow: ellipsis;
 }
 
-.project-card-meta {
+.tile-rename {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: var(--background-secondary);
+  padding: 2px 6px;
+  margin: -2px 0 -2px -6px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--foreground-primary);
+  outline: none;
+}
+
+.tile-meta {
   font-size: 12px;
   line-height: 16px;
   color: var(--foreground-secondary);
   font-variant-numeric: lining-nums proportional-nums;
 }
 
-.project-card-menu {
-  position: relative;
+/* ---------- Album cover (2x2 member thumbnails) ---------- */
+.album-cover {
+  aspect-ratio: 1 / 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  border: 0.5px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--background-primary);
 }
 
-.project-card--new {
+.album-cover-cell {
+  border-radius: 6px;
+  overflow: hidden;
+  min-height: 0;
+  display: block;
+}
+
+.album-cover-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.album-cover-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--background-secondary);
+}
+
+/* ---------- New project tile ---------- */
+.tile-new {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-direction: column;
   gap: var(--space-4);
   border: 1px dashed var(--border-primary);
+  border-radius: 8px;
   background: var(--background-primary);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 20px;
   color: var(--foreground-primary);
-}
-
-.project-card--new:hover {
-  border-color: var(--border-secondary);
-}
-
-.card-menu {
-  position: absolute;
-  top: 24px;
-  right: 0;
-  min-width: 150px;
-  background: var(--background-primary);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-modal);
-  padding: 4px;
-  z-index: 10;
-}
-
-.card-menu-item {
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  color: var(--foreground-primary);
-  font-size: 12px;
-  line-height: 16px;
-  padding: 6px 8px;
-  border-radius: var(--radius-xs);
   cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
-.card-menu-item:hover {
+.tile-new:hover {
+  border-color: var(--foreground-muted);
   background: var(--background-secondary);
 }
 
-.card-menu-item.danger {
-  color: #c0392b;
+/* ---------- Tile menus (Figma popover spec) ---------- */
+.tile-menu {
+  position: relative;
+  flex: none;
 }
 
-.ui-form-error {
-  margin: 0;
-  font-size: 12px;
-  color: #c0392b;
+.tile-menu-btn {
+  padding: 4px;
+  border-radius: 4px;
 }
+
+.tile-menu-btn:hover,
+.tile-menu-btn.open {
+  background: var(--border-primary);
+  color: var(--foreground-primary);
+}
+
+.menu-pop {
+  min-width: 240px;
+  padding: 4px;
+  background: var(--background-primary);
+  border: 0.5px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  display: flex;
+  flex-direction: column;
+}
+
+.tile-menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+}
+
+.menu-item-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.menu-item {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--foreground-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.menu-item:hover,
+.menu-item.selected {
+  background: var(--background-secondary);
+}
+
+.menu-item-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-item-chevron {
+  flex: none;
+  color: var(--foreground-secondary);
+}
+
+.menu-item.danger {
+  color: var(--foreground-danger);
+}
+
+.menu-item-thumb {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.menu-item-thumb-empty {
+  display: inline-block;
+  background: var(--background-secondary);
+}
+
+.menu-sub {
+  position: absolute;
+  left: calc(100% + 4px);
+  top: 0;
+  z-index: 31;
+}
+
 
 /* ---------- Toast ---------- */
 .toast {

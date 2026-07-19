@@ -6,6 +6,8 @@ import { useEditor } from "../store";
 afterEach(() => {
   cleanup();
   vi.mocked(window.api.getPathForFile).mockReset();
+  vi.mocked(window.api.listProjects).mockReset().mockResolvedValue([]);
+  vi.mocked(window.api.listAlbums).mockReset().mockResolvedValue([]);
 });
 
 function openDialog() {
@@ -14,6 +16,67 @@ function openDialog() {
   fireEvent.click(screen.getAllByText("New project")[0]);
   return utils;
 }
+
+describe("Home albums", () => {
+  it("shows album tiles and moves a project into an album from the card menu", async () => {
+    vi.mocked(window.api.listProjects).mockResolvedValue([
+      {
+        slug: "napa",
+        title: "Birthday in Napa Valley",
+        platform: "reels",
+        status: "draft",
+        durationSec: 24.9,
+        assetCount: 3,
+        updatedAt: "2026-07-18T00:00:00Z",
+      },
+    ]);
+    vi.mocked(window.api.listAlbums).mockResolvedValue([
+      { id: "nyc", name: "New York City", createdAt: "2026-07-01T00:00:00Z" },
+    ]);
+    vi.mocked(window.api.setProjectAlbum).mockResolvedValue({ ok: true });
+    useEditor.setState({ view: "home", projects: [] });
+    render(<Home />);
+
+    expect(await screen.findByText("Birthday in Napa Valley")).toBeInTheDocument();
+    expect(screen.getByText("New York City")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Options for Birthday in Napa Valley"));
+    fireEvent.click(screen.getByText("Move to album"));
+    fireEvent.click(await screen.findByText("New York City", { selector: ".menu-item-label" }));
+    await waitFor(() => expect(window.api.setProjectAlbum).toHaveBeenCalledWith("napa", "nyc"));
+  });
+
+  it("filters tiles by search query", async () => {
+    vi.mocked(window.api.listProjects).mockResolvedValue([
+      {
+        slug: "napa",
+        title: "Birthday in Napa Valley",
+        platform: "reels",
+        status: "draft",
+        durationSec: 24.9,
+        assetCount: 3,
+        updatedAt: "2026-07-18T00:00:00Z",
+      },
+      {
+        slug: "sur",
+        title: "Day trip to Big Sur",
+        platform: "reels",
+        status: "draft",
+        durationSec: 12,
+        assetCount: 2,
+        updatedAt: "2026-07-17T00:00:00Z",
+      },
+    ]);
+    vi.mocked(window.api.listAlbums).mockResolvedValue([]);
+    useEditor.setState({ view: "home", projects: [] });
+    render(<Home />);
+
+    await screen.findByText("Day trip to Big Sur");
+    fireEvent.change(screen.getByPlaceholderText("Search..."), { target: { value: "napa" } });
+    expect(screen.getByText("Birthday in Napa Valley")).toBeInTheDocument();
+    expect(screen.queryByText("Day trip to Big Sur")).not.toBeInTheDocument();
+  });
+});
 
 describe("NewProjectModal clips staging", () => {
   it("stages picked files as removable rows (snapshot survives the input reset)", async () => {

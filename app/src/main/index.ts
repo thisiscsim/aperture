@@ -395,6 +395,104 @@ export interface ProjectSummary {
   durationSec: number;
   assetCount: number;
   updatedAt?: string;
+  albumId?: string;
+}
+
+// ---- Home-page albums (registry at <PROJECTS_DIR>/albums.json; membership
+// lives in each project's meta.json so projects stay self-describing) ----
+export interface AlbumRecord {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+const ALBUMS_FILE = () => join(PROJECTS_DIR, "albums.json");
+
+function readAlbums(): AlbumRecord[] {
+  try {
+    const raw = JSON.parse(readFileSync(ALBUMS_FILE(), "utf8")) as { albums?: unknown[] };
+    return (raw.albums ?? []).filter(
+      (a): a is AlbumRecord =>
+        typeof a === "object" && a !== null && typeof (a as AlbumRecord).id === "string" &&
+        typeof (a as AlbumRecord).name === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeAlbumsFile(albums: AlbumRecord[]): void {
+  writeFileSync(ALBUMS_FILE(), `${JSON.stringify({ albums }, null, 2)}\n`);
+}
+
+const validAlbumId = (id: string) => /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id);
+
+function createAlbum(name: string): { ok: boolean; id?: string; name?: string; error?: string } {
+  try {
+    const albums = readAlbums();
+    // Dedupe the display name ("New album", "New album 2", ...) then derive the id.
+    const base = name.trim() || "New album";
+    let finalName = base;
+    let n = 2;
+    while (albums.some((a) => a.name.toLowerCase() === finalName.toLowerCase())) finalName = `${base} ${n++}`;
+    const idBase = slugify(finalName);
+    let id = idBase;
+    n = 2;
+    while (albums.some((a) => a.id === id)) id = `${idBase}-${n++}`;
+    albums.push({ id, name: finalName, createdAt: new Date().toISOString() });
+    writeAlbumsFile(albums);
+    return { ok: true, id, name: finalName };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function renameAlbum(id: string, name: string): { ok: boolean; error?: string } {
+  try {
+    if (!validAlbumId(id)) return { ok: false, error: "invalid album id" };
+    const albums = readAlbums();
+    const album = albums.find((a) => a.id === id);
+    if (!album) return { ok: false, error: "album not found" };
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false, error: "name required" };
+    album.name = trimmed;
+    writeAlbumsFile(albums);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function deleteAlbum(id: string): { ok: boolean; error?: string } {
+  try {
+    if (!validAlbumId(id)) return { ok: false, error: "invalid album id" };
+    writeAlbumsFile(readAlbums().filter((a) => a.id !== id));
+    // The group dissolves; member projects are kept and just ungrouped.
+    for (const slug of readdirSync(PROJECTS_DIR)) {
+      try {
+        if (!existsSync(join(PROJECTS_DIR, slug, "meta.json"))) continue;
+        if (readMeta(slug).albumId === id) touchMeta(slug, { albumId: undefined });
+      } catch {
+        // skip unreadable entries
+      }
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function setProjectAlbum(slug: string, albumId: string | null): { ok: boolean; error?: string } {
+  try {
+    if (albumId !== null) {
+      if (!validAlbumId(albumId)) return { ok: false, error: "invalid album id" };
+      if (!readAlbums().some((a) => a.id === albumId)) return { ok: false, error: "album not found" };
+    }
+    touchMeta(slug, { albumId: albumId ?? undefined });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 function slugify(name: string): string {
@@ -445,6 +543,7 @@ function listProjects(): ProjectSummary[] {
       durationSec,
       assetCount,
       updatedAt,
+      albumId: meta.albumId,
     });
   }
   return summaries.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
@@ -1166,6 +1265,13 @@ app.whenReady().then(() => {
       createProject(input),
   );
   ipcMain.handle("project:thumbnail", (_event, slug: string) => ensureThumbnail(slug));
+  ipcMain.handle("albums:list", () => readAlbums());
+  ipcMain.handle("albums:create", (_event, name: string) => createAlbum(name));
+  ipcMain.handle("albums:rename", (_event, id: string, name: string) => renameAlbum(id, name));
+  ipcMain.handle("albums:delete", (_event, id: string) => deleteAlbum(id));
+  ipcMain.handle("project:setAlbum", (_event, slug: string, albumId: string | null) =>
+    setProjectAlbum(slug, albumId),
+  );
   ipcMain.handle("project:delete", (_event, slug: string) => deleteProject(slug));
   ipcMain.handle("project:load", (_event, slug: string) => loadProject(slug));
   ipcMain.handle("project:watch", (event, slug: string) => {
