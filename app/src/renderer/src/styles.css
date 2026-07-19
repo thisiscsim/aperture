@@ -919,23 +919,25 @@ button.brand:hover {
   background: var(--background-secondary);
 }
 
+/* Offset is measured from the menu row, which sits inside the popover's 4px
+   padding — so +8px total = 4px to clear the popover edge + a 4px visual gap. */
 .menu-sub {
   position: absolute;
-  left: calc(100% + 4px);
+  left: calc(100% + 8px);
   top: 0;
   z-index: 31;
 }
 
-/* Invisible hover bridge over the 4px gap between menu and submenu — without
-   it, mouseleave fires mid-gap and the submenu unmounts before the cursor
-   can reach it. */
+/* Invisible hover bridge over the gap between menu and submenu — without it,
+   mouseleave fires mid-gap and the submenu unmounts before the cursor can
+   reach it. */
 .menu-sub::before {
   content: "";
   position: absolute;
-  left: -8px;
+  left: -12px;
   top: 0;
   bottom: 0;
-  width: 8px;
+  width: 12px;
 }
 
 
