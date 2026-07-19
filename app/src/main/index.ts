@@ -7,8 +7,10 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
+  unlinkSync,
   watch,
   writeFileSync,
 } from "node:fs";
@@ -110,6 +112,17 @@ let mainWindow: BrowserWindow | null = null;
 // later should also set productName in the builder config.)
 app.setName("Aperture");
 
+// Two instances would both watch and write the same edl.json/settings.json/
+// albums.json; refuse to start a second one and focus the first instead.
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0);
+}
+app.on("second-instance", () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+});
+
 // Load a local, gitignored env file (KEY=VALUE) so secrets like OPENAI_API_KEY
 // can live on disk instead of being exported into the launching shell. Existing
 // process env always wins. Runs at startup so spawned scripts inherit it.
@@ -184,7 +197,7 @@ function readSettings(): AppSettings {
 function writeSettings(patch: Partial<AppSettings>): AppSettings {
   const next = { ...readSettings(), ...patch };
   try {
-    writeFileSync(SETTINGS_PATH, `${JSON.stringify(next, null, 2)}\n`);
+    writeFileAtomic(SETTINGS_PATH, `${JSON.stringify(next, null, 2)}\n`);
   } catch {
     // best-effort
   }
@@ -310,6 +323,13 @@ function createWindow(): void {
 
   mainWindow = win;
   win.on("ready-to-show", () => win.show());
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
+    // On macOS the process outlives the window; don't leave the last
+    // project's watcher running against a windowless app.
+    activeWatcher?.watcher.close();
+    activeWatcher = null;
+  });
   win.webContents.setWindowOpenHandler((details) => {
     void shell.openExternal(details.url);
     return { action: "deny" };
@@ -324,6 +344,30 @@ function createWindow(): void {
 
 function readJson(file: string): unknown {
   return JSON.parse(readFileSync(file, "utf8"));
+}
+
+/**
+ * Write-then-rename so concurrent readers (the file watcher's reload path,
+ * engine scripts, a second window) can never observe a truncated file. The
+ * temp file lives in the same directory so the rename stays on one volume
+ * (atomic on POSIX).
+ */
+function writeFileAtomic(file: string, data: string | Buffer): void {
+  const tmp = join(
+    dirname(file),
+    `.${basename(file)}.${process.pid.toString(36)}${Date.now().toString(36)}.tmp`,
+  );
+  writeFileSync(tmp, data);
+  try {
+    renameSync(tmp, file);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // best-effort cleanup; the original error is the one that matters
+    }
+    throw err;
+  }
 }
 
 function readMeta(slug: string) {
@@ -362,7 +406,7 @@ function writeEdl(slug: string, edl: Edl): { ok: boolean; error?: string } {
     const validated = parseEdlOrThrow(edl);
     const file = safeProjectPath(slug, "edl.json");
     lastSelfWrite.set(slug, Date.now());
-    writeFileSync(file, `${JSON.stringify(validated, null, 2)}\n`);
+    writeFileAtomic(file, `${JSON.stringify(validated, null, 2)}\n`);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -372,7 +416,7 @@ function writeEdl(slug: string, edl: Edl): { ok: boolean; error?: string } {
 function touchMeta(slug: string, patch: Partial<ReturnType<typeof readMeta>>): void {
   try {
     const meta = { ...readMeta(slug), ...patch, updatedAt: new Date().toISOString() };
-    writeFileSync(safeProjectPath(slug, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
+    writeFileAtomic(safeProjectPath(slug, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
   } catch {
     // meta is best-effort
   }
@@ -381,10 +425,16 @@ function touchMeta(slug: string, patch: Partial<ReturnType<typeof readMeta>>): v
 function watchProject(slug: string, event: IpcMainInvokeEvent): void {
   activeWatcher?.watcher.close();
   activeWatcher = null;
-  const file = safeProjectPath(slug, "edl.json");
-  if (!existsSync(file)) return;
+  const dir = safeProjectPath(slug);
+  if (!existsSync(dir)) return;
   let timer: NodeJS.Timeout | null = null;
-  const watcher = watch(file, () => {
+  // Watch the directory, not the file: our atomic writes (and editors/scripts
+  // doing write-then-rename) swap the inode, which silently kills a file-level
+  // watch on macOS (kqueue) and Linux (inotify).
+  const watcher = watch(dir, (_eventType, filename) => {
+    // filename can be null on some platforms; only skip when we positively
+    // know the event was for a different file.
+    if (filename && filename !== "edl.json") return;
     // Ignore the echo from our own autosave.
     if (Date.now() - (lastSelfWrite.get(slug) ?? 0) < 1200) return;
     if (timer) clearTimeout(timer);
@@ -432,7 +482,7 @@ function readAlbums(): AlbumRecord[] {
 }
 
 function writeAlbumsFile(albums: AlbumRecord[]): void {
-  writeFileSync(ALBUMS_FILE(), `${JSON.stringify({ albums }, null, 2)}\n`);
+  writeFileAtomic(ALBUMS_FILE(), `${JSON.stringify({ albums }, null, 2)}\n`);
 }
 
 const validAlbumId = (id: string) => /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id);
@@ -583,13 +633,13 @@ function createProject(input: {
       status: "draft",
       styleProfileId: input.styleProfileId,
     });
-    writeFileSync(join(dir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
-    writeFileSync(
+    writeFileAtomic(join(dir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
+    writeFileAtomic(
       join(dir, "prompt.md"),
       input.prompt?.trim() ? `${input.prompt.trim()}\n` : `# ${meta.title}\n`,
     );
     const emptyEdl = parseEdlOrThrow({ tracks: [{ id: "v", type: "video", clips: [] }] });
-    writeFileSync(join(dir, "edl.json"), `${JSON.stringify(emptyEdl, null, 2)}\n`);
+    writeFileAtomic(join(dir, "edl.json"), `${JSON.stringify(emptyEdl, null, 2)}\n`);
     return { ok: true, slug };
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -752,7 +802,7 @@ function patchAssetProxy(slug: string, id: string, proxySrc: string, attempt = 0
       asset.proxySrc = proxySrc;
       // Intentionally do NOT mark lastSelfWrite: we want the watcher to reload
       // the editor so the preview picks up the proxy.
-      writeFileSync(file, `${JSON.stringify(edl, null, 2)}\n`);
+      writeFileAtomic(file, `${JSON.stringify(edl, null, 2)}\n`);
       return;
     }
   } catch {
@@ -1127,7 +1177,7 @@ function createStyle(name: string): { ok: boolean; id?: string; error?: string }
     let n = 2;
     while (existsSync(join(STYLES_DIR, id))) id = `${base}-${n++}`;
     mkdirSync(join(STYLES_DIR, id, "sources"), { recursive: true });
-    writeFileSync(
+    writeFileAtomic(
       join(STYLES_DIR, id, "profile.json"),
       `${JSON.stringify({ id, name: name.trim() || id, palette: [], exemplars: [], do: [], avoid: [] }, null, 2)}\n`,
     );
@@ -1318,7 +1368,7 @@ app.whenReady().then(() => {
   ipcMain.handle("edl:save", (_event, slug: string, edl: Edl) => writeEdl(slug, edl));
   ipcMain.handle("prompt:save", (_event, slug: string, text: string) => {
     try {
-      writeFileSync(safeProjectPath(slug, "prompt.md"), text);
+      writeFileAtomic(safeProjectPath(slug, "prompt.md"), text);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err) };
@@ -1362,7 +1412,7 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("narration:save", (_event, slug: string, text: string) => {
     try {
-      writeFileSync(safeProjectPath(slug, "narration.md"), text);
+      writeFileAtomic(safeProjectPath(slug, "narration.md"), text);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err) };
@@ -1429,7 +1479,7 @@ app.whenReady().then(() => {
       }
       if (!file) return { ok: false, error: "no active style profile" };
       const profile = { ...(readJson(file) as Record<string, unknown>), ...patch };
-      writeFileSync(file, `${JSON.stringify(profile, null, 2)}\n`);
+      writeFileAtomic(file, `${JSON.stringify(profile, null, 2)}\n`);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err) };
@@ -1469,7 +1519,7 @@ app.whenReady().then(() => {
         const metaFile = safeProjectPath(slug, "benchmarks", "benchmarks.meta.json");
         const metrics = existsSync(metaFile) ? (readJson(metaFile) as Record<string, unknown>) : {};
         metrics[file] = { ...(metrics[file] as object | undefined), ...m };
-        writeFileSync(metaFile, `${JSON.stringify(metrics, null, 2)}\n`);
+        writeFileAtomic(metaFile, `${JSON.stringify(metrics, null, 2)}\n`);
         return { ok: true };
       } catch (err) {
         return { ok: false, error: String(err) };
@@ -1579,4 +1629,9 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  activeWatcher?.watcher.close();
+  activeWatcher = null;
 });
