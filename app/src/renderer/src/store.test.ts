@@ -19,6 +19,26 @@ describe("view routing", () => {
     useEditor.getState().goHome();
     expect(useEditor.getState().view).toBe("home");
   });
+
+  it("enterProject switches view with data loaded and editor state reset", () => {
+    useEditor.setState({
+      selectedClipId: "x",
+      currentFrame: 42,
+      edlPast: [edl],
+      rightTab: "critique",
+    });
+    useEditor.getState().enterProject({ edl, slug: "demo", promptText: "hi" });
+    expect(useEditor.getState()).toMatchObject({
+      view: "editor",
+      slug: "demo",
+      promptText: "hi",
+      selectedClipId: null,
+      currentFrame: 0,
+      rightTab: "inspector",
+    });
+    expect(useEditor.getState().edl).toBe(edl);
+    expect(useEditor.getState().edlPast).toHaveLength(0);
+  });
 });
 
 describe("theme", () => {

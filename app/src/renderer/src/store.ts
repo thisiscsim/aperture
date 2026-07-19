@@ -120,6 +120,14 @@ interface EditorState {
   setView: (view: View) => void;
   setProjects: (projects: ProjectSummary[]) => void;
   openProject: (slug: string) => void;
+  /** Atomic Home -> editor entry: project data + view switch in one commit. */
+  enterProject: (p: {
+    edl: Edl;
+    slug?: string | null;
+    dir?: string | null;
+    promptText?: string;
+    meta?: Meta | null;
+  }) => void;
   goHome: () => void;
   setProject: (p: {
     edl: Edl;
@@ -204,6 +212,23 @@ export const useEditor = create<EditorState>()((set, get) => ({
       playing: false,
       notice: null,
       rightTab: "inspector",
+    }),
+  enterProject: (p) =>
+    set({
+      view: "editor",
+      edl: p.edl,
+      slug: p.slug ?? null,
+      dir: p.dir ?? null,
+      promptText: p.promptText ?? "",
+      meta: p.meta ?? null,
+      loadError: null,
+      selectedClipId: null,
+      currentFrame: 0,
+      playing: false,
+      notice: null,
+      rightTab: "inspector",
+      edlPast: [],
+      edlFuture: [],
     }),
   goHome: () => set({ view: "home", selectedClipId: null }),
   setProject: (p) =>

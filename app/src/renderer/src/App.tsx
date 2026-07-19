@@ -100,7 +100,10 @@ export function App(): JSX.Element {
         })
         .catch((err) => setLoadError(String(err)));
     setReload(load);
-    load();
+    // Home may have preloaded the project for a seamless view switch
+    // (enterProject) — skip the redundant initial read in that case.
+    const s = useEditor.getState();
+    if (!(s.edl && s.slug === slug)) void load();
 
     void window.api?.watchProject(slug);
     const off = window.api?.onProjectChanged((changed) => {

@@ -12,6 +12,7 @@ export function Home(): JSX.Element {
   const projects = useEditor((s) => s.projects);
   const setProjects = useEditor((s) => s.setProjects);
   const openProject = useEditor((s) => s.openProject);
+  const enterProject = useEditor((s) => s.enterProject);
   const [albums, setAlbums] = useState<AlbumSummary[]>([]);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -35,6 +36,33 @@ export function Home(): JSX.Element {
 
   const openAlbum = openAlbumId ? albums.find((a) => a.id === openAlbumId) ?? null : null;
   const tiles = buildTiles({ projects, albums, tab, openAlbumId, sort, query });
+
+  // Seamless navigation: load the project while Home is still showing and
+  // switch views only once the data is in the store — no empty-editor flash.
+  // If the disk read is genuinely slow (>250ms), fall back to the classic
+  // switch-then-load path so the user still gets a loading state.
+  const openSeamlessly = useCallback(
+    async (slug: string) => {
+      const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 250));
+      try {
+        const first = await Promise.race([window.api.loadProject(slug), timeout]);
+        if (first?.ok && first.edl) {
+          enterProject({
+            edl: first.edl,
+            slug: first.slug,
+            dir: first.dir,
+            promptText: first.promptText,
+            meta: first.meta,
+          });
+          return;
+        }
+      } catch {
+        // fall through to the classic path, which surfaces the load error
+      }
+      openProject(slug);
+    },
+    [enterProject, openProject],
+  );
 
   return (
     <div className="home">
@@ -110,7 +138,7 @@ export function Home(): JSX.Element {
                   project={tile.project}
                   albums={albums}
                   inAlbum={Boolean(openAlbumId)}
-                  onOpen={() => openProject(tile.project.slug)}
+                  onOpen={() => void openSeamlessly(tile.project.slug)}
                   onChanged={refresh}
                   onNewAlbum={() => setNamingFor(tile.project.slug)}
                 />
