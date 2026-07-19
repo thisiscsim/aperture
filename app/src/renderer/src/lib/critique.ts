@@ -1,28 +1,10 @@
-import type { Benchmarks, Edl } from "@reel/edl";
+import type { Benchmarks, Critique, Edl, SubScore } from "@reel/edl";
 import { durationSeconds } from "@reel/edl";
 
-export interface BenchmarkCompare {
-  yours: number;
-  theirs: number;
-  unit: string;
-}
-
-export interface SubScore {
-  key: string;
-  label: string;
-  score: number;
-  max: number;
-  note: string;
-  benchmark?: BenchmarkCompare;
-}
-
-export interface Critique {
-  score: number;
-  subscores: SubScore[];
-  fixes: { issue: string; fix: string }[];
-  benchmarksUsed?: boolean;
-  summary?: string;
-}
+// critique.json is a validated project file; its shape lives in @reel/edl
+// (CritiqueSchema) so the script writer, the main-process loader, and this
+// heuristic critic can't drift apart.
+export type { BenchmarkCompare, Critique, SubScore } from "@reel/edl";
 
 // Closeness score: full marks within ~1 std of the benchmark mean, decaying to 0
 // by ~3 std. Used so pacing/length are judged against THIS creator's winners.

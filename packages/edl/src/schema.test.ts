@@ -3,6 +3,7 @@ import {
   durationFrames,
   durationSeconds,
   parseBenchmarks,
+  parseCritique,
   parseEdl,
   parseMeta,
   parseStyleProfile,
@@ -98,6 +99,106 @@ describe("hostile input hardening", () => {
       parseEdl({ tracks: [{ id: "t", type: "text", clips: [{ id: "t1", start: 0, end: 2, text: t }] }] });
     expect(text("x".repeat(2001)).ok).toBe(false);
     expect(text("x".repeat(500)).ok).toBe(true);
+  });
+
+  it("rejects NUL bytes and UNC prefixes in media paths", () => {
+    const asset = (src: string) => parseEdl({ assets: [{ id: "a", kind: "video", src }] });
+    expect(asset("assets/clip\0.mp4").ok).toBe(false);
+    expect(asset("\\\\evil-host\\share\\x.mp4").ok).toBe(false);
+  });
+
+  it("rejects inverted clip ranges (out <= in, end <= start)", () => {
+    expect(parseEdl(withVideoClip({ in: 10, out: 2 })).ok).toBe(false);
+    expect(parseEdl(withVideoClip({ in: 4, out: 4 })).ok).toBe(false);
+    const text = parseEdl({
+      tracks: [{ id: "t", type: "text", clips: [{ id: "t1", start: 5, end: 2, text: "hi" }] }],
+    });
+    expect(text.ok).toBe(false);
+    const audio = parseEdl({
+      tracks: [{ id: "a", type: "audio", clips: [{ id: "c", assetId: "x", in: 9, out: 3 }] }],
+    });
+    expect(audio.ok).toBe(false);
+  });
+
+  it("rejects unbounded track ids/names and anim names", () => {
+    expect(parseEdl({ tracks: [{ id: "x".repeat(257), type: "video", clips: [] }] }).ok).toBe(false);
+    expect(parseEdl({ tracks: [{ id: "v", name: "n".repeat(257), type: "video", clips: [] }] }).ok).toBe(
+      false,
+    );
+    const anim = parseEdl({
+      tracks: [
+        {
+          id: "t",
+          type: "text",
+          clips: [{ id: "t1", start: 0, end: 2, text: "hi", anim: { name: "a".repeat(65) } }],
+        },
+      ],
+    });
+    expect(anim.ok).toBe(false);
+  });
+
+  it("caps clip-array sizes", () => {
+    const clips = Array.from({ length: 501 }, (_, i) => ({
+      id: `c${i}`,
+      assetId: "a",
+      start: 0,
+      in: 0,
+      out: 1,
+    }));
+    expect(parseEdl({ tracks: [{ id: "v", type: "video", clips }] }).ok).toBe(false);
+  });
+});
+
+// style.json / benchmarks.json / critique.json are shareable project files
+// too — the same hostile-input rules apply to the sidecar schemas.
+describe("hostile sidecar input", () => {
+  it("style profile rejects non-color palette entries (they get stamped into EDL themes)", () => {
+    expect(() => parseStyleProfile({ palette: ["url('https://x/beacon')"] })).toThrow();
+    expect(parseStyleProfile({ palette: ["#FAFAF9", "rgb(1, 2, 3)"] }).palette).toHaveLength(2);
+  });
+
+  it("style profile rejects Infinity/absurd numerics", () => {
+    expect(() => parseStyleProfile({ targetLengthSec: Number.POSITIVE_INFINITY })).toThrow();
+    expect(() => parseStyleProfile({ pacing: { cutsPer10s: Number.POSITIVE_INFINITY } })).toThrow();
+    expect(() => parseStyleProfile({ hookSec: -1 })).toThrow();
+    expect(parseStyleProfile({ targetLengthSec: 22, pacing: { cutsPer10s: 6 } }).targetLengthSec).toBe(22);
+  });
+
+  it("style profile caps prompt-bound strings and arrays", () => {
+    expect(() => parseStyleProfile({ styleGuide: "x".repeat(20_001) })).toThrow();
+    expect(() => parseStyleProfile({ do: Array.from({ length: 51 }, () => "tip") })).toThrow();
+    expect(() => parseStyleProfile({ exemplars: Array.from({ length: 51 }, () => ({})) })).toThrow();
+  });
+
+  it("benchmarks reject Infinity metrics (they feed z-score math)", () => {
+    expect(() =>
+      parseBenchmarks({
+        distribution: { durationSec: { mean: Number.POSITIVE_INFINITY, std: 1, min: 0, max: 1 } },
+      }),
+    ).toThrow();
+    expect(() => parseBenchmarks({ videos: [{ file: "a.mp4", durationSec: 1e13 }] })).toThrow();
+    expect(
+      parseBenchmarks({
+        count: 1,
+        videos: [{ file: "a.mp4", durationSec: 21, loudnessLufs: -14 }],
+        distribution: { durationSec: { mean: 21, std: 3, min: 15, max: 30 } },
+      }).count,
+    ).toBe(1);
+  });
+
+  it("parseCritique returns null for junk and clamps shape for valid input", () => {
+    expect(parseCritique(null)).toBeNull();
+    expect(parseCritique({ score: 9000, subscores: [] })).toBeNull();
+    expect(parseCritique({ score: 80, subscores: ["not-an-object"] })).toBeNull();
+    const ok = parseCritique({
+      score: 72,
+      subscores: [{ key: "hook", label: "Hook", score: 20, max: 25, note: "solid" }],
+      fixes: [{ issue: "ending", fix: "add a CTA" }],
+      benchmarksUsed: false,
+      summary: "decent first cut",
+    });
+    expect(ok?.score).toBe(72);
+    expect(ok?.subscores[0].benchmark).toBeUndefined();
   });
 });
 

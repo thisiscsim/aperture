@@ -35,6 +35,7 @@ import {
   durationSeconds,
   type Edl,
   parseBenchmarks,
+  parseCritique,
   parseEdl,
   parseEdlOrThrow,
   parseMeta,
@@ -1614,7 +1615,9 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("critique:load", (_event, slug: string) => {
     try {
-      return JSON.parse(readFileSync(safeProjectPath(slug, "critique.json"), "utf8"));
+      // critique.json is a shareable project file; a score of 9000 or string
+      // subscores must not reach the Critique panel.
+      return parseCritique(JSON.parse(readFileSync(safeProjectPath(slug, "critique.json"), "utf8")));
     } catch {
       return null;
     }

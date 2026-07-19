@@ -94,7 +94,7 @@ export const ThemeSchema = z.object({
   /** Default text-overlay alignment (Design section in the editor). */
   textAlignment: TextAlignmentSchema.default({}),
   /** Id of the named visual-style preset this theme was seeded from (if any). */
-  stylePreset: z.string().optional(),
+  stylePreset: z.string().max(64).optional(),
   /** Optional color grade applied to all video clips. */
   grade: GradeSchema.optional(),
 });
@@ -108,8 +108,8 @@ export const TransitionSchema = z.object({
 
 /** A text animation reference. `name` is an animate-text spec id; `from` is the catalog source. */
 export const TextAnimSchema = z.object({
-  name: z.string(),
-  from: z.string().default("animate-text"),
+  name: z.string().max(64),
+  from: z.string().max(64).default("animate-text"),
 });
 
 export const TransformSchema = z.object({
@@ -119,81 +119,89 @@ export const TransformSchema = z.object({
   rotation: z.number().finite().min(-3600).max(3600).default(0),
 });
 
-export const VideoClipSchema = z.object({
-  id: z.string().max(256),
-  assetId: z.string().max(256),
-  /** Timeline position (seconds from composition start). */
-  start: seconds(),
-  /** Source in-point (seconds into the asset). */
-  in: seconds().default(0),
-  /** Source out-point (seconds into the asset). Must be > in. */
-  out: z.number().finite().positive().max(MAX_TIMELINE_SEC),
-  transform: TransformSchema.partial().optional(),
-  transitionIn: TransitionSchema.optional(),
-  transitionOut: TransitionSchema.optional(),
-  volume: z.number().min(0).max(1).default(1),
-});
+export const VideoClipSchema = z
+  .object({
+    id: z.string().max(256),
+    assetId: z.string().max(256),
+    /** Timeline position (seconds from composition start). */
+    start: seconds(),
+    /** Source in-point (seconds into the asset). */
+    in: seconds().default(0),
+    /** Source out-point (seconds into the asset). Must be > in. */
+    out: z.number().finite().positive().max(MAX_TIMELINE_SEC),
+    transform: TransformSchema.partial().optional(),
+    transitionIn: TransitionSchema.optional(),
+    transitionOut: TransitionSchema.optional(),
+    volume: z.number().min(0).max(1).default(1),
+  })
+  .refine((c) => c.out > c.in, { message: "out must be > in", path: ["out"] });
 
-export const TextClipSchema = z.object({
-  id: z.string().max(256),
-  start: seconds(),
-  end: z.number().finite().positive().max(MAX_TIMELINE_SEC),
-  text: z.string().max(2000),
-  style: z.string().max(64).default("title"),
-  anim: TextAnimSchema.optional(),
-});
+export const TextClipSchema = z
+  .object({
+    id: z.string().max(256),
+    start: seconds(),
+    end: z.number().finite().positive().max(MAX_TIMELINE_SEC),
+    text: z.string().max(2000),
+    style: z.string().max(64).default("title"),
+    anim: TextAnimSchema.optional(),
+  })
+  .refine((c) => c.end > c.start, { message: "end must be > start", path: ["end"] });
 
-export const AudioClipSchema = z.object({
-  id: z.string().max(256),
-  assetId: z.string().max(256),
-  start: seconds().default(0),
-  in: seconds().default(0),
-  out: z.number().finite().positive().max(MAX_TIMELINE_SEC),
-  /** Gain in dB. */
-  gain: z.number().finite().min(-60).max(12).default(0),
-  duckUnderVoice: z.boolean().default(false),
-  /** What this clip is: a music bed, a spoken voiceover, or a one-off sound effect. */
-  role: z.enum(["music", "voiceover", "sfx"]).default("music"),
-});
+export const AudioClipSchema = z
+  .object({
+    id: z.string().max(256),
+    assetId: z.string().max(256),
+    start: seconds().default(0),
+    in: seconds().default(0),
+    out: z.number().finite().positive().max(MAX_TIMELINE_SEC),
+    /** Gain in dB. */
+    gain: z.number().finite().min(-60).max(12).default(0),
+    duckUnderVoice: z.boolean().default(false),
+    /** What this clip is: a music bed, a spoken voiceover, or a one-off sound effect. */
+    role: z.enum(["music", "voiceover", "sfx"]).default("music"),
+  })
+  .refine((c) => c.out > c.in, { message: "out must be > in", path: ["out"] });
 
 export const VideoTrackSchema = z.object({
-  id: z.string(),
+  id: z.string().max(256),
   /** Optional display name for the timeline layer. */
-  name: z.string().optional(),
+  name: z.string().max(256).optional(),
   type: z.literal("video"),
   clips: z.array(VideoClipSchema).max(500).default([]),
 });
 
 export const TextTrackSchema = z.object({
-  id: z.string(),
+  id: z.string().max(256),
   /** Optional display name for the timeline layer. */
-  name: z.string().optional(),
+  name: z.string().max(256).optional(),
   type: z.literal("text"),
   clips: z.array(TextClipSchema).max(500).default([]),
 });
 
-export const CaptionWordSchema = z.object({
-  text: z.string().max(256),
-  start: seconds(),
-  end: seconds(),
-});
+export const CaptionWordSchema = z
+  .object({
+    text: z.string().max(256),
+    start: seconds(),
+    end: seconds(),
+  })
+  .refine((w) => w.end >= w.start, { message: "end must be >= start", path: ["end"] });
 
 export const CaptionTrackSchema = z.object({
-  id: z.string(),
+  id: z.string().max(256),
   /** Optional display name for the timeline layer. */
-  name: z.string().optional(),
+  name: z.string().max(256).optional(),
   type: z.literal("caption"),
   /** Path (relative to project root) to a word-level transcript JSON. */
   source: RelativePathSchema.optional(),
-  style: z.string().default("karaoke"),
+  style: z.string().max(64).default("karaoke"),
   /** Word-level timings (written by the transcribe step or inline). */
   words: z.array(CaptionWordSchema).max(20_000).optional(),
 });
 
 export const AudioTrackSchema = z.object({
-  id: z.string(),
+  id: z.string().max(256),
   /** Optional display name for the timeline layer. */
-  name: z.string().optional(),
+  name: z.string().max(256).optional(),
   type: z.literal("audio"),
   clips: z.array(AudioClipSchema).max(500).default([]),
 });
@@ -230,13 +238,13 @@ export const EdlSchema = z.object({
  * tracks the project's identity and where it is in the pipeline, not the cut.
  */
 export const MetaSchema = z.object({
-  title: z.string().default("Untitled"),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
+  title: z.string().max(512).default("Untitled"),
+  createdAt: z.string().max(64).optional(),
+  updatedAt: z.string().max(64).optional(),
   platform: z.enum(["reels", "tiktok", "shorts"]).default("reels"),
   status: z.enum(["draft", "generated", "critiqued", "exported"]).default("draft"),
   /** Id of the learned/selected style profile that seeds generation. */
-  styleProfileId: z.string().optional(),
+  styleProfileId: z.string().max(64).optional(),
   /** Home-page album this project belongs to (registry lives at the projects root). */
   albumId: z.string().max(64).optional(),
 });
@@ -246,15 +254,15 @@ export const MetaSchema = z.object({
  * retrievable "exemplar" generation imitates (in-context learning).
  */
 export const StyleExemplarSchema = z.object({
-  source: z.string().optional(),
-  hook: z.string().optional(),
-  beats: z.string().optional(),
-  captionStyle: z.string().optional(),
-  textTreatment: z.string().optional(),
-  transitions: z.array(z.string()).default([]),
-  gradeNote: z.string().optional(),
-  durationSec: z.number().optional(),
-  cutsPer10s: z.number().optional(),
+  source: z.string().max(512).optional(),
+  hook: z.string().max(2000).optional(),
+  beats: z.string().max(4000).optional(),
+  captionStyle: z.string().max(64).optional(),
+  textTreatment: z.string().max(2000).optional(),
+  transitions: z.array(z.string().max(64)).max(32).default([]),
+  gradeNote: z.string().max(2000).optional(),
+  durationSec: seconds().optional(),
+  cutsPer10s: bounded(1000).optional(),
 });
 
 /**
@@ -264,59 +272,66 @@ export const StyleExemplarSchema = z.object({
  * and retrieves `exemplars` to imitate concrete edit structure.
  */
 export const StyleProfileSchema = z.object({
-  id: z.string().default("custom"),
-  name: z.string().default("My Style"),
-  palette: z.array(z.string()).default([]),
-  fontFamily: z.string().optional(),
+  id: z.string().max(64).default("custom"),
+  name: z.string().max(256).default("My Style"),
+  /** Colors are stamped into EDL themes and rendered as inline CSS — same allowlist as the EDL palette. */
+  palette: z.array(CssColorSchema).max(16).default([]),
+  fontFamily: z.string().max(256).optional(),
   captionStyle: z.enum(["karaoke", "block", "word", "none"]).optional(),
   grade: GradeSchema.optional(),
   pacing: z
     .object({
-      cutsPer10s: z.number().nonnegative().optional(),
-      avgShotSec: z.number().positive().optional(),
+      cutsPer10s: bounded(1000).optional(),
+      avgShotSec: z.number().finite().positive().max(MAX_TIMELINE_SEC).optional(),
     })
     .default({}),
-  hookPattern: z.string().optional(),
-  hookSec: z.number().nonnegative().optional(),
-  textTreatment: z.string().optional(),
-  transitions: z.array(z.string()).default([]),
+  hookPattern: z.string().max(2000).optional(),
+  hookSec: seconds().optional(),
+  textTreatment: z.string().max(2000).optional(),
+  transitions: z.array(z.string().max(64)).max(32).default([]),
   /** How generation should use the references: imitate closely vs vibe-match. */
   referenceMode: z.enum(["literal", "inspired"]).default("literal"),
   /** 0 = calm/cinematic, 1 = frenetic/high-energy. */
   energy: z.number().min(0).max(1).optional(),
   /** 0 = no music drive, 1 = tightly beat-synced. */
   musicEnergy: z.number().min(0).max(1).optional(),
-  targetLengthSec: z.number().positive().optional(),
-  /** Long-form prose style guide the model reads to imitate the look/feel. */
-  styleGuide: z.string().optional(),
+  targetLengthSec: z.number().finite().positive().max(MAX_TIMELINE_SEC).optional(),
+  /** Long-form prose style guide the model reads to imitate the look/feel (interpolated into prompts — capped). */
+  styleGuide: z.string().max(20_000).optional(),
   /** Per-reference structural exemplars for in-context imitation. */
-  exemplars: z.array(StyleExemplarSchema).default([]),
-  do: z.array(z.string()).default([]),
-  avoid: z.array(z.string()).default([]),
-  notes: z.string().optional(),
+  exemplars: z.array(StyleExemplarSchema).max(50).default([]),
+  do: z.array(z.string().max(500)).max(50).default([]),
+  avoid: z.array(z.string().max(500)).max(50).default([]),
+  notes: z.string().max(4000).optional(),
   /** Number of source clips analyzed + when. */
-  source: z.object({ clips: z.number(), generatedAt: z.string() }).partial().optional(),
+  source: z
+    .object({ clips: z.number().int().nonnegative().max(100_000), generatedAt: z.string().max(64) })
+    .partial()
+    .optional(),
 });
+
+/** Finite metric value: benchmark stats feed z-score math where Infinity/NaN poison every subscore. */
+const metricNumber = () => z.number().finite().min(-1e9).max(1e9);
 
 /** Per-benchmark-video extracted features (one entry per file in benchmarks/). */
 export const BenchmarkFeatureSchema = z.object({
-  file: z.string(),
-  durationSec: z.number().optional(),
-  cutsPer10s: z.number().optional(),
-  hookSec: z.number().optional(),
-  captionWordsPerSec: z.number().optional(),
-  textDensity: z.number().optional(),
-  loudnessLufs: z.number().optional(),
-  views: z.number().optional(),
-  likes: z.number().optional(),
+  file: z.string().max(512),
+  durationSec: seconds().optional(),
+  cutsPer10s: bounded(1000).optional(),
+  hookSec: seconds().optional(),
+  captionWordsPerSec: bounded(100).optional(),
+  textDensity: bounded(1000).optional(),
+  loudnessLufs: z.number().finite().min(-120).max(20).optional(),
+  views: z.number().finite().nonnegative().max(1e12).optional(),
+  likes: z.number().finite().nonnegative().max(1e12).optional(),
 });
 
 /** Summary stats for a single metric across the benchmark set. */
 export const BenchmarkMetricSchema = z.object({
-  mean: z.number(),
-  std: z.number(),
-  min: z.number(),
-  max: z.number(),
+  mean: metricNumber(),
+  std: metricNumber(),
+  min: metricNumber(),
+  max: metricNumber(),
 });
 
 /**
@@ -324,8 +339,44 @@ export const BenchmarkMetricSchema = z.object({
  * scores the current cut against, instead of fixed heuristic thresholds.
  */
 export const BenchmarksSchema = z.object({
-  generatedAt: z.string().optional(),
-  count: z.number().default(0),
-  videos: z.array(BenchmarkFeatureSchema).default([]),
-  distribution: z.record(z.string(), BenchmarkMetricSchema).default({}),
+  generatedAt: z.string().max(64).optional(),
+  count: z.number().int().nonnegative().max(100_000).default(0),
+  videos: z.array(BenchmarkFeatureSchema).max(500).default([]),
+  distribution: z
+    .record(z.string().max(64), BenchmarkMetricSchema)
+    .refine((d) => Object.keys(d).length <= 64, { message: "too many distribution keys" })
+    .default({}),
+});
+
+/** A yours-vs-winners comparison attached to a critique subscore. */
+export const BenchmarkCompareSchema = z.object({
+  yours: metricNumber(),
+  theirs: metricNumber(),
+  unit: z.string().max(32),
+});
+
+/** One weighted dimension of a critique (hook, pacing, captions, ...). */
+export const SubScoreSchema = z.object({
+  key: z.string().max(64),
+  label: z.string().max(128),
+  score: z.number().finite().min(0).max(100),
+  max: z.number().finite().positive().max(100),
+  note: z.string().max(1000).default(""),
+  benchmark: BenchmarkCompareSchema.optional(),
+});
+
+/**
+ * The critic's output (projects/<slug>/critique.json). Written by
+ * critique-llm.mjs / the renderer's heuristic critic and rendered by the
+ * Critique panel — validated like every other shareable project file.
+ */
+export const CritiqueSchema = z.object({
+  score: z.number().finite().min(0).max(100),
+  subscores: z.array(SubScoreSchema).max(20).default([]),
+  fixes: z
+    .array(z.object({ issue: z.string().max(500), fix: z.string().max(2000) }))
+    .max(50)
+    .default([]),
+  benchmarksUsed: z.boolean().optional(),
+  summary: z.string().max(2000).optional(),
 });

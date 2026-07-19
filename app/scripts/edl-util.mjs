@@ -34,6 +34,28 @@ function clampSec(v, fallback) {
   return Math.min(Math.max(v, 0), MAX_SEC);
 }
 
+function clampNum(v, lo, hi, fallback) {
+  if (typeof v !== "number" || !Number.isFinite(v)) return fallback;
+  return Math.min(Math.max(v, lo), hi);
+}
+
+/**
+ * Repair a transition object: default a missing/broken duration, clamp an
+ * oversized one, and treat zero/negative duration (a common model idiom for
+ * "no transition") as absence. Returns undefined when the transition should
+ * be dropped entirely.
+ */
+function fixTransition(t) {
+  if (!t || typeof t !== "object" || Array.isArray(t)) return undefined;
+  if (typeof t.preset !== "string" || !t.preset || t.preset.length > 64) return undefined;
+  if (typeof t.duration !== "number" || !Number.isFinite(t.duration)) t.duration = 0.4;
+  else if (t.duration <= 0) return undefined;
+  else t.duration = Math.min(t.duration, 30);
+  return t;
+}
+
+const clampStr = (v, max) => (typeof v === "string" && v.length > max ? v.slice(0, max) : v);
+
 /** Repair common harmless model deviations before strict EdlSchema validation. */
 export function sanitizeEdl(obj) {
   if (!obj || !Array.isArray(obj.tracks)) return obj;
@@ -43,22 +65,67 @@ export function sanitizeEdl(obj) {
     if (obj.theme.palette.length === 0) delete obj.theme.palette;
   }
   for (const track of obj.tracks) {
+    if (track && typeof track === "object") {
+      if ("id" in track) track.id = clampStr(track.id, 256);
+      if (track.name != null) track.name = clampStr(track.name, 256);
+    }
+    // Caption tracks carry word timings instead of clips.
+    if (track?.type === "caption" && Array.isArray(track.words)) {
+      if (track.words.length > 20_000) track.words = track.words.slice(0, 20_000);
+      for (const w of track.words) {
+        if (!w || typeof w !== "object") continue;
+        w.text = clampStr(w.text, 256);
+        w.start = clampSec(w.start, 0);
+        w.end = clampSec(w.end, w.start);
+        if (w.end < w.start) [w.start, w.end] = [w.end, w.start];
+      }
+    }
     if (!Array.isArray(track?.clips)) continue;
     for (const clip of track.clips) {
       if (!clip) continue;
+      if ("id" in clip) clip.id = clampStr(clip.id, 256);
+      if ("assetId" in clip) clip.assetId = clampStr(clip.assetId, 256);
       // Non-finite / absurd timings hang the timeline and player.
       if ("start" in clip) clip.start = clampSec(clip.start, 0);
       if ("in" in clip) clip.in = clampSec(clip.in, 0);
       if ("out" in clip) clip.out = clampSec(clip.out, 1) || 1;
       if ("end" in clip) clip.end = clampSec(clip.end, 1) || 1;
+      // Inverted ranges (out <= in, end <= start) are usually transposed
+      // values; swap, and pad degenerate zero-length results.
+      if (typeof clip.in === "number" && typeof clip.out === "number" && clip.out <= clip.in) {
+        [clip.in, clip.out] = [clip.out, clip.in];
+        if (clip.out <= clip.in) clip.out = clip.in + 1;
+      }
+      if (typeof clip.start === "number" && typeof clip.end === "number" && clip.end <= clip.start) {
+        [clip.start, clip.end] = [clip.end, clip.start];
+        if (clip.end <= clip.start) clip.end = clip.start + 1;
+      }
+      if ("transitionIn" in clip) {
+        clip.transitionIn = fixTransition(clip.transitionIn);
+        if (clip.transitionIn === undefined) delete clip.transitionIn;
+      }
+      if ("transitionOut" in clip) {
+        clip.transitionOut = fixTransition(clip.transitionOut);
+        if (clip.transitionOut === undefined) delete clip.transitionOut;
+      }
+      if (track.type === "video" && clip.volume != null) {
+        clip.volume = clampNum(clip.volume, 0, 1, 1);
+      }
+      if (track.type === "audio" && clip.gain != null) {
+        clip.gain = clampNum(clip.gain, -60, 12, 0);
+      }
       if (track.type === "text") {
         if (typeof clip.text === "string" && clip.text.length > 2000) clip.text = clip.text.slice(0, 2000);
         if (clip.anim != null) {
           if (typeof clip.anim !== "object") {
             delete clip.anim;
-          } else if (typeof clip.anim.name !== "string" || !clip.anim.name) {
-            clip.anim.name = "soft-blur-in";
-            clip.anim.from = clip.anim.from ?? "animate-text";
+          } else {
+            if (typeof clip.anim.name !== "string" || !clip.anim.name) {
+              clip.anim.name = "soft-blur-in";
+              clip.anim.from = clip.anim.from ?? "animate-text";
+            }
+            clip.anim.name = clampStr(clip.anim.name, 64);
+            if (clip.anim.from != null) clip.anim.from = clampStr(clip.anim.from, 64);
           }
         }
         if (clip.style && clip.style !== "title" && clip.style !== "subtitle") {

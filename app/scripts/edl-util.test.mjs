@@ -22,6 +22,74 @@ describe("sanitizeEdl", () => {
     const input = { tracks: [{ type: "video", clips: [{ id: "v1" }] }] };
     expect(sanitizeEdl(input)).toEqual(input);
   });
+
+  it("swaps inverted in/out and start/end ranges, padding degenerate ones", () => {
+    const out = sanitizeEdl({
+      tracks: [
+        { type: "video", clips: [{ id: "v1", in: 10, out: 2 }] },
+        { type: "video", clips: [{ id: "v2", in: 4, out: 4 }] },
+        { type: "text", clips: [{ id: "t1", start: 5, end: 2, text: "hi" }] },
+      ],
+    });
+    expect(out.tracks[0].clips[0]).toMatchObject({ in: 2, out: 10 });
+    expect(out.tracks[1].clips[0]).toMatchObject({ in: 4, out: 5 });
+    expect(out.tracks[2].clips[0]).toMatchObject({ start: 2, end: 5 });
+  });
+
+  it("repairs transitions: defaults broken durations, drops zero/negative or preset-less ones", () => {
+    const out = sanitizeEdl({
+      tracks: [
+        {
+          type: "video",
+          clips: [
+            { id: "a", in: 0, out: 2, transitionIn: { preset: "fade", duration: 0 } },
+            { id: "b", in: 0, out: 2, transitionIn: { preset: "fade" }, transitionOut: { duration: 1 } },
+            { id: "c", in: 0, out: 2, transitionIn: { preset: "slide", duration: 400 } },
+          ],
+        },
+      ],
+    });
+    const [a, b, c] = out.tracks[0].clips;
+    expect(a.transitionIn).toBeUndefined();
+    expect(b.transitionIn).toMatchObject({ preset: "fade", duration: 0.4 });
+    expect(b.transitionOut).toBeUndefined();
+    expect(c.transitionIn).toMatchObject({ preset: "slide", duration: 30 });
+  });
+
+  it("clamps volume/gain and truncates oversized ids and track names", () => {
+    const out = sanitizeEdl({
+      tracks: [
+        {
+          type: "video",
+          id: "x".repeat(300),
+          name: "n".repeat(300),
+          clips: [{ id: "i".repeat(300), in: 0, out: 2, volume: 9 }],
+        },
+        { type: "audio", clips: [{ id: "a1", in: 0, out: 2, gain: -900 }] },
+      ],
+    });
+    expect(out.tracks[0].id).toHaveLength(256);
+    expect(out.tracks[0].name).toHaveLength(256);
+    expect(out.tracks[0].clips[0].id).toHaveLength(256);
+    expect(out.tracks[0].clips[0].volume).toBe(1);
+    expect(out.tracks[1].clips[0].gain).toBe(-60);
+  });
+
+  it("repairs caption words: clamps timings and fixes inverted ranges", () => {
+    const out = sanitizeEdl({
+      tracks: [
+        {
+          type: "caption",
+          words: [
+            { text: "hi", start: 2, end: 1 },
+            { text: "there", start: 1, end: Number.POSITIVE_INFINITY },
+          ],
+        },
+      ],
+    });
+    expect(out.tracks[0].words[0]).toMatchObject({ start: 1, end: 2 });
+    expect(out.tracks[0].words[1]).toMatchObject({ start: 1, end: 1 });
+  });
 });
 
 describe("restoreAudioTracks", () => {
