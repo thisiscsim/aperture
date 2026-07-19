@@ -11,6 +11,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { parseMedia } from "@remotion/media-parser";
 import { nodeReader } from "@remotion/media-parser/node";
+import { parseEdl } from "@reel/edl";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -35,7 +36,14 @@ async function main() {
   const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const assetsDir = path.join(projectDir, "assets");
   const edlPath = path.join(projectDir, "edl.json");
-  const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
+  // Start from a validated cut: theme/tracks from the existing (shareable)
+  // file are carried into the baseline this script writes.
+  const existing = parseEdl(JSON.parse(fs.readFileSync(edlPath, "utf8")));
+  if (!existing.ok || !existing.edl) {
+    console.error(`ERROR invalid edl.json: ${(existing.errors ?? []).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  const edl = existing.edl;
 
   const all = fs
     .readdirSync(assetsDir)
@@ -166,7 +174,14 @@ async function main() {
     else edl.tracks.push({ id: "aud", type: "audio", clips: audioClips });
   }
 
-  fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
+  // The baseline is the foundation every later step builds on — never write
+  // one the schema would reject.
+  const final = parseEdl(edl);
+  if (!final.ok || !final.edl) {
+    console.error(`ERROR assembled baseline is invalid: ${(final.errors ?? []).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  fs.writeFileSync(edlPath, `${JSON.stringify(final.edl, null, 2)}\n`);
   fs.writeFileSync(
     path.join(projectDir, "analysis.json"),
     `${JSON.stringify({ slug, generatedAt: new Date().toISOString(), probes }, null, 2)}\n`,

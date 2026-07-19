@@ -10,6 +10,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
+import { parseStyleProfile } from "@reel/edl";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -136,6 +137,10 @@ async function main() {
 
   const stylePath = path.join(projectDir, "style.json");
   const existing = fs.existsSync(stylePath) ? JSON.parse(fs.readFileSync(stylePath, "utf8")) : {};
+  // The schema requires avgShotSec/targetLengthSec to be positive; omit them
+  // when analysis produced nothing (all-zero durations) instead of writing 0.
+  const avgShotSec = round(median(shotLens) ?? 0);
+  const targetLengthSec = round(median(lengths) ?? 0);
   const style = {
     id: existing.id ?? "learned",
     name: existing.name ?? "My Style",
@@ -144,18 +149,27 @@ async function main() {
     captionStyle: existing.captionStyle ?? "karaoke",
     pacing: {
       cutsPer10s: round(medianCuts),
-      avgShotSec: round(median(shotLens) ?? 0),
+      ...(avgShotSec > 0 ? { avgShotSec } : {}),
     },
     hookPattern: existing.hookPattern,
     energy,
-    targetLengthSec: round(median(lengths) ?? 0),
+    ...(targetLengthSec > 0 ? { targetLengthSec } : {}),
     do: existing.do ?? [],
     avoid: existing.avoid ?? [],
     notes: existing.notes ?? "Baseline from analyze-style.mjs — refine with the learn-aesthetic skill.",
     source: { clips: videos.length, generatedAt: new Date().toISOString() },
   };
 
-  fs.writeFileSync(stylePath, `${JSON.stringify(style, null, 2)}\n`);
+  // style.json values get stamped into EDL themes; never persist a profile
+  // the schema would reject (parse also normalizes defaults).
+  let validated;
+  try {
+    validated = parseStyleProfile(style);
+  } catch (err) {
+    console.error(`ERROR analyzed style failed validation: ${err}`);
+    process.exit(2);
+  }
+  fs.writeFileSync(stylePath, `${JSON.stringify(validated, null, 2)}\n`);
   console.log(`DONE ${stylePath}`);
 }
 

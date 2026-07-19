@@ -7,6 +7,7 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
+import { parseBenchmarks, parseEdl } from "@reel/edl";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -157,9 +158,23 @@ async function main() {
 
   const projectDir = path.join(process.env.APERTURE_PROJECTS_DIR || path.join(repoRoot, "projects"), slug);
   const edlPath = path.join(projectDir, "edl.json");
-  const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
+  // Both inputs are shareable project files — validate before scoring math
+  // (Infinity benchmark means yield NaN subscores) or mutating the cut.
+  const parsed = parseEdl(JSON.parse(fs.readFileSync(edlPath, "utf8")));
+  if (!parsed.ok || !parsed.edl) {
+    console.error(`ERROR invalid edl.json: ${(parsed.errors ?? []).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  const edl = parsed.edl;
   const benchPath = path.join(projectDir, "benchmarks.json");
-  const benchmarks = fs.existsSync(benchPath) ? JSON.parse(fs.readFileSync(benchPath, "utf8")) : null;
+  let benchmarks = null;
+  if (fs.existsSync(benchPath)) {
+    try {
+      benchmarks = parseBenchmarks(JSON.parse(fs.readFileSync(benchPath, "utf8")));
+    } catch (err) {
+      console.error(`ERROR ignoring invalid benchmarks.json: ${err}`);
+    }
+  }
 
   const resultsPath = path.join(projectDir, "results.tsv");
   if (!fs.existsSync(resultsPath)) fs.writeFileSync(resultsPath, "iter\tscore\tdelta\tchange\n");
@@ -182,6 +197,13 @@ async function main() {
     }
     if (!changed) {
       console.log("PHASE no further improvement");
+      break;
+    }
+    // The improvements are conservative, but never write an EDL the schema
+    // would reject back to disk.
+    const check = parseEdl(edl);
+    if (!check.ok) {
+      console.log("PHASE improvement produced invalid edl, stopping");
       break;
     }
     fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);

@@ -15,6 +15,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
+import { parseEdl } from "@reel/edl";
 import { alignmentToWords, preprocessForTts, synthesisHash } from "./tts-util.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -143,7 +144,12 @@ async function main() {
 
   console.log("PHASE updating timeline");
   const edlPath = path.join(projectDir, "edl.json");
-  const edl = JSON.parse(fs.readFileSync(edlPath, "utf8"));
+  const parsedEdl = parseEdl(JSON.parse(fs.readFileSync(edlPath, "utf8")));
+  if (!parsedEdl.ok || !parsedEdl.edl) {
+    console.error(`ERROR invalid edl.json: ${(parsedEdl.errors ?? []).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  const edl = parsedEdl.edl;
   const durationSec = words.length > 0 ? Math.max(words[words.length - 1].end, 1) : 1;
   const assetId = `vo-${hash}`;
 
@@ -181,10 +187,15 @@ async function main() {
 
   // Captions from the synthesis alignment (no whisper pass needed).
   const cap = edl.tracks.find((t) => t.type === "caption");
-  if (cap) cap.words = words;
-  else edl.tracks.push({ id: "cap", type: "caption", style: "karaoke", words });
+  if (cap) cap.words = words.slice(0, 20_000);
+  else edl.tracks.push({ id: "cap", type: "caption", style: "karaoke", words: words.slice(0, 20_000) });
 
-  fs.writeFileSync(edlPath, `${JSON.stringify(edl, null, 2)}\n`);
+  const final = parseEdl(edl);
+  if (!final.ok || !final.edl) {
+    console.error(`ERROR voiceover produced an invalid edl: ${(final.errors ?? []).slice(0, 5).join("; ")}`);
+    process.exit(2);
+  }
+  fs.writeFileSync(edlPath, `${JSON.stringify(final.edl, null, 2)}\n`);
   console.log(`DONE voiceover ${rel} (${words.length} caption words, ${durationSec.toFixed(1)}s)`);
 }
 

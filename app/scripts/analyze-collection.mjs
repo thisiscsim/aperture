@@ -13,6 +13,7 @@ import fs from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { generateText } from "ai";
+import { parseStyleProfile } from "@reel/edl";
 import { isLlmConfigured, llmConfig, resolveModel, reasoningEffort } from "./llm.mjs";
 import { extractJson } from "./edl-util.mjs";
 
@@ -200,17 +201,20 @@ async function main() {
   const cuts = perVideo.map((v) => v.cutsPer10s).filter(Boolean);
   const lengths = perVideo.map((v) => v.durationSec).filter(Boolean);
   const medianCuts = median(cuts) ?? 0;
+  const avgShotSec = round(
+    median(perVideo.map((v) => (v.cutsPer10s ? 10 / v.cutsPer10s : 0)).filter(Boolean)) ?? 0,
+  );
+  const targetLengthSec = round(median(lengths) ?? 0);
   const metrics = {
     clips: videos.length,
     palette: avgPalette(perVideo.map((v) => v.palette)),
     pacing: {
       cutsPer10s: round(medianCuts),
-      avgShotSec: round(
-        median(perVideo.map((v) => (v.cutsPer10s ? 10 / v.cutsPer10s : 0)).filter(Boolean)) ?? 0,
-      ),
+      // Schema requires positive values; omit rather than write 0.
+      ...(avgShotSec > 0 ? { avgShotSec } : {}),
     },
     hookSec: round(median(perVideo.map((v) => v.hookSec).filter((x) => x != null)) ?? 0),
-    targetLengthSec: round(median(lengths) ?? 0),
+    ...(targetLengthSec > 0 ? { targetLengthSec } : {}),
     energy: Math.max(0, Math.min(1, round((medianCuts - 1) / 11))),
     perVideo: perVideo.map(({ file, durationSec, cutsPer10s, hookSec }) => ({
       file,
@@ -228,7 +232,7 @@ async function main() {
     }
   })();
 
-  let profile = {
+  const deterministic = {
     id: existing.id ?? "learned",
     name: existing.name ?? "My Style",
     palette: metrics.palette,
@@ -236,13 +240,14 @@ async function main() {
     pacing: metrics.pacing,
     hookSec: metrics.hookSec,
     energy: metrics.energy,
-    targetLengthSec: metrics.targetLengthSec,
+    ...(targetLengthSec > 0 ? { targetLengthSec } : {}),
     exemplars: [],
     do: [],
     avoid: [],
     notes: "Deterministic baseline (no model). Configure an LLM for a richer style guide.",
     source: { clips: videos.length, generatedAt: new Date().toISOString() },
   };
+  let profile = deterministic;
 
   if (isLlmConfigured()) {
     const { provider, model } = llmConfig();
@@ -270,7 +275,9 @@ async function main() {
       });
       console.log("PROGRESS 90");
       const llm = extractJson(text);
-      // LLM owns look/feel + guide + exemplars; deterministic metrics win for pacing/length.
+      // LLM owns look/feel + guide + exemplars; deterministic metrics win for
+      // pacing/length. Model output is pre-trimmed to the schema caps so a
+      // verbose reply degrades gracefully instead of failing validation.
       profile = {
         ...profile,
         palette: Array.isArray(llm.palette) && llm.palette.length ? llm.palette : profile.palette,
@@ -279,19 +286,31 @@ async function main() {
         grade: llm.grade ?? undefined,
         hookPattern: llm.hookPattern,
         textTreatment: llm.textTreatment,
-        transitions: Array.isArray(llm.transitions) ? llm.transitions : [],
+        transitions: Array.isArray(llm.transitions) ? llm.transitions.slice(0, 32) : [],
         energy: typeof llm.energy === "number" ? llm.energy : profile.energy,
         musicEnergy: typeof llm.musicEnergy === "number" ? llm.musicEnergy : undefined,
-        styleGuide: llm.styleGuide,
-        exemplars: Array.isArray(llm.exemplars) ? llm.exemplars : [],
-        do: Array.isArray(llm.do) ? llm.do : [],
-        avoid: Array.isArray(llm.avoid) ? llm.avoid : [],
+        styleGuide: typeof llm.styleGuide === "string" ? llm.styleGuide.slice(0, 20_000) : undefined,
+        exemplars: Array.isArray(llm.exemplars) ? llm.exemplars.slice(0, 50) : [],
+        do: Array.isArray(llm.do) ? llm.do.slice(0, 50) : [],
+        avoid: Array.isArray(llm.avoid) ? llm.avoid.slice(0, 50) : [],
         notes: "Distilled from frames + metrics by the LLM.",
       };
     } catch (err) {
       console.error(`ERROR LLM distillation failed, keeping deterministic profile: ${err}`);
     }
   }
+
+  // The profile is stamped into EDL themes and spliced into prompts: validate
+  // before persisting. If the LLM-merged profile fails (junk colors, absurd
+  // numbers), fall back to the deterministic one rather than writing junk.
+  let validated;
+  try {
+    validated = parseStyleProfile(profile);
+  } catch (err) {
+    console.error(`ERROR distilled profile failed validation, keeping deterministic: ${err}`);
+    validated = parseStyleProfile(deterministic);
+  }
+  profile = validated;
 
   fs.writeFileSync(path.join(outDir, profileName), `${JSON.stringify(profile, null, 2)}\n`);
   if (profile.styleGuide) fs.writeFileSync(path.join(outDir, "style-guide.md"), `${profile.styleGuide}\n`);
