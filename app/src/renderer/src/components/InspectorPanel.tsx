@@ -32,17 +32,43 @@ const ANIMS = [
 const TRANSITIONS = ["none", "fade", "slide", "wipe"];
 
 const ASPECTS: { id: string; label: string; ratio: string; resolutions: [number, number][] }[] = [
-  { id: "9:16", label: "Vertical", ratio: "9:16", resolutions: [[1080, 1920], [720, 1280]] },
-  { id: "16:9", label: "Landscape", ratio: "16:9", resolutions: [[1920, 1080], [1280, 720]] },
-  { id: "1:1", label: "Square", ratio: "1:1", resolutions: [[1080, 1080], [720, 720]] },
+  {
+    id: "9:16",
+    label: "Vertical",
+    ratio: "9:16",
+    resolutions: [
+      [1080, 1920],
+      [720, 1280],
+    ],
+  },
+  {
+    id: "16:9",
+    label: "Landscape",
+    ratio: "16:9",
+    resolutions: [
+      [1920, 1080],
+      [1280, 720],
+    ],
+  },
+  {
+    id: "1:1",
+    label: "Square",
+    ratio: "1:1",
+    resolutions: [
+      [1080, 1080],
+      [720, 720],
+    ],
+  },
 ];
 
 function aspectOf(width: number, height: number): (typeof ASPECTS)[number] {
   const r = width / height;
-  return ASPECTS.find((a) => {
-    const [w, h] = a.ratio.split(":").map(Number);
-    return Math.abs(r - w / h) < 0.01;
-  }) ?? ASPECTS[0];
+  return (
+    ASPECTS.find((a) => {
+      const [w, h] = a.ratio.split(":").map(Number);
+      return Math.abs(r - w / h) < 0.01;
+    }) ?? ASPECTS[0]
+  );
 }
 
 /**
@@ -313,7 +339,9 @@ function ClipSubflow(): JSX.Element {
               max={1}
               step={0.05}
               value={videoClip.volume ?? 1}
-              onChange={(e) => updateEdl((d) => mutateVideoClip(d, id, (c) => (c.volume = Number(e.target.value))))}
+              onChange={(e) =>
+                updateEdl((d) => mutateVideoClip(d, id, (c) => (c.volume = Number(e.target.value))))
+              }
             />
           </div>
           <div className="insp-group" style={{ width: "100%" }}>
@@ -360,14 +388,18 @@ function ClipSubflow(): JSX.Element {
               max={6}
               step={1}
               value={audioClip.gain}
-              onChange={(e) => updateEdl((d) => mutateAudioClip(d, id, (c) => (c.gain = Number(e.target.value))))}
+              onChange={(e) =>
+                updateEdl((d) => mutateAudioClip(d, id, (c) => (c.gain = Number(e.target.value))))
+              }
             />
           </div>
           <label className="insp-check">
             <input
               type="checkbox"
               checked={audioClip.duckUnderVoice}
-              onChange={(e) => updateEdl((d) => mutateAudioClip(d, id, (c) => (c.duckUnderVoice = e.target.checked)))}
+              onChange={(e) =>
+                updateEdl((d) => mutateAudioClip(d, id, (c) => (c.duckUnderVoice = e.target.checked)))
+              }
             />
             Duck under voice
           </label>
@@ -512,7 +544,11 @@ function InspSelect({
           </option>
         ))}
       </select>
-      <Icon name="chevron-top" size={16} style={{ transform: "rotate(180deg)", color: "var(--foreground-secondary)" }} />
+      <Icon
+        name="chevron-top"
+        size={16}
+        style={{ transform: "rotate(180deg)", color: "var(--foreground-secondary)" }}
+      />
     </span>
   );
 }
@@ -520,7 +556,14 @@ function InspSelect({
 function normalizeHex(c: string): string {
   if (/^#[0-9a-fA-F]{6}$/.test(c)) return c;
   if (/^#[0-9a-fA-F]{3}$/.test(c)) {
-    return "#" + c.slice(1).split("").map((x) => x + x).join("");
+    return (
+      "#" +
+      c
+        .slice(1)
+        .split("")
+        .map((x) => x + x)
+        .join("")
+    );
   }
   return "#000000";
 }

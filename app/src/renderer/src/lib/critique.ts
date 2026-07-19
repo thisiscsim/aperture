@@ -52,7 +52,8 @@ export function critiqueEdl(edl: Edl, benchmarks?: Benchmarks | null): Critique 
 
   const hookPresent = videoClips.some((c) => c.start <= 0.1) || textClips.some((c) => c.start <= 2);
   const endingPresent =
-    videoClips.some((c) => c.start + (c.out - c.in) >= dur - 1.5) || textClips.some((c) => c.end >= dur - 1.5);
+    videoClips.some((c) => c.start + (c.out - c.in) >= dur - 1.5) ||
+    textClips.some((c) => c.end >= dur - 1.5);
 
   const cutsPer10s = dur > 0 ? (videoClips.length / dur) * 10 : 0;
   const dist = benchmarks?.distribution;
@@ -75,28 +76,30 @@ export function critiqueEdl(edl: Edl, benchmarks?: Benchmarks | null): Critique 
           label: "Pacing",
           max: 15,
           score: videoClips.length >= 4 && videoClips.length <= 12 ? 14 : videoClips.length === 0 ? 4 : 9,
-          note: videoClips.length === 0 ? "No video clips yet — pacing can't be judged." : `${videoClips.length} cuts.`,
+          note:
+            videoClips.length === 0
+              ? "No video clips yet — pacing can't be judged."
+              : `${videoClips.length} cuts.`,
         };
 
   // Length: benchmark-relative when we have data, else the 7-35s sweet spot.
   const lenBench = dist?.durationSec;
-  const length: SubScore =
-    lenBench
-      ? {
-          key: "length",
-          label: "Length",
-          max: 10,
-          score: closeness(dur, lenBench.mean, lenBench.std, 10),
-          note: `${dur.toFixed(1)}s vs your winners' ${lenBench.mean.toFixed(1)}s.`,
-          benchmark: { yours: round1(dur), theirs: round1(lenBench.mean), unit: "s" },
-        }
-      : {
-          key: "length",
-          label: "Length",
-          max: 10,
-          score: dur >= 7 && dur <= 35 ? 10 : dur < 7 ? 5 : 6,
-          note: `${dur.toFixed(1)}s ${dur >= 7 && dur <= 35 ? "(in range)" : "(outside 7-35s sweet spot)"}.`,
-        };
+  const length: SubScore = lenBench
+    ? {
+        key: "length",
+        label: "Length",
+        max: 10,
+        score: closeness(dur, lenBench.mean, lenBench.std, 10),
+        note: `${dur.toFixed(1)}s vs your winners' ${lenBench.mean.toFixed(1)}s.`,
+        benchmark: { yours: round1(dur), theirs: round1(lenBench.mean), unit: "s" },
+      }
+    : {
+        key: "length",
+        label: "Length",
+        max: 10,
+        score: dur >= 7 && dur <= 35 ? 10 : dur < 7 ? 5 : 6,
+        note: `${dur.toFixed(1)}s ${dur >= 7 && dur <= 35 ? "(in range)" : "(outside 7-35s sweet spot)"}.`,
+      };
 
   const subscores: SubScore[] = [
     {

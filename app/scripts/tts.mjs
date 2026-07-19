@@ -34,7 +34,16 @@ function arg(name) {
 function normalizeLoudness(file) {
   const measure = spawnSync(
     ffmpegPath,
-    ["-hide_banner", "-i", file, "-af", `loudnorm=I=${TARGET_LUFS}:TP=${TARGET_TP}:LRA=11:print_format=json`, "-f", "null", "-"],
+    [
+      "-hide_banner",
+      "-i",
+      file,
+      "-af",
+      `loudnorm=I=${TARGET_LUFS}:TP=${TARGET_TP}:LRA=11:print_format=json`,
+      "-f",
+      "null",
+      "-",
+    ],
     { encoding: "utf8" },
   );
   const m = measure.stderr.match(/\{[\s\S]*\}/);
@@ -48,10 +57,14 @@ function normalizeLoudness(file) {
   if (Math.abs(Number(stats.input_i) - TARGET_LUFS) <= 1) return true; // already at target
   const out = `${file}.norm.mp3`;
   const apply = spawnSync(ffmpegPath, [
-    "-y", "-hide_banner", "-i", file,
+    "-y",
+    "-hide_banner",
+    "-i",
+    file,
     "-af",
     `loudnorm=I=${TARGET_LUFS}:TP=${TARGET_TP}:LRA=11:linear=true:measured_I=${stats.input_i}:measured_TP=${stats.input_tp}:measured_LRA=${stats.input_lra}:measured_thresh=${stats.input_thresh}`,
-    "-b:a", "192k",
+    "-b:a",
+    "192k",
     out,
   ]);
   if (apply.status !== 0 || !fs.existsSync(out)) return false;

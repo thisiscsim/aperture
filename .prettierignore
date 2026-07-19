@@ -1,0 +1,10 @@
+node_modules
+dist
+out
+storybook-static
+projects
+styles
+.whisper
+package-lock.json
+*.md
+fixtures

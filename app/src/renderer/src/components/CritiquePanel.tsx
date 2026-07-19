@@ -24,7 +24,9 @@ export function CritiquePanel(): JSX.Element {
   const [benchList, setBenchList] = useState<BenchItem[]>([]);
   const [phase, setPhase] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [trajectory, setTrajectory] = useState<{ iter: number; score: number; delta: string; change: string }[]>([]);
+  const [trajectory, setTrajectory] = useState<
+    { iter: number; score: number; delta: string; change: string }[]
+  >([]);
   const [aiMode, setAiMode] = useState<"llm" | "baseline">("baseline");
   const [critPhase, setCritPhase] = useState<string | null>(null);
   const [detail, setDetail] = useState(false);
@@ -35,7 +37,10 @@ export function CritiquePanel(): JSX.Element {
   const setNotice = useEditor((s) => s.setNotice);
 
   useEffect(() => {
-    window.api?.generateMode().then((m) => setAiMode(m.mode)).catch(() => {});
+    window.api
+      ?.generateMode()
+      .then((m) => setAiMode(m.mode))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -46,15 +51,27 @@ export function CritiquePanel(): JSX.Element {
         setSource("agent");
       }
     });
-    window.api?.loadBenchmarks(slug).then(setBenchmarks).catch(() => {});
-    window.api?.listBenchmarks(slug).then(setBenchList).catch(() => {});
-    window.api?.autoTuneResults(slug).then(setTrajectory).catch(() => {});
+    window.api
+      ?.loadBenchmarks(slug)
+      .then(setBenchmarks)
+      .catch(() => {});
+    window.api
+      ?.listBenchmarks(slug)
+      .then(setBenchList)
+      .catch(() => {});
+    window.api
+      ?.autoTuneResults(slug)
+      .then(setTrajectory)
+      .catch(() => {});
   }, [slug]);
 
   // Refresh trajectory + critique when an auto-improve run finishes.
   useEffect(() => {
     if (!slug || autotuning) return;
-    window.api?.autoTuneResults(slug).then(setTrajectory).catch(() => {});
+    window.api
+      ?.autoTuneResults(slug)
+      .then(setTrajectory)
+      .catch(() => {});
   }, [slug, autotuning]);
 
   if (!edl) return <div />;
@@ -186,7 +203,13 @@ export function CritiquePanel(): JSX.Element {
             </div>
           )}
 
-          <Button variant="primary" size="sm" onClick={onAutoTune} disabled={autotuning} style={{ width: "100%" }}>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onAutoTune}
+            disabled={autotuning}
+            style={{ width: "100%" }}
+          >
             {autotuning ? "Improving…" : "Auto-improve"}
           </Button>
 
@@ -196,8 +219,8 @@ export function CritiquePanel(): JSX.Element {
               <ul>
                 {trajectory.map((t) => (
                   <li key={t.iter}>
-                    <strong>{t.score}</strong> {t.delta !== "0" && <span className="muted">({t.delta})</span>} —{" "}
-                    {t.change}
+                    <strong>{t.score}</strong> {t.delta !== "0" && <span className="muted">({t.delta})</span>}{" "}
+                    — {t.change}
                   </li>
                 ))}
               </ul>

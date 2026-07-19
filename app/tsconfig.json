@@ -9,6 +9,5 @@
       "@/*": ["src/renderer/src/*"]
     }
   },
-  "include": ["src", "electron.vite.config.ts"],
-  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
+  "include": ["src", "electron.vite.config.ts", "../test"]
 }

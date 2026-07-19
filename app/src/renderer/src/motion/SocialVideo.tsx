@@ -40,7 +40,13 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string; preview?: boolea
       {/* All video tracks render in EDL order; later layers stack on top. */}
       {edl.tracks.map((track) =>
         track.type === "video" && track.clips.length > 0 ? (
-          <VideoTrackView key={track.id} track={track} edl={edl} assetBaseUrl={assetBaseUrl} preview={preview} />
+          <VideoTrackView
+            key={track.id}
+            track={track}
+            edl={edl}
+            assetBaseUrl={assetBaseUrl}
+            preview={preview}
+          />
         ) : null,
       )}
 
@@ -52,7 +58,13 @@ export const SocialVideo: FC<{ edl: Edl; assetBaseUrl?: string; preview?: boolea
 
       {edl.tracks.map((track) =>
         track.type === "audio" && track.clips.length > 0 ? (
-          <AudioTrackView key={track.id} track={track} edl={edl} assetBaseUrl={assetBaseUrl} preview={preview} />
+          <AudioTrackView
+            key={track.id}
+            track={track}
+            edl={edl}
+            assetBaseUrl={assetBaseUrl}
+            preview={preview}
+          />
         ) : null,
       )}
 
@@ -130,7 +142,12 @@ const CrossfadeVideo: FC<{
   }
 
   const grade = edl.theme.grade;
-  const mediaStyle: CSSProperties = { width: "100%", height: "100%", objectFit: "cover", filter: gradeFilter(grade) };
+  const mediaStyle: CSSProperties = {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    filter: gradeFilter(grade),
+  };
   return (
     <AbsoluteFill style={style}>
       {asset.kind === "image" ? (
@@ -153,7 +170,7 @@ const CrossfadeVideo: FC<{
       )}
     </AbsoluteFill>
   );
-}
+};
 
 // Light color grade as a CSS filter (no footage-transformation pipeline).
 function gradeFilter(grade: Edl["theme"]["grade"]): string | undefined {
@@ -164,7 +181,7 @@ function gradeFilter(grade: Edl["theme"]["grade"]): string | undefined {
   if (grade.saturation !== 1) parts.push(`saturate(${grade.saturation})`);
   if (grade.temperature) parts.push(`hue-rotate(${grade.temperature}deg)`);
   return parts.length ? parts.join(" ") : undefined;
-};
+}
 
 // p goes 0 -> 1 as the clip enters.
 function enterStyle(preset: string, p: number): CSSProperties {
@@ -330,7 +347,10 @@ const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
             ) : (
               <span key={wi} style={{ display: "inline-block", whiteSpace: "nowrap" }}>
                 {[...word].map((ch, ci) => (
-                  <span key={ci} style={{ display: "inline-block", ...unitStyle(spec, frame, fps, charIdx++) }}>
+                  <span
+                    key={ci}
+                    style={{ display: "inline-block", ...unitStyle(spec, frame, fps, charIdx++) }}
+                  >
                     {ch}
                   </span>
                 ))}
@@ -359,10 +379,7 @@ const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
           }
           const style = unitStyle(spec, frame, fps, unitIdx++);
           return (
-            <span
-              key={i}
-              style={{ display: isLine ? "block" : "inline-block", whiteSpace: "pre", ...style }}
-            >
+            <span key={i} style={{ display: isLine ? "block" : "inline-block", whiteSpace: "pre", ...style }}>
               {u}
             </span>
           );
@@ -412,7 +429,13 @@ const CaptionView: FC<{ track: CaptionTrack; edl: Edl }> = ({ track, edl }) => {
 
 function hexToRgba(hex: string, alpha: number): string {
   const m = hex.replace("#", "");
-  const full = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const full =
+    m.length === 3
+      ? m
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : m;
   const n = Number.parseInt(full, 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }

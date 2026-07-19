@@ -119,7 +119,7 @@ async function main() {
       console.log(`PHASE iteration ${i} produced invalid edl, stopping`);
       break;
     }
-    const score = typeof out.score === "number" ? Math.round(out.score) : prev ?? 0;
+    const score = typeof out.score === "number" ? Math.round(out.score) : (prev ?? 0);
     const change = typeof out.change === "string" ? out.change.slice(0, 120) : "revised edit";
 
     // Never let an improvement pass silently drop the music bed / voiceover.

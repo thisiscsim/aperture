@@ -112,18 +112,17 @@ const api = {
     platform?: string;
     styleProfileId?: string;
   }): Promise<CreateProjectResult> => ipcRenderer.invoke("project:create", input),
-  projectThumbnail: (slug: string): Promise<string | null> =>
-    ipcRenderer.invoke("project:thumbnail", slug),
+  projectThumbnail: (slug: string): Promise<string | null> => ipcRenderer.invoke("project:thumbnail", slug),
   listAlbums: (): Promise<AlbumSummary[]> => ipcRenderer.invoke("albums:list"),
   createAlbum: (name: string): Promise<{ ok: boolean; id?: string; name?: string; error?: string }> =>
     ipcRenderer.invoke("albums:create", name),
-  renameAlbum: (id: string, name: string): Promise<SaveResult> => ipcRenderer.invoke("albums:rename", id, name),
+  renameAlbum: (id: string, name: string): Promise<SaveResult> =>
+    ipcRenderer.invoke("albums:rename", id, name),
   deleteAlbum: (id: string): Promise<SaveResult> => ipcRenderer.invoke("albums:delete", id),
   setProjectAlbum: (slug: string, albumId: string | null): Promise<SaveResult> =>
     ipcRenderer.invoke("project:setAlbum", slug, albumId),
   deleteProject: (slug: string): Promise<SaveResult> => ipcRenderer.invoke("project:delete", slug),
-  loadProject: (slug: string): Promise<LoadProjectResult> =>
-    ipcRenderer.invoke("project:load", slug),
+  loadProject: (slug: string): Promise<LoadProjectResult> => ipcRenderer.invoke("project:load", slug),
   watchProject: (slug: string): Promise<SaveResult> => ipcRenderer.invoke("project:watch", slug),
   saveEdl: (slug: string, edl: Edl): Promise<SaveResult> => ipcRenderer.invoke("edl:save", slug, edl),
   savePrompt: (slug: string, text: string): Promise<SaveResult> =>
@@ -141,7 +140,8 @@ const api = {
   importAudioFromUrl: (slug: string, url: string): Promise<ImportResult> =>
     ipcRenderer.invoke("audio:fromUrl", slug, url),
   // ElevenLabs voiceover
-  voicesStatus: (): Promise<{ configured: boolean; keyLocked: boolean }> => ipcRenderer.invoke("voices:status"),
+  voicesStatus: (): Promise<{ configured: boolean; keyLocked: boolean }> =>
+    ipcRenderer.invoke("voices:status"),
   listVoices: (): Promise<{ ok: boolean; voices: VoiceSummary[]; error?: string }> =>
     ipcRenderer.invoke("voices:list"),
   cloneVoice: (input: {
@@ -152,7 +152,8 @@ const api = {
   }): Promise<{ ok: boolean; voiceId?: string; error?: string }> => ipcRenderer.invoke("voices:clone", input),
   deleteVoice: (id: string): Promise<SaveResult> => ipcRenderer.invoke("voices:delete", id),
   loadNarration: (slug: string): Promise<string> => ipcRenderer.invoke("narration:load", slug),
-  saveNarration: (slug: string, text: string): Promise<SaveResult> => ipcRenderer.invoke("narration:save", slug, text),
+  saveNarration: (slug: string, text: string): Promise<SaveResult> =>
+    ipcRenderer.invoke("narration:save", slug, text),
   draftNarration: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("narration:draft", slug),
   generateVoiceover: (slug: string, voiceId: string): Promise<ExportResult> =>
     ipcRenderer.invoke("tts:start", slug, voiceId),
@@ -173,8 +174,14 @@ const api = {
   createStyle: (name: string): Promise<CreateStyleResult> => ipcRenderer.invoke("styles:create", name),
   newStyleFromDialog: (
     mode: "files" | "folder",
-  ): Promise<{ ok: boolean; id?: string; name?: string; files?: string[]; canceled?: boolean; error?: string }> =>
-    ipcRenderer.invoke("styles:newFromDialog", mode),
+  ): Promise<{
+    ok: boolean;
+    id?: string;
+    name?: string;
+    files?: string[];
+    canceled?: boolean;
+    error?: string;
+  }> => ipcRenderer.invoke("styles:newFromDialog", mode),
   addStyleSources: (id: string, mode: "files" | "folder"): Promise<ImportFilesResult> =>
     ipcRenderer.invoke("styles:addFromDialog", id, mode),
   analyzeStyle: (id: string): Promise<ExportResult> => ipcRenderer.invoke("styles:analyze", id),
@@ -192,7 +199,9 @@ const api = {
   analyzeBenchmarks: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("benchmarks:analyze", slug),
   loadBenchmarks: (slug: string): Promise<Benchmarks | null> => ipcRenderer.invoke("benchmarks:load", slug),
   autoTune: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("autotune:start", slug),
-  autoTuneResults: (slug: string): Promise<{ iter: number; score: number; delta: string; change: string }[]> =>
+  autoTuneResults: (
+    slug: string,
+  ): Promise<{ iter: number; score: number; delta: string; change: string }[]> =>
     ipcRenderer.invoke("autotune:results", slug),
   exportProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("export:start", slug),
   generateProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("generate:start", slug),
@@ -208,7 +217,8 @@ const api = {
   runCritique: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("critique:run", slug),
   revealItem: (filePath: string): Promise<void> => ipcRenderer.invoke("shell:reveal", filePath),
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke("settings:get"),
-  setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> => ipcRenderer.invoke("settings:set", patch),
+  setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> =>
+    ipcRenderer.invoke("settings:set", patch),
   getProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:get"),
   revealProjectsDir: (): Promise<string> => ipcRenderer.invoke("home:reveal"),
   pickProjectsDir: (): Promise<{ ok: boolean; homeDir?: string; canceled?: boolean }> =>

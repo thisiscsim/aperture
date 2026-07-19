@@ -32,12 +32,34 @@ describe("restoreAudioTracks", () => {
         id: "aud",
         type: "audio",
         name: "Music",
-        clips: [{ id: "a-m", assetId: "m", start: 0, in: 0, out: 12, gain: -12, duckUnderVoice: false, role: "music" }],
+        clips: [
+          {
+            id: "a-m",
+            assetId: "m",
+            start: 0,
+            in: 0,
+            out: 12,
+            gain: -12,
+            duckUnderVoice: false,
+            role: "music",
+          },
+        ],
       },
       {
         id: "vo",
         type: "audio",
-        clips: [{ id: "a-v", assetId: "v", start: 0, in: 0, out: 6, gain: 0, duckUnderVoice: false, role: "voiceover" }],
+        clips: [
+          {
+            id: "a-v",
+            assetId: "v",
+            start: 0,
+            in: 0,
+            out: 6,
+            gain: 0,
+            duckUnderVoice: false,
+            role: "voiceover",
+          },
+        ],
       },
     ],
   };
@@ -60,7 +82,11 @@ describe("restoreAudioTracks", () => {
       tracks: [
         { id: "v", type: "video", clips: [{ id: "v1", assetId: "a", start: 0, in: 0, out: 12 }] },
         { id: "aud", type: "audio", clips: [] },
-        { id: "vo", type: "audio", clips: [{ id: "a-v", assetId: "v", start: 1, in: 0, out: 6, role: "voiceover" }] },
+        {
+          id: "vo",
+          type: "audio",
+          clips: [{ id: "a-v", assetId: "v", start: 1, in: 0, out: 6, role: "voiceover" }],
+        },
       ],
     };
     const out = restoreAudioTracks(modelCut, baseline);

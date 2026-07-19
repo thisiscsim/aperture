@@ -60,7 +60,9 @@ describe("parseEdl", () => {
 // project sandbox, and non-color palette strings reach inline CSS.
 describe("hostile input hardening", () => {
   const withVideoClip = (clip: Record<string, unknown>) => ({
-    tracks: [{ id: "v", type: "video", clips: [{ id: "c", assetId: "a", start: 0, in: 0, out: 4, ...clip }] }],
+    tracks: [
+      { id: "v", type: "video", clips: [{ id: "c", assetId: "a", start: 0, in: 0, out: 4, ...clip }] },
+    ],
   });
 
   it("rejects Infinity timings (JSON 1e400 parses to Infinity)", () => {

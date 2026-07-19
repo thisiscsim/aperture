@@ -39,8 +39,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
   useEscapeKey(onClose);
 
   useEffect(() => {
-    window.api?.getSettings().then(setSettings).catch(() => {});
-    window.api?.getProjectsDir().then(setProjectsDir).catch(() => {});
+    window.api
+      ?.getSettings()
+      .then(setSettings)
+      .catch(() => {});
+    window.api
+      ?.getProjectsDir()
+      .then(setProjectsDir)
+      .catch(() => {});
     window.api
       ?.generateMode()
       .then((m) => setLocks({ modelLocked: m.modelLocked, keyLocked: m.keyLocked }))
@@ -99,7 +105,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }): JSX.Element
                 <Toggle on={settings.hwDecode} onChange={(v) => void update({ hwDecode: v })} />
               </SettingRow>
               <Divider />
-              <SettingRow title="Hardware-accelerated export" sub="Use GPU encoder when rendering the final MP4">
+              <SettingRow
+                title="Hardware-accelerated export"
+                sub="Use GPU encoder when rendering the final MP4"
+              >
                 <Toggle on={settings.hwEncode} onChange={(v) => void update({ hwEncode: v })} />
               </SettingRow>
               <Divider />
@@ -254,7 +263,10 @@ function VoicesTab({
   const chunks = useRef<Blob[]>([]);
 
   const refresh = useCallback(() => {
-    window.api?.voicesStatus().then(setStatus).catch(() => {});
+    window.api
+      ?.voicesStatus()
+      .then(setStatus)
+      .catch(() => {});
     window.api
       ?.listVoices()
       .then((r) => {
@@ -372,7 +384,10 @@ function VoicesTab({
               onChange={(v) => void update({ defaultVoiceId: v || undefined })}
               options={[
                 { value: "", label: "Pick a voice" },
-                ...voices.map((v) => ({ value: v.id, label: `${v.name}${v.category === "cloned" ? " (cloned)" : ""}` })),
+                ...voices.map((v) => ({
+                  value: v.id,
+                  label: `${v.name}${v.category === "cloned" ? " (cloned)" : ""}`,
+                })),
               ]}
             />
           </SettingRow>
@@ -402,7 +417,10 @@ function VoicesTab({
           )}
           <Divider />
 
-          <SettingRow title="Clone a voice" sub="1-5 minutes of clean speech. Requires a paid ElevenLabs plan.">
+          <SettingRow
+            title="Clone a voice"
+            sub="1-5 minutes of clean speech. Requires a paid ElevenLabs plan."
+          >
             <span />
           </SettingRow>
           <div className="settings-key-row">
@@ -462,8 +480,8 @@ function VoicesTab({
             </div>
           )}
           <label className="insp-check">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-            I have the person&apos;s consent (or it&apos;s my own voice) and the rights to clone it.
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />I have
+            the person&apos;s consent (or it&apos;s my own voice) and the rights to clone it.
           </label>
           <Button
             variant="primary"

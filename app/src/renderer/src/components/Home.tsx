@@ -1,7 +1,7 @@
 import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets } from "../lib/edl-edit";
-import { buildTiles, relativeTime, SORT_LABELS, type HomeSort, type HomeTile } from "../lib/home";
+import { buildTiles, relativeTime, SORT_LABELS, type HomeSort } from "../lib/home";
 import { SettingsButton } from "./SettingsModal";
 import { Button, Field, Icon, IconButton, Input, Modal, TextArea, useEscapeKey } from "./ui";
 import type { AlbumSummary, ProjectSummary } from "../../../preload";
@@ -29,12 +29,15 @@ export function Home(): JSX.Element {
       .then((list) => setProjects(list))
       .catch(() => setProjects([]))
       .finally(() => setLoading(false));
-    window.api?.listAlbums().then(setAlbums).catch(() => {});
+    window.api
+      ?.listAlbums()
+      .then(setAlbums)
+      .catch(() => {});
   }, [setProjects]);
 
   useEffect(refresh, [refresh]);
 
-  const openAlbum = openAlbumId ? albums.find((a) => a.id === openAlbumId) ?? null : null;
+  const openAlbum = openAlbumId ? (albums.find((a) => a.id === openAlbumId) ?? null) : null;
   const tiles = buildTiles({ projects, albums, tab, openAlbumId, sort, query });
 
   // Seamless navigation: load the project while Home is still showing and
@@ -413,7 +416,9 @@ function ProjectTile({
                 onClick={async (e) => {
                   e.stopPropagation();
                   close();
-                  if (!window.confirm(`Delete "${project.title}"? This permanently removes the project folder.`))
+                  if (
+                    !window.confirm(`Delete "${project.title}"? This permanently removes the project folder.`)
+                  )
                     return;
                   const res = await window.api.deleteProject(project.slug);
                   if (res.ok) onChanged();
@@ -475,9 +480,12 @@ function MoveToAlbumItem({
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => setSubOpen(false), 150);
   };
-  useEffect(() => () => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
 
   const move = async (albumId: string) => {
     close();
@@ -597,7 +605,9 @@ function AlbumTile({
                 onClick={async (e) => {
                   e.stopPropagation();
                   close();
-                  if (!window.confirm(`Delete the album "${album.name}"? Its projects are kept and ungrouped.`))
+                  if (
+                    !window.confirm(`Delete the album "${album.name}"? Its projects are kept and ungrouped.`)
+                  )
                     return;
                   const res = await window.api.deleteAlbum(album.id);
                   if (res.ok) onChanged();
@@ -738,7 +748,10 @@ function NewProjectModal({
       // so the editor opens with everything already in place.
       if (files.length > 0) {
         setBusy(`Importing ${files.length} clip${files.length === 1 ? "" : "s"}…`);
-        const imp = await window.api.importAssets(res.slug, files.map((f) => f.path));
+        const imp = await window.api.importAssets(
+          res.slug,
+          files.map((f) => f.path),
+        );
         if (imp.ok && imp.assets.length > 0) {
           const proj = await window.api.loadProject(res.slug);
           if (proj.ok && proj.edl) {

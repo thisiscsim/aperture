@@ -21,7 +21,11 @@ export function TextArea({ className, ...rest }: TextareaHTMLAttributes<HTMLText
   return <textarea className={["ui-textarea", className].filter(Boolean).join(" ")} {...rest} />;
 }
 
-export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>): JSX.Element {
+export function Select({
+  className,
+  children,
+  ...rest
+}: SelectHTMLAttributes<HTMLSelectElement>): JSX.Element {
   return (
     <span className="ui-select-wrap">
       <select className={["ui-select", className].filter(Boolean).join(" ")} {...rest}>

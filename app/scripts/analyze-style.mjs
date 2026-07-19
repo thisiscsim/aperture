@@ -8,7 +8,7 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,7 +52,21 @@ function paletteFor(file, atSec) {
   try {
     const res = spawnSync(
       ffmpegPath,
-      ["-ss", String(atSec), "-i", file, "-frames:v", "1", "-vf", "scale=3:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+      [
+        "-ss",
+        String(atSec),
+        "-i",
+        file,
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=3:1",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-",
+      ],
       { maxBuffer: 1 << 20 },
     );
     const buf = res.stdout;
@@ -79,7 +93,9 @@ function avgPalette(palettes) {
       acc[i][2] += n & 255;
     });
   }
-  return acc.map(([r, g, b]) => toHex(Math.round(r / valid.length), Math.round(g / valid.length), Math.round(b / valid.length)));
+  return acc.map(([r, g, b]) =>
+    toHex(Math.round(r / valid.length), Math.round(g / valid.length), Math.round(b / valid.length)),
+  );
 }
 
 async function main() {

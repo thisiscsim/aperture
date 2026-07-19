@@ -58,7 +58,11 @@ describe("Home albums", () => {
         updatedAt: "2026-07-18T00:00:00Z",
       },
     ]);
-    vi.mocked(window.api.createAlbum).mockResolvedValue({ ok: true, id: "wine-country", name: "Wine Country" });
+    vi.mocked(window.api.createAlbum).mockResolvedValue({
+      ok: true,
+      id: "wine-country",
+      name: "Wine Country",
+    });
     vi.mocked(window.api.setProjectAlbum).mockResolvedValue({ ok: true });
     useEditor.setState({ view: "home", projects: [] });
     render(<Home />);
@@ -170,8 +174,6 @@ describe("NewProjectModal clips staging", () => {
 
     await waitFor(() => expect(window.api.createProject).toHaveBeenCalled());
     expect(window.api.createProject).toHaveBeenCalledWith({ title: "My cut", prompt: "" });
-    await waitFor(() =>
-      expect(window.api.importAssets).toHaveBeenCalledWith("demo", ["/picked/beach.mp4"]),
-    );
+    await waitFor(() => expect(window.api.importAssets).toHaveBeenCalledWith("demo", ["/picked/beach.mp4"]));
   });
 });

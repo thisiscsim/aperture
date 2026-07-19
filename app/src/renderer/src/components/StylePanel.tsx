@@ -22,10 +22,19 @@ export function StylePanel(): JSX.Element {
   const refInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
-    window.api?.listStyles().then(setStyles).catch(() => {});
+    window.api
+      ?.listStyles()
+      .then(setStyles)
+      .catch(() => {});
     if (!slug) return;
-    window.api?.listReferences(slug).then(setProjectRefs).catch(() => {});
-    window.api?.loadMeta(slug).then((m) => setActiveId(m.styleProfileId)).catch(() => {});
+    window.api
+      ?.listReferences(slug)
+      .then(setProjectRefs)
+      .catch(() => {});
+    window.api
+      ?.loadMeta(slug)
+      .then((m) => setActiveId(m.styleProfileId))
+      .catch(() => {});
     window.api?.loadStyle(slug).then((p) => {
       setIsProjectProfile(Boolean(p));
       if (p) setProfile(p);
@@ -38,7 +47,10 @@ export function StylePanel(): JSX.Element {
   const effectiveId = activeId ?? (styles.length === 1 ? styles[0].id : undefined);
   useEffect(() => {
     if (isProjectProfile || !effectiveId) return;
-    window.api?.getStyle(effectiveId).then((p) => p && setProfile(p)).catch(() => {});
+    window.api
+      ?.getStyle(effectiveId)
+      .then((p) => p && setProfile(p))
+      .catch(() => {});
   }, [effectiveId, isProjectProfile]);
 
   const newStyleFromFolder = async () => {
@@ -206,8 +218,18 @@ export function StylePanel(): JSX.Element {
               Generate, or run analysis now.
             </p>
           )}
-          <Button variant="secondary" size="sm" onClick={reanalyze} disabled={!!phase} style={{ width: "100%" }}>
-            {phase ? `Analyzing… ${phase}` : profile?.styleGuide ? "Re-analyze references" : "Analyze references"}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={reanalyze}
+            disabled={!!phase}
+            style={{ width: "100%" }}
+          >
+            {phase
+              ? `Analyzing… ${phase}`
+              : profile?.styleGuide
+                ? "Re-analyze references"
+                : "Analyze references"}
           </Button>
           {phase && (
             <div className="crit-trajectory">

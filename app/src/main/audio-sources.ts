@@ -30,8 +30,7 @@ const SOURCES: AudioSource[] = [
 ];
 
 export type ResolvedAudioSource =
-  | { ok: true; id: string; label: string; url: string }
-  | { ok: false; error: string };
+  { ok: true; id: string; label: string; url: string } | { ok: false; error: string };
 
 export function resolveAudioSource(raw: string): ResolvedAudioSource {
   let url: URL;

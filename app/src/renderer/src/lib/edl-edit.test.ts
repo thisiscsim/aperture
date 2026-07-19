@@ -42,7 +42,13 @@ describe("addAudioClip", () => {
     const edl = baseEdl(); // video ends at 4s
     addAudioClip(edl, "m", "music", 10);
     const track = edl.tracks.find((t): t is AudioTrack => t.type === "audio")!;
-    expect(track.clips[0]).toMatchObject({ assetId: "m", role: "music", gain: -12, duckUnderVoice: true, out: 4 });
+    expect(track.clips[0]).toMatchObject({
+      assetId: "m",
+      role: "music",
+      gain: -12,
+      duckUnderVoice: true,
+      out: 4,
+    });
   });
 
   it("uses the track's natural length when there is no video yet", () => {

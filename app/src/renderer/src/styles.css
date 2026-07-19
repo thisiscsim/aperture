@@ -86,7 +86,10 @@ button {
   color: var(--fg);
   font-size: 12px;
   cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    opacity 150ms ease;
 }
 
 .btn:hover:not(:disabled) {
@@ -175,7 +178,9 @@ button {
 
 .dropzone {
   cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
 }
 
 .dropzone:hover,
@@ -833,11 +838,15 @@ button.brand:hover {
   line-height: 20px;
   color: var(--foreground-primary);
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
 }
 
 .tile-new {
-  transition: border-color 120ms ease, background 120ms ease,
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
     transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
@@ -845,7 +854,9 @@ button.brand:hover {
   border-color: var(--foreground-muted);
   background: var(--background-secondary);
   transform: translateY(-3px);
-  transition: border-color 120ms ease, background 120ms ease,
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
     transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -965,7 +976,6 @@ button.brand:hover {
   width: 12px;
 }
 
-
 /* ---------- Toast ---------- */
 .toast {
   position: fixed;
@@ -987,7 +997,9 @@ button.brand:hover {
 
 .toast-error {
   border-color: #c0392b;
-  box-shadow: 0 0 0 1px #c0392b, 0 16px 50px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 0 0 1px #c0392b,
+    0 16px 50px rgba(0, 0, 0, 0.45);
 }
 
 /* ---------- Boot overlay ---------- */
