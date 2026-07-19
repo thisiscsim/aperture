@@ -88,7 +88,7 @@ export function Home(): JSX.Element {
           )}
           <div className="home-toolbar-right">
             <SortMenu sort={sort} onChange={setSort} />
-            <input
+            <Input
               className="home-search"
               type="text"
               placeholder="Search..."
@@ -100,6 +100,8 @@ export function Home(): JSX.Element {
 
         {loading ? (
           <p className="home-loading">Loading projects…</p>
+        ) : tiles.length === 0 && tab === "albums" && !openAlbum && query.trim() === "" ? (
+          <p className="home-empty">No albums yet</p>
         ) : (
           <div className="tile-grid">
             {tiles.map((tile) =>
@@ -123,9 +125,6 @@ export function Home(): JSX.Element {
                   onChanged={refresh}
                 />
               ),
-            )}
-            {tiles.length === 0 && tab === "albums" && !openAlbum && query.trim() === "" && (
-              <p className="home-loading">No albums yet — use a project&apos;s menu → Move to album.</p>
             )}
             {!openAlbum && tab === "all" && (
               <button className="tile tile-new" onClick={() => setCreating(true)}>
@@ -208,6 +207,54 @@ function NewAlbumDialog({
   );
 }
 
+/** Rename dialog shared by projects and albums — same specs as the creation dialogs. */
+function RenameDialog({
+  title,
+  label,
+  initial,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  label: string;
+  initial: string;
+  onClose: () => void;
+  onSave: (value: string) => void | Promise<void>;
+}): JSX.Element {
+  const [value, setValue] = useState(initial);
+
+  const save = () => {
+    if (!value.trim()) return;
+    void onSave(value.trim());
+  };
+
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} disabled={!value.trim()}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <Field label={label}>
+        <Input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()}
+        />
+      </Field>
+    </Modal>
+  );
+}
+
 /* ---------------- toolbar sort ---------------- */
 
 function SortMenu({ sort, onChange }: { sort: HomeSort; onChange: (s: HomeSort) => void }): JSX.Element {
@@ -283,44 +330,19 @@ function ProjectTile({
 }): JSX.Element {
   const thumb = useThumb(project.slug);
   const [renaming, setRenaming] = useState(false);
-  const [draft, setDraft] = useState(project.title);
-
-  const commitRename = async () => {
-    setRenaming(false);
-    const title = draft.trim();
-    if (title && title !== project.title) {
-      await window.api.saveMeta(project.slug, { title });
-      onChanged();
-    }
-  };
 
   const meta = [`${project.durationSec.toFixed(1)}s`, relativeTime(project.updatedAt)]
     .filter(Boolean)
     .join(" ⋅ ");
 
   return (
-    <div className="tile" role="button" tabIndex={0} onClick={() => !renaming && onOpen()}>
+    <div className="tile" role="button" tabIndex={0} onClick={onOpen}>
       <div className="tile-thumb">
         {thumb ? <img src={thumb} alt="" /> : <div className="tile-thumb-empty">No clips yet</div>}
       </div>
       <div className="tile-info">
         <div className="tile-text">
-          {renaming ? (
-            <input
-              className="tile-rename"
-              value={draft}
-              autoFocus
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => void commitRename()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void commitRename();
-                if (e.key === "Escape") setRenaming(false);
-              }}
-            />
-          ) : (
-            <div className="tile-title">{project.title}</div>
-          )}
+          <div className="tile-title">{project.title}</div>
           <div className="tile-meta">{meta}</div>
         </div>
         <TileMenu
@@ -339,7 +361,6 @@ function ProjectTile({
                 onClick={(e) => {
                   e.stopPropagation();
                   close();
-                  setDraft(project.title);
                   setRenaming(true);
                 }}
               >
@@ -378,6 +399,23 @@ function ProjectTile({
           )}
         />
       </div>
+      {renaming && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <RenameDialog
+            title="Rename project"
+            label="Title"
+            initial={project.title}
+            onClose={() => setRenaming(false)}
+            onSave={async (title) => {
+              setRenaming(false);
+              if (title !== project.title) {
+                await window.api.saveMeta(project.slug, { title });
+                onChanged();
+              }
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -479,23 +517,13 @@ function AlbumTile({
   onChanged: () => void;
 }): JSX.Element {
   const [renaming, setRenaming] = useState(false);
-  const [draft, setDraft] = useState(album.name);
-
-  const commitRename = async () => {
-    setRenaming(false);
-    const name = draft.trim();
-    if (name && name !== album.name) {
-      await window.api.renameAlbum(album.id, name);
-      onChanged();
-    }
-  };
 
   const meta = [`${members.length} item${members.length === 1 ? "" : "s"}`, relativeTime(updatedAt)]
     .filter(Boolean)
     .join(" ⋅ ");
 
   return (
-    <div className="tile" role="button" tabIndex={0} onClick={() => !renaming && onOpen()}>
+    <div className="tile" role="button" tabIndex={0} onClick={onOpen}>
       <div className="album-cover">
         {[0, 1, 2, 3].map((i) =>
           members[i] ? (
@@ -507,22 +535,7 @@ function AlbumTile({
       </div>
       <div className="tile-info">
         <div className="tile-text">
-          {renaming ? (
-            <input
-              className="tile-rename"
-              value={draft}
-              autoFocus
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => void commitRename()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void commitRename();
-                if (e.key === "Escape") setRenaming(false);
-              }}
-            />
-          ) : (
-            <div className="tile-title">{album.name}</div>
-          )}
+          <div className="tile-title">{album.name}</div>
           <div className="tile-meta">{meta}</div>
         </div>
         <TileMenu
@@ -534,7 +547,6 @@ function AlbumTile({
                 onClick={(e) => {
                   e.stopPropagation();
                   close();
-                  setDraft(album.name);
                   setRenaming(true);
                 }}
               >
@@ -559,6 +571,23 @@ function AlbumTile({
           )}
         />
       </div>
+      {renaming && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <RenameDialog
+            title="Rename album"
+            label="Name"
+            initial={album.name}
+            onClose={() => setRenaming(false)}
+            onSave={async (name) => {
+              setRenaming(false);
+              if (name !== album.name) {
+                await window.api.renameAlbum(album.id, name);
+                onChanged();
+              }
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

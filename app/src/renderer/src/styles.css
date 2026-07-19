@@ -700,22 +700,19 @@ button.brand:hover {
   z-index: 30;
 }
 
+/* The search field is a stock .ui-input, just width-constrained. */
 .home-search {
   width: 240px;
-  height: 28px;
-  padding: 6.5px 8.5px;
-  border: 0.5px solid var(--border-primary);
-  border-radius: 8px;
-  background: var(--background-secondary);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 1;
-  color: var(--foreground-primary);
-  outline: none;
+  flex: none;
 }
 
-.home-search::placeholder {
-  color: var(--foreground-muted);
+.home-empty {
+  margin: 0;
+  padding: 64px 0;
+  text-align: center;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--foreground-secondary);
 }
 
 /* ---------- Tile grid ---------- */
@@ -776,20 +773,6 @@ button.brand:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.tile-rename {
-  width: 100%;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: var(--background-secondary);
-  padding: 2px 6px;
-  margin: -2px 0 -2px -6px;
-  font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--foreground-primary);
-  outline: none;
 }
 
 .tile-meta {
