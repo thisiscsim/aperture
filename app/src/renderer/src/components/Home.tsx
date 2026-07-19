@@ -435,6 +435,22 @@ function MoveToAlbumItem({
   onNewAlbum: () => void;
 }): JSX.Element {
   const [subOpen, setSubOpen] = useState(false);
+  // Grace timer: closing on a delay tolerates diagonal cursor travel that
+  // briefly exits the row on the way to the submenu.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const enter = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setSubOpen(true);
+  };
+  const leave = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setSubOpen(false), 150);
+  };
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   const move = async (albumId: string) => {
     close();
@@ -443,11 +459,7 @@ function MoveToAlbumItem({
   };
 
   return (
-    <div
-      className="menu-item-wrap"
-      onMouseEnter={() => setSubOpen(true)}
-      onMouseLeave={() => setSubOpen(false)}
-    >
+    <div className="menu-item-wrap" onMouseEnter={enter} onMouseLeave={leave}>
       <button
         className="menu-item"
         onClick={(e) => {

@@ -946,6 +946,18 @@ button.brand:hover {
   z-index: 31;
 }
 
+/* Invisible hover bridge over the 4px gap between menu and submenu — without
+   it, mouseleave fires mid-gap and the submenu unmounts before the cursor
+   can reach it. */
+.menu-sub::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+}
+
 
 /* ---------- Toast ---------- */
 .toast {
