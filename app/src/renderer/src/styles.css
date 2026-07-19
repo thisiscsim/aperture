@@ -942,11 +942,14 @@ button.brand:hover {
 }
 
 /* Offset is measured from the menu row, which sits inside the popover's 4px
-   padding — so +8px total = 4px to clear the popover edge + a 4px visual gap. */
+   padding — so +8px total = 4px to clear the popover edge + a 4px visual gap.
+   top compensates for the submenu's own padding + border so its FIRST item
+   lines up exactly with the origin row (align the selected item instead if a
+   submenu ever carries selection state). */
 .menu-sub {
   position: absolute;
   left: calc(100% + 8px);
-  top: 0;
+  top: -4.5px;
   z-index: 31;
 }
 
