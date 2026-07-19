@@ -18,6 +18,7 @@ export function EditorHeader(): JSX.Element {
   const canRedo = useEditor((s) => s.edlFuture.length > 0);
   const undoEdl = useEditor((s) => s.undoEdl);
   const redoEdl = useEditor((s) => s.redoEdl);
+  const saveError = useEditor((s) => s.saveError);
 
   const onExport = async () => {
     if (!slug || exporting) return;
@@ -49,6 +50,11 @@ export function EditorHeader(): JSX.Element {
           {title}
           <span className="ext">.aperture</span>
         </span>
+        {saveError && (
+          <span className="save-state error" title={saveError} role="status">
+            Not saved
+          </span>
+        )}
       </div>
 
       <div className="editor-header-actions">

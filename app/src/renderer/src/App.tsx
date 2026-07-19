@@ -6,7 +6,7 @@ import { RightPanel } from "./components/RightPanel";
 import { Timeline } from "./components/Timeline";
 import { ExportModal } from "./components/ExportModal";
 import { Home } from "./components/Home";
-import { useEditor, type PanelId } from "./store";
+import { cancelPendingSave, useEditor, type PanelId } from "./store";
 
 export function App(): JSX.Element {
   const view = useEditor((s) => s.view);
@@ -115,7 +115,11 @@ export function App(): JSX.Element {
 
     void window.api?.watchProject(slug);
     const off = window.api?.onProjectChanged((changed) => {
-      if (changed === slug) load();
+      if (changed !== slug) return;
+      // Drop any in-flight autosave immediately — before the async reload
+      // lands — so it can't overwrite the newer file the agent just wrote.
+      cancelPendingSave(slug);
+      load();
     });
     return () => off?.();
   }, [view, slug, setProject, setLoadError, setReload]);

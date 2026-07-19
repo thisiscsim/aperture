@@ -100,15 +100,19 @@ export function Timeline(): JSX.Element {
         : { start: clip.start, in: (clip as MediaLike).in, out: (clip as MediaLike).out };
     let preview = orig;
 
+    let moved = false;
     const onMove = (ev: globalThis.MouseEvent) => {
       const dSec = (ev.clientX - startX) / PX_PER_SEC;
+      if (dSec !== 0) moved = true;
       preview = computePreview(track.type, mode, orig, dSec, assetDur);
       setDrag({ clipId: clip.id, trackType: track.type, preview });
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      commit(updateEdl, clip.id, track.type, preview);
+      // A plain click (no movement) is just a selection — committing would
+      // push an identical EDL onto the undo stack and schedule a disk write.
+      if (moved) commit(updateEdl, clip.id, track.type, preview);
       setDrag(null);
       setTimeout(() => (dragging.current = false), 0);
     };

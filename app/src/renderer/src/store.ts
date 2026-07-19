@@ -69,13 +69,94 @@ function withViewTransition(mutate: () => void): void {
 // Debounced persistence of edits back to projects/<slug>/edl.json. Editor edits
 // mutate the in-memory EDL immediately; we flush to disk shortly after so the
 // agent/renderer (which re-read the file) see the same source of truth.
+//
+// The pending payload is tracked explicitly (not just captured in the timer
+// closure) so project switches can flush it, external reloads can drop it,
+// and quitting can't silently lose the last edit.
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSave: { slug: string; edl: Edl } | null = null;
+
+function clearSaveTimer(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+}
+
+async function persist(slug: string, edl: Edl): Promise<void> {
+  let res: { ok: boolean; error?: string } | null | undefined;
+  try {
+    res = await window.api?.saveEdl(slug, edl);
+  } catch (err) {
+    res = { ok: false, error: String(err) };
+  }
+  if (res && res.ok === false) {
+    // The edit only exists in memory; keep the dirty flag and tell the user
+    // instead of silently diverging from disk.
+    useEditor.setState({
+      saveError: res.error ?? "unknown error",
+      notice: {
+        kind: "error",
+        text: `Autosave failed — latest edits are not on disk (${res.error ?? "unknown error"})`,
+      },
+    });
+    return;
+  }
+  // Clear dirty only if nothing newer is in flight and the store still holds
+  // exactly what we saved (an edit during the await keeps the flag).
+  const s = useEditor.getState();
+  if (!pendingSave && s.slug === slug && s.edl === edl) {
+    useEditor.setState({ dirty: false, saveError: null });
+  }
+}
+
+/** Write the pending edit (if any) to disk now. */
+function flushPendingSave(): void {
+  clearSaveTimer();
+  const p = pendingSave;
+  pendingSave = null;
+  if (p) void persist(p.slug, p.edl);
+}
+
+/**
+ * Disk truth for `slug` is about to replace in-memory state (external reload):
+ * drop a pending save for that project — flushing it would overwrite the
+ * newer file and re-suppress the watcher echo, leaving UI and disk diverged.
+ * A pending save for a *different* project is unrelated; flush it.
+ */
+export function cancelPendingSave(slug: string | null): void {
+  if (pendingSave && pendingSave.slug !== slug) {
+    flushPendingSave();
+    return;
+  }
+  clearSaveTimer();
+  pendingSave = null;
+}
+
+/** Test-only: drop any pending autosave without writing or flushing. */
+export function _dropPendingSave(): void {
+  clearSaveTimer();
+  pendingSave = null;
+}
+
 function scheduleSave(slug: string | null, edl: Edl): void {
   if (!slug) return;
-  if (saveTimer) clearTimeout(saveTimer);
+  // Never let a new project's first edit clobber the previous project's
+  // pending save via the shared timer.
+  if (pendingSave && pendingSave.slug !== slug) flushPendingSave();
+  pendingSave = { slug, edl };
+  clearSaveTimer();
   saveTimer = setTimeout(() => {
-    void window.api?.saveEdl(slug, edl);
+    saveTimer = null;
+    flushPendingSave();
   }, 400);
+}
+
+// Renderer teardown (quit, reload) must not lose the debounce window's edit.
+// `beforeunload` can't await, but the IPC message is dispatched before the
+// process goes away, and the main process writes synchronously.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => flushPendingSave());
 }
 
 export interface ExportResult {
@@ -93,6 +174,11 @@ interface EditorState {
   promptText: string;
   meta: Meta | null;
   loadError: string | null;
+
+  /** True while an edit exists that has not been confirmed written to disk. */
+  dirty: boolean;
+  /** Last autosave failure (null when saves are healthy). */
+  saveError: string | null;
 
   selectedClipId: string | null;
   currentFrame: number;
@@ -177,6 +263,8 @@ export const useEditor = create<EditorState>()((set, get) => ({
   promptText: "",
   meta: null,
   loadError: null,
+  dirty: false,
+  saveError: null,
 
   selectedClipId: null,
   currentFrame: 0,
@@ -201,19 +289,27 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   setView: (view) => set({ view }),
   setProjects: (projects) => set({ projects }),
-  openProject: (slug) =>
+  openProject: (slug) => {
+    // A pending save can only belong to the previous context; persist it.
+    flushPendingSave();
     set({
       slug,
       view: "editor",
       edl: null,
       loadError: null,
+      dirty: false,
+      saveError: null,
       selectedClipId: null,
       currentFrame: 0,
       playing: false,
       notice: null,
       rightTab: "inspector",
-    }),
-  enterProject: (p) =>
+    });
+  },
+  enterProject: (p) => {
+    // Incoming data is fresh disk truth for p.slug: drop a same-project
+    // pending save, flush any other project's.
+    cancelPendingSave(p.slug ?? null);
     set({
       view: "editor",
       edl: p.edl,
@@ -222,6 +318,8 @@ export const useEditor = create<EditorState>()((set, get) => ({
       promptText: p.promptText ?? "",
       meta: p.meta ?? null,
       loadError: null,
+      dirty: false,
+      saveError: null,
       selectedClipId: null,
       currentFrame: 0,
       playing: false,
@@ -229,9 +327,16 @@ export const useEditor = create<EditorState>()((set, get) => ({
       rightTab: "inspector",
       edlPast: [],
       edlFuture: [],
-    }),
-  goHome: () => set({ view: "home", selectedClipId: null }),
-  setProject: (p) =>
+    });
+  },
+  goHome: () => {
+    flushPendingSave();
+    set({ view: "home", selectedClipId: null });
+  },
+  setProject: (p) => {
+    // External load (open/generate/auto-improve/agent-write reload): disk is
+    // the newer truth — a stale pending save must not overwrite it.
+    cancelPendingSave(p.slug ?? null);
     set({
       edl: p.edl,
       slug: p.slug ?? null,
@@ -239,14 +344,19 @@ export const useEditor = create<EditorState>()((set, get) => ({
       promptText: p.promptText ?? "",
       meta: p.meta ?? null,
       loadError: null,
+      dirty: false,
+      saveError: null,
       // External load (open/generate/auto-improve reload) resets edit history.
       edlPast: [],
       edlFuture: [],
-    }),
+    });
+  },
   setPromptText: (text) => set({ promptText: text }),
   saveNow: async () => {
+    clearSaveTimer();
+    pendingSave = null;
     const { slug, edl } = get();
-    if (slug && edl) await window.api?.saveEdl(slug, edl);
+    if (slug && edl) await persist(slug, edl);
   },
   setLoadError: (msg) => set({ loadError: msg }),
   edlPast: [],
@@ -259,7 +369,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       const next = structuredClone(s.edl);
       mutate(next);
       scheduleSave(s.slug, next);
-      return { edl: next, edlPast: [...s.edlPast.slice(-49), s.edl], edlFuture: [] };
+      return { edl: next, dirty: true, edlPast: [...s.edlPast.slice(-49), s.edl], edlFuture: [] };
     }),
   undoEdl: () =>
     set((s) => {
@@ -268,6 +378,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       scheduleSave(s.slug, prev);
       return {
         edl: prev,
+        dirty: true,
         edlPast: s.edlPast.slice(0, -1),
         edlFuture: [s.edl, ...s.edlFuture],
         selectedClipId: clipExists(prev, s.selectedClipId) ? s.selectedClipId : null,
@@ -280,6 +391,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       scheduleSave(s.slug, next);
       return {
         edl: next,
+        dirty: true,
         edlPast: [...s.edlPast, s.edl],
         edlFuture: s.edlFuture.slice(1),
         selectedClipId: clipExists(next, s.selectedClipId) ? s.selectedClipId : null,
