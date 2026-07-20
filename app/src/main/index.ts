@@ -642,18 +642,46 @@ function deleteProject(slug: string): { ok: boolean; error?: string } {
   }
 }
 
-function findFirstVideoSrc(slug: string): string | null {
-  // Prefer an asset declared in the EDL; fall back to scanning assets/.
+interface FirstFrameRef {
+  src: string;
+  /** Source-time offset of the frame the rendered video opens on. */
+  seekSec: number;
+}
+
+function findFirstVideoFrame(slug: string): FirstFrameRef | null {
+  // The thumbnail must match frame 0 of the rendered video: the earliest clip
+  // on the video tracks, at its `in` offset — not merely the first asset
+  // declared in the EDL (assets order doesn't follow timeline order).
   try {
     const parsed = parseEdl(readJson(safeProjectPath(slug, "edl.json")));
-    const asset = parsed.ok ? parsed.edl?.assets.find((a) => a.kind === "video") : undefined;
-    if (asset) return asset.src;
+    if (parsed.ok && parsed.edl) {
+      const edl = parsed.edl;
+      let first: { start: number; assetId: string; in: number } | null = null;
+      for (const track of edl.tracks) {
+        if (track.type !== "video") continue;
+        for (const clip of track.clips) {
+          // <= so start-time ties resolve to later tracks/clips, which render
+          // on top — i.e. the layer actually visible at frame 0.
+          if (!first || clip.start <= first.start)
+            first = { start: clip.start, assetId: clip.assetId, in: clip.in };
+        }
+      }
+      if (first) {
+        const opener = first;
+        const asset = edl.assets.find((a) => a.id === opener.assetId);
+        // Image clips are valid openers too; ffmpeg reads them fine at seek 0.
+        if (asset && (asset.kind === "video" || asset.kind === "image"))
+          return { src: asset.src, seekSec: asset.kind === "video" ? opener.in : 0 };
+      }
+      const asset = edl.assets.find((a) => a.kind === "video");
+      if (asset) return { src: asset.src, seekSec: 0 };
+    }
   } catch {
     // fall through
   }
   try {
     const file = readdirSync(safeProjectPath(slug, "assets")).find((f) => assetKindFor(f) === "video");
-    if (file) return `assets/${file}`;
+    if (file) return { src: `assets/${file}`, seekSec: 0 };
   } catch {
     // no assets dir
   }
@@ -704,30 +732,36 @@ function enqueueProxy(task: () => Promise<void>): void {
   else proxyQueue.push(run);
 }
 
-// Generate (and cache) a poster frame for the project's first video clip.
+// Versioned cache name: v2 switched the poster from a fixed 0.8s seek to the
+// timeline's true first frame. The new name invalidates every stale v1 thumb
+// (mtime comparison alone would keep serving them until the next edit).
+const THUMB_FILE = ".thumb-v2.jpg";
+
+// Generate (and cache) a poster frame matching the video's first frame.
 async function ensureThumbnail(slug: string): Promise<string | null> {
   try {
     assertSlug(slug);
   } catch {
     return null;
   }
-  const thumb = safeProjectPath(slug, ".thumb.jpg");
+  const thumb = safeProjectPath(slug, THUMB_FILE);
   const edlFile = safeProjectPath(slug, "edl.json");
   try {
     if (existsSync(thumb) && statSync(thumb).mtimeMs >= statSync(edlFile).mtimeMs) {
-      return `reel-asset://${slug}/.thumb.jpg`;
+      return `reel-asset://${slug}/${THUMB_FILE}`;
     }
   } catch {
     // regenerate
   }
-  const src = findFirstVideoSrc(slug);
-  if (!src || !ffmpegPath) return null;
-  const input = safeProjectPath(slug, src);
+  const frame = findFirstVideoFrame(slug);
+  if (!frame || !ffmpegPath) return null;
+  const input = safeProjectPath(slug, frame.src);
   const ok = await runFfmpeg(
-    ["-y", "-ss", "0.8", "-i", input, "-frames:v", "1", "-vf", "scale=360:-1", thumb],
+    ["-y", "-ss", frame.seekSec.toFixed(3), "-i", input, "-frames:v", "1", "-vf", "scale=360:-1", thumb],
     30_000,
   );
-  return ok ? `reel-asset://${slug}/.thumb.jpg` : null;
+  rmSync(safeProjectPath(slug, ".thumb.jpg"), { force: true });
+  return ok ? `reel-asset://${slug}/${THUMB_FILE}` : null;
 }
 
 export interface ImportedAsset {
