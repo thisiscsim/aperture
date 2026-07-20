@@ -1,20 +1,28 @@
-import { type DragEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets } from "../lib/edl-edit";
 import { buildTiles, relativeTime, SORT_LABELS, type HomeSort } from "../lib/home";
 import { SettingsButton } from "./SettingsModal";
-import { Button, Field, Icon, IconButton, Input, Modal, TextArea, useEscapeKey } from "./ui";
+import {
+  AlbumCover,
+  AlbumCoverCell,
+  Button,
+  Field,
+  Icon,
+  IconButton,
+  Input,
+  Menu,
+  MenuItem,
+  MenuSub,
+  Modal,
+  NewTile,
+  TextArea,
+  Tile,
+  TileThumb,
+} from "./ui";
 import type { AlbumSummary, ProjectSummary } from "../../../preload";
 
 const SORTS: HomeSort[] = ["newest", "oldest", "az", "za"];
-
-/** Enter/Space activation for role="button" tiles (they were mouse-only). */
-function activateOnKey(e: KeyboardEvent, fn: () => void): void {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    fn();
-  }
-}
 
 export function Home(): JSX.Element {
   const projects = useEditor((s) => s.projects);
@@ -165,10 +173,9 @@ export function Home(): JSX.Element {
               ),
             )}
             {!openAlbum && tab === "all" && (
-              <button className="tile tile-new" onClick={() => setCreating(true)}>
-                <Icon name="clapboard-wide" size={16} />
-                <span>New project</span>
-              </button>
+              <NewTile icon="clapboard-wide" onClick={() => setCreating(true)}>
+                New project
+              </NewTile>
             )}
           </div>
         )}
@@ -296,41 +303,23 @@ function RenameDialog({
 /* ---------------- toolbar sort ---------------- */
 
 function SortMenu({ sort, onChange }: { sort: HomeSort; onChange: (s: HomeSort) => void }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEscapeKey(open ? () => setOpen(false) : null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
   return (
-    <div className="sort-wrap" ref={ref}>
-      <button className="sort-btn" onClick={() => setOpen((v) => !v)}>
-        {SORT_LABELS[sort]}
-        <Icon name="chevron-top" size={16} style={{ transform: "rotate(180deg)" }} />
-      </button>
-      {open && (
-        <div className="menu-pop sort-pop" role="menu">
-          {SORTS.map((s) => (
-            <button
-              key={s}
-              className="menu-item"
-              onClick={() => {
-                onChange(s);
-                setOpen(false);
-              }}
-            >
-              <span className="menu-item-label">{SORT_LABELS[s]}</span>
-            </button>
-          ))}
-        </div>
+    <Menu
+      className="sort-wrap"
+      popClassName="sort-pop"
+      trigger={(toggle) => (
+        <button className="sort-btn" onClick={toggle}>
+          {SORT_LABELS[sort]}
+          <Icon name="chevron-top" size={16} style={{ transform: "rotate(180deg)" }} />
+        </button>
       )}
-    </div>
+    >
+      {SORTS.map((s) => (
+        <MenuItem key={s} onSelect={() => onChange(s)}>
+          {SORT_LABELS[s]}
+        </MenuItem>
+      ))}
+    </Menu>
   );
 }
 
@@ -374,197 +363,116 @@ function ProjectTile({
     .join(" ⋅ ");
 
   return (
-    <div
-      className="tile"
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => activateOnKey(e, onOpen)}
-    >
-      <div className="tile-thumb">
-        {thumb ? <img src={thumb} alt="" /> : <div className="tile-thumb-empty">No clips yet</div>}
-      </div>
-      <div className="tile-info">
-        <div className="tile-text">
-          <div className="tile-title">{project.title}</div>
-          <div className="tile-meta">{meta}</div>
-        </div>
-        <TileMenu
-          label={`Options for ${project.title}`}
-          items={(close) => (
-            <>
-              <MoveToAlbumItem
-                project={project}
-                albums={albums}
-                close={close}
-                onChanged={onChanged}
-                onNewAlbum={onNewAlbum}
-              />
-              <button
-                className="menu-item"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  close();
-                  setRenaming(true);
-                }}
-              >
-                <Icon name="input-form" size={16} />
-                <span className="menu-item-label">Rename project</span>
-              </button>
-              {inAlbum && (
-                <button
-                  className="menu-item"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    close();
-                    await window.api.setProjectAlbum(project.slug, null);
-                    onChanged();
-                  }}
-                >
-                  <Icon name="move-folder" size={16} />
-                  <span className="menu-item-label">Remove from album</span>
-                </button>
-              )}
-              <button
-                className="menu-item danger"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  close();
-                  if (
-                    !window.confirm(`Delete "${project.title}"? This permanently removes the project folder.`)
-                  )
-                    return;
-                  const res = await window.api.deleteProject(project.slug);
-                  if (res.ok) onChanged();
-                  else
-                    useEditor
-                      .getState()
-                      .pushNotice("error", `Couldn't delete project: ${res.error ?? "unknown error"}`);
-                }}
-              >
-                <Icon name="trash-can" size={16} />
-                <span className="menu-item-label">Delete project</span>
-              </button>
-            </>
+    <Tile
+      media={<TileThumb src={thumb} emptyLabel="No clips yet" />}
+      title={project.title}
+      meta={meta}
+      onOpen={onOpen}
+      actions={
+        <Menu
+          className="tile-menu"
+          popClassName="tile-menu-pop"
+          trigger={(toggle, open) => (
+            <IconButton
+              icon="ellipsis"
+              size={12}
+              className={`tile-menu-btn ${open ? "open" : ""}`}
+              label={`Options for ${project.title}`}
+              onClick={toggle}
+            />
           )}
-        />
-      </div>
-      {renaming && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <RenameDialog
-            title="Rename project"
-            label="Title"
-            initial={project.title}
-            onClose={() => setRenaming(false)}
-            onSave={async (title) => {
-              setRenaming(false);
-              if (title !== project.title) {
-                await window.api.saveMeta(project.slug, { title });
+        >
+          <MenuSub icon="move-folder" label="Move to album">
+            <MenuItem icon="plus-large" onSelect={onNewAlbum}>
+              New album
+            </MenuItem>
+            {albums.map((a) => (
+              <AlbumMenuItem
+                key={a.id}
+                album={a}
+                onPick={async () => {
+                  await window.api.setProjectAlbum(project.slug, a.id);
+                  onChanged();
+                }}
+              />
+            ))}
+          </MenuSub>
+          <MenuItem icon="input-form" onSelect={() => setRenaming(true)}>
+            Rename project
+          </MenuItem>
+          {inAlbum && (
+            <MenuItem
+              icon="move-folder"
+              onSelect={async () => {
+                await window.api.setProjectAlbum(project.slug, null);
                 onChanged();
-              }
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** "Move to album ›" row with the albums submenu (new album + existing albums). */
-function MoveToAlbumItem({
-  project,
-  albums,
-  close,
-  onChanged,
-  onNewAlbum,
-}: {
-  project: ProjectSummary;
-  albums: AlbumSummary[];
-  close: () => void;
-  onChanged: () => void;
-  onNewAlbum: () => void;
-}): JSX.Element {
-  const [subOpen, setSubOpen] = useState(false);
-  // Grace timer: closing on a delay tolerates diagonal cursor travel that
-  // briefly exits the row on the way to the submenu.
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const enter = () => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setSubOpen(true);
-  };
-  const leave = () => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = setTimeout(() => setSubOpen(false), 150);
-  };
-  useEffect(
-    () => () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    },
-    [],
-  );
-
-  const move = async (albumId: string) => {
-    close();
-    await window.api.setProjectAlbum(project.slug, albumId);
-    onChanged();
-  };
-
-  return (
-    <div className="menu-item-wrap" onMouseEnter={enter} onMouseLeave={leave}>
-      <button
-        className="menu-item"
-        onClick={(e) => {
-          e.stopPropagation();
-          setSubOpen((v) => !v);
-        }}
-      >
-        <Icon name="move-folder" size={16} />
-        <span className="menu-item-label">Move to album</span>
-        <Icon name="chevron-right-small" size={16} className="menu-item-chevron" />
-      </button>
-      {subOpen && (
-        <div className="menu-pop menu-sub" role="menu">
-          <button
-            className="menu-item"
-            onClick={(e) => {
-              e.stopPropagation();
-              close();
-              onNewAlbum();
+              }}
+            >
+              Remove from album
+            </MenuItem>
+          )}
+          <MenuItem
+            icon="trash-can"
+            danger
+            onSelect={async () => {
+              if (!window.confirm(`Delete "${project.title}"? This permanently removes the project folder.`))
+                return;
+              const res = await window.api.deleteProject(project.slug);
+              if (res.ok) onChanged();
+              else
+                useEditor
+                  .getState()
+                  .pushNotice("error", `Couldn't delete project: ${res.error ?? "unknown error"}`);
             }}
           >
-            <Icon name="plus-large" size={16} />
-            <span className="menu-item-label">New album</span>
-          </button>
-          {albums.map((a) => (
-            <AlbumSubmenuRow key={a.id} album={a} onPick={() => void move(a.id)} />
-          ))}
-        </div>
+            Delete project
+          </MenuItem>
+        </Menu>
+      }
+    >
+      {renaming && (
+        <RenameDialog
+          title="Rename project"
+          label="Title"
+          initial={project.title}
+          onClose={() => setRenaming(false)}
+          onSave={async (title) => {
+            setRenaming(false);
+            if (title !== project.title) {
+              await window.api.saveMeta(project.slug, { title });
+              onChanged();
+            }
+          }}
+        />
       )}
-    </div>
+    </Tile>
   );
 }
 
-function AlbumSubmenuRow({ album, onPick }: { album: AlbumSummary; onPick: () => void }): JSX.Element {
+/** Album row in the move-to submenu: leading cover thumbnail + name. */
+function AlbumMenuItem({
+  album,
+  onPick,
+}: {
+  album: AlbumSummary;
+  onPick: () => void | Promise<void>;
+}): JSX.Element {
   const projects = useEditor((s) => s.projects);
   const first = projects.find((p) => p.albumId === album.id);
   const thumb = useThumb(first?.slug ?? "");
   return (
-    <button
-      className="menu-item"
-      onClick={(e) => {
-        e.stopPropagation();
-        onPick();
-      }}
+    <MenuItem
+      leading={
+        first && thumb ? (
+          <img className="menu-item-thumb" src={thumb} alt="" />
+        ) : (
+          <span className="menu-item-thumb menu-item-thumb-empty" />
+        )
+      }
+      onSelect={onPick}
     >
-      {first && thumb ? (
-        <img className="menu-item-thumb" src={thumb} alt="" />
-      ) : (
-        <span className="menu-item-thumb menu-item-thumb-empty" />
-      )}
-      <span className="menu-item-label">{album.name}</span>
-    </button>
+      {album.name}
+    </MenuItem>
   );
 }
 
@@ -588,135 +496,76 @@ function AlbumTile({
     .join(" ⋅ ");
 
   return (
-    <div
-      className="tile"
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => activateOnKey(e, onOpen)}
-    >
-      <div className="album-cover">
-        {[0, 1, 2, 3].map((i) =>
-          members[i] ? (
-            <AlbumCoverCell key={members[i].slug} slug={members[i].slug} />
-          ) : (
-            <span key={`empty-${i}`} className="album-cover-cell album-cover-empty" />
-          ),
-        )}
-      </div>
-      <div className="tile-info">
-        <div className="tile-text">
-          <div className="tile-title">{album.name}</div>
-          <div className="tile-meta">{meta}</div>
-        </div>
-        <TileMenu
-          label={`Options for ${album.name}`}
-          items={(close) => (
-            <>
-              <button
-                className="menu-item"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  close();
-                  setRenaming(true);
-                }}
-              >
-                <Icon name="input-form" size={16} />
-                <span className="menu-item-label">Rename album</span>
-              </button>
-              <button
-                className="menu-item danger"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  close();
-                  if (
-                    !window.confirm(`Delete the album "${album.name}"? Its projects are kept and ungrouped.`)
-                  )
-                    return;
-                  const res = await window.api.deleteAlbum(album.id);
-                  if (res.ok) onChanged();
-                  else
-                    useEditor
-                      .getState()
-                      .pushNotice("error", `Couldn't delete album: ${res.error ?? "unknown error"}`);
-                }}
-              >
-                <Icon name="trash-can" size={16} />
-                <span className="menu-item-label">Delete album</span>
-              </button>
-            </>
-          )}
+    <Tile
+      media={
+        <AlbumCover
+          cells={members.slice(0, 4).map((m) => (
+            <MemberCoverCell key={m.slug} slug={m.slug} />
+          ))}
         />
-      </div>
-      {renaming && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <RenameDialog
-            title="Rename album"
-            label="Name"
-            initial={album.name}
-            onClose={() => setRenaming(false)}
-            onSave={async (name) => {
-              setRenaming(false);
-              if (name !== album.name) {
-                await window.api.renameAlbum(album.id, name);
-                onChanged();
-              }
+      }
+      title={album.name}
+      meta={meta}
+      onOpen={onOpen}
+      actions={
+        <Menu
+          className="tile-menu"
+          popClassName="tile-menu-pop"
+          trigger={(toggle, open) => (
+            <IconButton
+              icon="ellipsis"
+              size={12}
+              className={`tile-menu-btn ${open ? "open" : ""}`}
+              label={`Options for ${album.name}`}
+              onClick={toggle}
+            />
+          )}
+        >
+          <MenuItem icon="input-form" onSelect={() => setRenaming(true)}>
+            Rename album
+          </MenuItem>
+          <MenuItem
+            icon="trash-can"
+            danger
+            onSelect={async () => {
+              if (!window.confirm(`Delete the album "${album.name}"? Its projects are kept and ungrouped.`))
+                return;
+              const res = await window.api.deleteAlbum(album.id);
+              if (res.ok) onChanged();
+              else
+                useEditor
+                  .getState()
+                  .pushNotice("error", `Couldn't delete album: ${res.error ?? "unknown error"}`);
             }}
-          />
-        </div>
+          >
+            Delete album
+          </MenuItem>
+        </Menu>
+      }
+    >
+      {renaming && (
+        <RenameDialog
+          title="Rename album"
+          label="Name"
+          initial={album.name}
+          onClose={() => setRenaming(false)}
+          onSave={async (name) => {
+            setRenaming(false);
+            if (name !== album.name) {
+              await window.api.renameAlbum(album.id, name);
+              onChanged();
+            }
+          }}
+        />
       )}
-    </div>
+    </Tile>
   );
 }
 
-function AlbumCoverCell({ slug }: { slug: string }): JSX.Element {
+/** Kit cover cell fed by the project's fetched thumbnail. */
+function MemberCoverCell({ slug }: { slug: string }): JSX.Element {
   const thumb = useThumb(slug);
-  return (
-    <span className="album-cover-cell">
-      {thumb ? <img src={thumb} alt="" /> : <span className="album-cover-empty" />}
-    </span>
-  );
-}
-
-/** Ellipsis icon-button + anchored popover, closing on Escape/outside click. */
-function TileMenu({
-  label,
-  items,
-}: {
-  label: string;
-  items: (close: () => void) => React.ReactNode;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEscapeKey(open ? () => setOpen(false) : null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
-  return (
-    <div className="tile-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
-      <IconButton
-        icon="ellipsis"
-        size={12}
-        className={`tile-menu-btn ${open ? "open" : ""}`}
-        label={label}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-      />
-      {open && (
-        <div className="menu-pop tile-menu-pop" role="menu">
-          {items(() => setOpen(false))}
-        </div>
-      )}
-    </div>
-  );
+  return <AlbumCoverCell src={thumb} />;
 }
 
 interface StagedFile {

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { SettingsButton } from "./SettingsModal";
-import { Button, Icon, IconButton, useEscapeKey } from "./ui";
+import { Button, Icon, IconButton, Menu, MenuItem } from "./ui";
 import { VISUAL_STYLES, getVisualStyle } from "../styles/visual-styles";
 
 export function EditorHeader(): JSX.Element {
@@ -75,18 +74,6 @@ export function EditorHeader(): JSX.Element {
 
 function PresetsMenu(): JSX.Element {
   const updateEdl = useEditor((s) => s.updateEdl);
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEscapeKey(open ? () => setOpen(false) : null);
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
 
   const apply = (id: string) => {
     const preset = getVisualStyle(id);
@@ -97,24 +84,22 @@ function PresetsMenu(): JSX.Element {
       d.theme.palette = [...preset.palette];
       d.theme.captionStyle = preset.captionStyle;
     });
-    setOpen(false);
   };
 
   return (
-    <div className="presets-wrap" ref={wrapRef}>
-      <Button variant="ghost" size="sm" icon="magic-wand" onClick={() => setOpen((v) => !v)}>
-        Presets
-      </Button>
-      {open && (
-        <div className="presets-menu" role="menu">
-          {VISUAL_STYLES.map((s) => (
-            <button key={s.id} className="presets-item" onClick={() => apply(s.id)}>
-              <span className="name">{s.name}</span>
-              <span className="hint">{s.inspiration}</span>
-            </button>
-          ))}
-        </div>
+    <Menu
+      popClassName="presets-pop"
+      trigger={(toggle) => (
+        <Button variant="ghost" size="sm" icon="magic-wand" onClick={toggle}>
+          Presets
+        </Button>
       )}
-    </div>
+    >
+      {VISUAL_STYLES.map((s) => (
+        <MenuItem key={s.id} hint={s.inspiration} onSelect={() => apply(s.id)}>
+          {s.name}
+        </MenuItem>
+      ))}
+    </Menu>
   );
 }

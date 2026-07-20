@@ -1,4 +1,4 @@
-import { type DragEvent, type MouseEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, type MouseEvent, useRef, useState } from "react";
 import { durationFrames, durationSeconds, MAX_TIMELINE_SEC, type Track } from "@reel/edl";
 import { useEditor } from "../store";
 import { addAssets, addTrack, renameTrack } from "../lib/edl-edit";
@@ -24,7 +24,7 @@ import {
   round,
   type TextLike,
 } from "../lib/timeline-geometry";
-import { Icon, IconButton, useEscapeKey, type IconName } from "./ui";
+import { Button, Icon, IconButton, Menu, MenuItem, type IconName } from "./ui";
 
 export function Timeline(): JSX.Element {
   const edl = useEditor((s) => s.edl);
@@ -437,18 +437,6 @@ function TimeReadout({ fps, dur }: { fps: number; dur: number }): JSX.Element {
 /* ---------- layer button ---------- */
 
 function LayerButton({ onAdd }: { onAdd: (type: "video" | "text" | "audio") => void }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  useEscapeKey(open ? () => setOpen(false) : null);
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: globalThis.MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
-
   const items: { type: "video" | "text" | "audio"; icon: IconName; label: string }[] = [
     { type: "video", icon: "clapboard-wide", label: "Video layer" },
     { type: "text", icon: "text-motion", label: "Text layer" },
@@ -456,29 +444,20 @@ function LayerButton({ onAdd }: { onAdd: (type: "video" | "text" | "audio") => v
   ];
 
   return (
-    <div className="presets-wrap" ref={wrapRef}>
-      <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setOpen((v) => !v)}>
-        <Icon name="form-square" size={16} />
-        Layer
-      </button>
-      {open && (
-        <div className="presets-menu tl-layer-menu" role="menu">
-          {items.map((i) => (
-            <button
-              key={i.type}
-              className="presets-item row"
-              onClick={() => {
-                onAdd(i.type);
-                setOpen(false);
-              }}
-            >
-              <Icon name={i.icon} size={14} />
-              <span className="name">{i.label}</span>
-            </button>
-          ))}
-        </div>
+    <Menu
+      popClassName="tl-layer-menu"
+      trigger={(toggle) => (
+        <Button variant="ghost" size="sm" icon="form-square" onClick={toggle}>
+          Layer
+        </Button>
       )}
-    </div>
+    >
+      {items.map((i) => (
+        <MenuItem key={i.type} icon={i.icon} onSelect={() => onAdd(i.type)}>
+          {i.label}
+        </MenuItem>
+      ))}
+    </Menu>
   );
 }
 
