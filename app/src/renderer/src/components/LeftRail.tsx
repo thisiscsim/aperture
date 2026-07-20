@@ -541,7 +541,7 @@ function RecordButton({
       size="sm"
       icon="record"
       onClick={recording ? stop : start}
-      style={recording ? { width: "100%", color: "#c0392b" } : { width: "100%" }}
+      style={recording ? { width: "100%", color: "var(--foreground-danger)" } : { width: "100%" }}
       title="Record a voiceover — captions are transcribed automatically"
     >
       {recording ? "Stop recording" : "Record"}

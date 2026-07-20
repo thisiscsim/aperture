@@ -341,6 +341,20 @@ export function Timeline(): JSX.Element {
                       className={`tl-chip tl-chip-${track.type} ${selected ? "selected" : ""}`}
                       style={{ left: geom.start * PX_PER_SEC, width: Math.max(14, geom.dur * PX_PER_SEC) }}
                       onMouseDown={(e) => startDrag(e, clip, track, "move")}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${track.type} clip: ${labelOf(track.type, clip)}`}
+                      aria-pressed={selected}
+                      onKeyDown={(e) => {
+                        // Keyboard users can at least select/deselect a clip
+                        // (drag/trim stays pointer-driven).
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          select(clip.id);
+                        } else if (e.key === "Escape") {
+                          select(null);
+                        }
+                      }}
                       title={labelOf(track.type, clip)}
                     >
                       <div
