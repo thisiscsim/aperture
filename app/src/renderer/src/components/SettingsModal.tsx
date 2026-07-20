@@ -1,7 +1,8 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { Button, Icon, IconButton } from "./ui";
 import { useEscapeKey } from "./ui/useEscapeKey";
+import { Divider, modelLabel, SettingRow, SettingSelect, Toggle } from "./settings/controls";
 import type { AppSettings, PublicSettings, VoiceSummary } from "../../../preload";
 
 type SettingsTab = "general" | "export" | "agent" | "voices";
@@ -509,87 +510,6 @@ function VoicesTab({
         </>
       )}
     </>
-  );
-}
-
-function modelLabel(id: string): string {
-  return id
-    .replace(/^gpt-/, "GPT ")
-    .replace(/^claude-/, "Claude ")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .replace("Gpt", "GPT");
-}
-
-function SettingRow({
-  title,
-  sub,
-  subTitle,
-  onSubClick,
-  children,
-}: {
-  title: string;
-  sub: string;
-  subTitle?: string;
-  onSubClick?: () => void;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <div className="settings-row">
-      <div className="settings-row-text">
-        <div className="settings-row-title">{title}</div>
-        <div
-          className={`settings-row-sub ${onSubClick ? "clickable" : ""}`}
-          title={subTitle}
-          onClick={onSubClick}
-        >
-          {sub}
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Divider(): JSX.Element {
-  return <div className="settings-divider" />;
-}
-
-function SettingSelect({
-  value,
-  onChange,
-  options,
-  disabled,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  disabled?: boolean;
-}): JSX.Element {
-  return (
-    <span className={`settings-select-btn ${disabled ? "disabled" : ""}`}>
-      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <Icon name="chevron-top" size={16} style={{ transform: "rotate(180deg)" }} />
-    </span>
-  );
-}
-
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }): JSX.Element {
-  return (
-    <button
-      className={`switch ${on ? "on" : ""}`}
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-    >
-      <span className="switch-knob" />
-    </button>
   );
 }
 

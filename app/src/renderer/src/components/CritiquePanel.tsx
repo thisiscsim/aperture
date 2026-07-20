@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Benchmarks } from "@reel/edl";
 import { useEditor } from "../store";
 import { critiqueEdl, type Critique } from "../lib/critique";
+import { pathsFrom } from "../lib/files";
 import { Button, Icon } from "./ui";
 
 interface BenchItem {
@@ -75,17 +76,6 @@ export function CritiquePanel(): JSX.Element {
   }, [slug, autotuning]);
 
   if (!edl) return <div />;
-
-  const pathsFrom = (files: FileList): string[] =>
-    Array.from(files)
-      .map((f) => {
-        try {
-          return window.api.getPathForFile(f);
-        } catch {
-          return "";
-        }
-      })
-      .filter(Boolean);
 
   const addBenchmarks = async (files: FileList) => {
     if (!slug) return;

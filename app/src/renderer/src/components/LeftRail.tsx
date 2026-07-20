@@ -1,7 +1,8 @@
 import { type DragEvent, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets, addAudioClip } from "../lib/edl-edit";
-import { ASSET_MIME } from "./Timeline";
+import { pathsFrom } from "../lib/files";
+import { ASSET_MIME } from "../lib/timeline-geometry";
 import { Button, Icon, Modal } from "./ui";
 import type { ImportedAsset, VoiceSummary } from "../../../preload";
 
@@ -76,17 +77,6 @@ export function LeftRail(): JSX.Element {
       setGenerating(false);
     }
   };
-
-  const pathsFrom = (files: FileList | File[]): string[] =>
-    Array.from(files)
-      .map((f) => {
-        try {
-          return window.api.getPathForFile(f);
-        } catch {
-          return "";
-        }
-      })
-      .filter(Boolean);
 
   const importClips = async (files: FileList | File[]) => {
     if (!slug) return;
