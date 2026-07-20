@@ -389,11 +389,12 @@ const AnimatedText: FC<{ clip: TextClip; edl: Edl }> = ({ clip, edl }) => {
   );
 };
 
-// Word timings are sorted and non-overlapping, so binary-search the active
-// word instead of a linear scan — a caption track can hold up to 20k words and
+type CaptionWordT = NonNullable<CaptionTrack["words"]>[number];
+
+// Word timings are sorted and non-overlapping, so binary-search the active word
+// index instead of a linear scan — a caption track can hold up to 20k words and
 // this runs every frame. Exported for unit testing.
-export function activeWordAt(words: CaptionTrack["words"], t: number): { text: string } | undefined {
-  if (!words || words.length === 0) return undefined;
+export function activeWordIndexAt(words: CaptionWordT[], t: number): number {
   let lo = 0;
   let hi = words.length - 1;
   while (lo <= hi) {
@@ -401,20 +402,74 @@ export function activeWordAt(words: CaptionTrack["words"], t: number): { text: s
     const w = words[mid];
     if (t < w.start) hi = mid - 1;
     else if (t >= w.end) lo = mid + 1;
-    else return w;
+    else return mid;
   }
-  return undefined;
+  return -1;
+}
+
+/**
+ * The line (phrase) of caption words the active word belongs to, plus the
+ * active index within it. Lines break on a speech pause (gap > 0.6s) or a
+ * length cap so `karaoke`/`block` styles read as a phrase, not the whole track.
+ * Returns null when no word is active. Exported for unit testing.
+ */
+export function captionLineAt(
+  words: CaptionWordT[],
+  t: number,
+): { line: CaptionWordT[]; activeIndex: number } | null {
+  const active = activeWordIndexAt(words, t);
+  if (active < 0) return null;
+  const GAP = 0.6;
+  const MAX = 7;
+  let start = active;
+  while (start > 0 && active - start < MAX - 1 && words[start].start - words[start - 1].end <= GAP) {
+    start--;
+  }
+  let end = active;
+  while (end < words.length - 1 && end - start < MAX - 1 && words[end + 1].start - words[end].end <= GAP) {
+    end++;
+  }
+  return { line: words.slice(start, end + 1), activeIndex: active - start };
 }
 
 const CaptionView: FC<{ track: CaptionTrack; edl: Edl }> = ({ track, edl }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
-  const active = activeWordAt(track.words, t);
-  if (!active) return null;
-  const m = edl.theme.safeMargins;
+  const words = track.words ?? [];
+  const style = edl.theme.captionStyle;
+
   const color = edl.theme.palette[0] ?? "#FAF6EE";
   const accent = edl.theme.palette[2] ?? "#E8B04B";
+  const m = edl.theme.safeMargins;
+
+  // "word" shows only the currently-spoken word; "block"/"karaoke" show the
+  // whole current phrase, with karaoke highlighting the active word.
+  let content: JSX.Element | null = null;
+  if (style === "word") {
+    const idx = activeWordIndexAt(words, t);
+    if (idx < 0) return null;
+    content = <>{words[idx].text.toUpperCase()}</>;
+  } else {
+    const phrase = captionLineAt(words, t);
+    if (!phrase) return null;
+    content = (
+      <>
+        {phrase.line.map((w, i) => (
+          <span
+            key={i}
+            style={{
+              color: style === "karaoke" && i === phrase.activeIndex ? accent : color,
+              marginRight: i < phrase.line.length - 1 ? "0.3em" : 0,
+            }}
+          >
+            {w.text.toUpperCase()}
+          </span>
+        ))}
+      </>
+    );
+  }
+
   return (
     <div
       style={{
@@ -438,7 +493,7 @@ const CaptionView: FC<{ track: CaptionTrack; edl: Edl }> = ({ track, edl }) => {
           boxShadow: `0 0 0 3px ${accent}`,
         }}
       >
-        {active.text.toUpperCase()}
+        {content}
       </span>
     </div>
   );

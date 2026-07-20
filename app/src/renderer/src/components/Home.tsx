@@ -1,4 +1,4 @@
-import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type DragEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets } from "../lib/edl-edit";
 import { buildTiles, relativeTime, SORT_LABELS, type HomeSort } from "../lib/home";
@@ -7,6 +7,14 @@ import { Button, Field, Icon, IconButton, Input, Modal, TextArea, useEscapeKey }
 import type { AlbumSummary, ProjectSummary } from "../../../preload";
 
 const SORTS: HomeSort[] = ["newest", "oldest", "az", "za"];
+
+/** Enter/Space activation for role="button" tiles (they were mouse-only). */
+function activateOnKey(e: KeyboardEvent, fn: () => void): void {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    fn();
+  }
+}
 
 export function Home(): JSX.Element {
   const projects = useEditor((s) => s.projects);
@@ -366,7 +374,13 @@ function ProjectTile({
     .join(" ⋅ ");
 
   return (
-    <div className="tile" role="button" tabIndex={0} onClick={onOpen}>
+    <div
+      className="tile"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => activateOnKey(e, onOpen)}
+    >
       <div className="tile-thumb">
         {thumb ? <img src={thumb} alt="" /> : <div className="tile-thumb-empty">No clips yet</div>}
       </div>
@@ -574,7 +588,13 @@ function AlbumTile({
     .join(" ⋅ ");
 
   return (
-    <div className="tile" role="button" tabIndex={0} onClick={onOpen}>
+    <div
+      className="tile"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => activateOnKey(e, onOpen)}
+    >
       <div className="album-cover">
         {[0, 1, 2, 3].map((i) =>
           members[i] ? (

@@ -1081,6 +1081,21 @@
   overflow: hidden;
 }
 
+/* Per-type chip tint (the markup emits tl-chip-video/-text/-audio; these were
+   defined as --action-* design tokens but never wired to a rule). */
+.tl-chip-video {
+  background: var(--action-video-bg);
+  border-color: var(--action-video-border);
+}
+.tl-chip-text {
+  background: var(--action-text-bg);
+  border-color: var(--action-text-border);
+}
+.tl-chip-audio {
+  background: var(--action-audio-bg);
+  border-color: var(--action-audio-border);
+}
+
 .tl-chip .icon {
   flex: none;
   color: var(--foreground-secondary);
