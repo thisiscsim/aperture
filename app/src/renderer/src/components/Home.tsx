@@ -1,20 +1,28 @@
-import { type DragEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "../store";
 import { addAssets } from "../lib/edl-edit";
 import { buildTiles, relativeTime, SORT_LABELS, type HomeSort } from "../lib/home";
 import { SettingsButton } from "./SettingsModal";
-import { Button, Field, Icon, IconButton, Input, Menu, MenuItem, MenuSub, Modal, TextArea } from "./ui";
+import {
+  AlbumCover,
+  AlbumCoverCell,
+  Button,
+  Field,
+  Icon,
+  IconButton,
+  Input,
+  Menu,
+  MenuItem,
+  MenuSub,
+  Modal,
+  NewTile,
+  TextArea,
+  Tile,
+  TileThumb,
+} from "./ui";
 import type { AlbumSummary, ProjectSummary } from "../../../preload";
 
 const SORTS: HomeSort[] = ["newest", "oldest", "az", "za"];
-
-/** Enter/Space activation for role="button" tiles (they were mouse-only). */
-function activateOnKey(e: KeyboardEvent, fn: () => void): void {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    fn();
-  }
-}
 
 export function Home(): JSX.Element {
   const projects = useEditor((s) => s.projects);
@@ -165,10 +173,9 @@ export function Home(): JSX.Element {
               ),
             )}
             {!openAlbum && tab === "all" && (
-              <button className="tile tile-new" onClick={() => setCreating(true)}>
-                <Icon name="clapboard-wide" size={16} />
-                <span>New project</span>
-              </button>
+              <NewTile icon="clapboard-wide" onClick={() => setCreating(true)}>
+                New project
+              </NewTile>
             )}
           </div>
         )}
@@ -356,21 +363,12 @@ function ProjectTile({
     .join(" ⋅ ");
 
   return (
-    <div
-      className="tile"
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => activateOnKey(e, onOpen)}
-    >
-      <div className="tile-thumb">
-        {thumb ? <img src={thumb} alt="" /> : <div className="tile-thumb-empty">No clips yet</div>}
-      </div>
-      <div className="tile-info">
-        <div className="tile-text">
-          <div className="tile-title">{project.title}</div>
-          <div className="tile-meta">{meta}</div>
-        </div>
+    <Tile
+      media={<TileThumb src={thumb} emptyLabel="No clips yet" />}
+      title={project.title}
+      meta={meta}
+      onOpen={onOpen}
+      actions={
         <Menu
           className="tile-menu"
           popClassName="tile-menu-pop"
@@ -430,25 +428,24 @@ function ProjectTile({
             Delete project
           </MenuItem>
         </Menu>
-      </div>
+      }
+    >
       {renaming && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <RenameDialog
-            title="Rename project"
-            label="Title"
-            initial={project.title}
-            onClose={() => setRenaming(false)}
-            onSave={async (title) => {
-              setRenaming(false);
-              if (title !== project.title) {
-                await window.api.saveMeta(project.slug, { title });
-                onChanged();
-              }
-            }}
-          />
-        </div>
+        <RenameDialog
+          title="Rename project"
+          label="Title"
+          initial={project.title}
+          onClose={() => setRenaming(false)}
+          onSave={async (title) => {
+            setRenaming(false);
+            if (title !== project.title) {
+              await window.api.saveMeta(project.slug, { title });
+              onChanged();
+            }
+          }}
+        />
       )}
-    </div>
+    </Tile>
   );
 }
 
@@ -499,27 +496,18 @@ function AlbumTile({
     .join(" ⋅ ");
 
   return (
-    <div
-      className="tile"
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => activateOnKey(e, onOpen)}
-    >
-      <div className="album-cover">
-        {[0, 1, 2, 3].map((i) =>
-          members[i] ? (
-            <AlbumCoverCell key={members[i].slug} slug={members[i].slug} />
-          ) : (
-            <span key={`empty-${i}`} className="album-cover-cell album-cover-empty" />
-          ),
-        )}
-      </div>
-      <div className="tile-info">
-        <div className="tile-text">
-          <div className="tile-title">{album.name}</div>
-          <div className="tile-meta">{meta}</div>
-        </div>
+    <Tile
+      media={
+        <AlbumCover
+          cells={members.slice(0, 4).map((m) => (
+            <MemberCoverCell key={m.slug} slug={m.slug} />
+          ))}
+        />
+      }
+      title={album.name}
+      meta={meta}
+      onOpen={onOpen}
+      actions={
         <Menu
           className="tile-menu"
           popClassName="tile-menu-pop"
@@ -553,35 +541,31 @@ function AlbumTile({
             Delete album
           </MenuItem>
         </Menu>
-      </div>
+      }
+    >
       {renaming && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <RenameDialog
-            title="Rename album"
-            label="Name"
-            initial={album.name}
-            onClose={() => setRenaming(false)}
-            onSave={async (name) => {
-              setRenaming(false);
-              if (name !== album.name) {
-                await window.api.renameAlbum(album.id, name);
-                onChanged();
-              }
-            }}
-          />
-        </div>
+        <RenameDialog
+          title="Rename album"
+          label="Name"
+          initial={album.name}
+          onClose={() => setRenaming(false)}
+          onSave={async (name) => {
+            setRenaming(false);
+            if (name !== album.name) {
+              await window.api.renameAlbum(album.id, name);
+              onChanged();
+            }
+          }}
+        />
       )}
-    </div>
+    </Tile>
   );
 }
 
-function AlbumCoverCell({ slug }: { slug: string }): JSX.Element {
+/** Kit cover cell fed by the project's fetched thumbnail. */
+function MemberCoverCell({ slug }: { slug: string }): JSX.Element {
   const thumb = useThumb(slug);
-  return (
-    <span className="album-cover-cell">
-      {thumb ? <img src={thumb} alt="" /> : <span className="album-cover-empty" />}
-    </span>
-  );
+  return <AlbumCoverCell src={thumb} />;
 }
 
 interface StagedFile {
