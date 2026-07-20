@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StyleProfile } from "@reel/edl";
 import { useEditor } from "../store";
+import { pathsFrom } from "../lib/files";
 import { Button, Icon } from "./ui";
 import type { StyleSummary } from "../../../preload";
 
@@ -66,15 +67,7 @@ export function StylePanel(): JSX.Element {
   const addToLibrary = async (files: FileList) => {
     if (!slug) return;
     // Files dropped here become project-level references (override).
-    const paths = Array.from(files)
-      .map((f) => {
-        try {
-          return window.api.getPathForFile(f);
-        } catch {
-          return "";
-        }
-      })
-      .filter(Boolean);
+    const paths = pathsFrom(files);
     if (paths.length === 0) return;
     setBusy("Importing references…");
     try {
