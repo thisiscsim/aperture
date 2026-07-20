@@ -12,14 +12,48 @@ export default meta;
 
 // Keep in sync with the ICONS map in Icon.tsx.
 const ICON_NAMES = [
-  "aperture-logomark", "arrow-left", "arrow-out-of-box", "arrow-rotate", "chevron-right-small",
-  "chevron-top", "circle-questionmark", "clapboard-sparkle", "clapboard-wide", "ellipsis",
-  "finder", "folder", "folder-alt", "form-rectangle", "form-square", "github",
-  "horizontal-align-bottom", "horizontal-align-center", "horizontal-align-top", "input-form",
-  "layout-align-left", "linear", "magic-wand", "move-folder", "multi-media", "play-circle",
-  "plus-large", "prompt", "record", "settings-gear", "share-os", "skip", "square-arrow-down",
-  "step-back", "step-forwards", "text-motion", "trash-can", "vertical-align-center",
-  "vertical-align-left", "vertical-align-right", "voice-high", "volume-full",
+  "aperture-logomark",
+  "arrow-left",
+  "arrow-out-of-box",
+  "arrow-rotate",
+  "chevron-right-small",
+  "chevron-top",
+  "circle-questionmark",
+  "clapboard-sparkle",
+  "clapboard-wide",
+  "ellipsis",
+  "finder",
+  "folder",
+  "folder-alt",
+  "form-rectangle",
+  "form-square",
+  "github",
+  "horizontal-align-bottom",
+  "horizontal-align-center",
+  "horizontal-align-top",
+  "input-form",
+  "layout-align-left",
+  "linear",
+  "magic-wand",
+  "move-folder",
+  "multi-media",
+  "play-circle",
+  "plus-large",
+  "prompt",
+  "record",
+  "settings-gear",
+  "share-os",
+  "skip",
+  "square-arrow-down",
+  "step-back",
+  "step-forwards",
+  "text-motion",
+  "trash-can",
+  "vertical-align-center",
+  "vertical-align-left",
+  "vertical-align-right",
+  "voice-high",
+  "volume-full",
 ] as const;
 
 export const IconGallery: StoryObj = {
@@ -28,7 +62,13 @@ export const IconGallery: StoryObj = {
       {ICON_NAMES.map((name) => (
         <div
           key={name}
-          style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--foreground-secondary)" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 11,
+            color: "var(--foreground-secondary)",
+          }}
         >
           <Icon name={name} size={16} />
           <span>{name}</span>
