@@ -1,4 +1,4 @@
-import { type DragEvent, type MouseEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, type MouseEvent, useRef, useState } from "react";
 import { durationFrames, durationSeconds, MAX_TIMELINE_SEC, type Track } from "@reel/edl";
 import { useEditor } from "../store";
 import { addAssets, addTrack, renameTrack } from "../lib/edl-edit";
