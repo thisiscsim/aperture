@@ -13,6 +13,8 @@
     "dev": "npm --workspace app run dev",
     "prebuild": "npm run build:edl",
     "build": "npm --workspace app run build",
+    "storybook": "npm --workspace app run storybook",
+    "build-storybook": "npm --workspace app run build-storybook",
     "pretypecheck": "npm run build:edl",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "pretest": "npm run build:edl",
