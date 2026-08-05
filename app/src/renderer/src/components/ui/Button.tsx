@@ -2,7 +2,8 @@ import type { ButtonHTMLAttributes } from "react";
 import { Icon, type IconName } from "./Icon";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost";
+  /** `ghost` is the legacy name for `tertiary` (same styling). */
+  variant?: "primary" | "secondary" | "tertiary" | "danger" | "ghost";
   size?: "sm" | "md";
   icon?: IconName;
 }

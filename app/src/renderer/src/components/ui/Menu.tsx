@@ -68,6 +68,20 @@ export function Menu({
   );
 }
 
+/** Muted section label row (the popover spec's "header" menu item). */
+export function MenuHeader({ children }: { children: ReactNode }): JSX.Element {
+  return <div className="menu-header">{children}</div>;
+}
+
+/**
+ * Bordered group inside a popover (the spec's `sectionContainer`). When a
+ * menu's children are sections, the pop's own padding collapses (via :has)
+ * so each section carries its own 4px inset and hairline divider.
+ */
+export function MenuSection({ children }: { children: ReactNode }): JSX.Element {
+  return <div className="menu-section">{children}</div>;
+}
+
 export function MenuItem({
   icon,
   leading,

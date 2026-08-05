@@ -11,6 +11,7 @@ import clapboardWide from "../../assets/icons/clapboard-wide.svg?raw";
 import ellipsis from "../../assets/icons/ellipsis.svg?raw";
 import finder from "../../assets/icons/finder.svg?raw";
 import folder from "../../assets/icons/folder.svg?raw";
+import folderAddLeft from "../../assets/icons/folder-add-left.svg?raw";
 import folderAlt from "../../assets/icons/folder-alt.svg?raw";
 import formRectangle from "../../assets/icons/form-rectangle.svg?raw";
 import formSquare from "../../assets/icons/form-square.svg?raw";
@@ -59,6 +60,7 @@ const ICONS = {
   ellipsis,
   finder,
   folder,
+  "folder-add-left": folderAddLeft,
   "folder-alt": folderAlt,
   "form-rectangle": formRectangle,
   "form-square": formSquare,
