@@ -17,8 +17,8 @@ import { useEscapeKey } from "./useEscapeKey";
  * first item aligns with its origin row (gap-bridged, grace-timed).
  *
  * Positioning of the popover is delegated to `popClassName` (e.g.
- * `tile-menu-pop`, `sort-pop`, `presets-pop`, `tl-layer-menu`) so call sites
- * control anchor/direction while look and behavior stay canonical.
+ * `tile-menu-pop`, `sort-pop`, `composer-pop`, `ftb-pop`, `tl-layer-menu`) so
+ * call sites control anchor/direction while look and behavior stay canonical.
  */
 
 interface MenuContextValue {

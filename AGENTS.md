@@ -4,14 +4,14 @@ AI-assisted short-form video studio. You (the agent) turn a prompt + raw clips i
 
 ## How it works
 
-The full creator journey (front to back):
+The full creator journey (front to back, v1.5):
 
-1. The user opens the editor on a project **homepage** and creates a project under `projects/<slug>/` (scaffolds `meta.json`, `prompt.md`, an empty `edl.json`, and `assets/ references/ benchmarks/ transcripts/ renders/`).
-2. In the editor they provide input: upload clips into `assets/`, write intent in `prompt.md`, attach music, and add or record a voiceover (which auto-transcribes to word-level captions).
-3. Optionally they teach the agent their look: upload their own past videos into `references/` and run aesthetic learning, which writes a reusable `style.json` profile (+ `aesthetic.md`).
-4. You generate the first cut by writing `projects/<slug>/edl.json` — the single source of truth — conditioned on `prompt.md` and `style.json`.
-5. The Electron editor live-previews `edl.json` and live-reloads it when you (or the user) change it. The user refines on the timeline; their edits autosave back to `edl.json`.
-6. You critique the cut into `critique.json`, calibrated against the creator's own high-performers in `benchmarks.json` when present. The `auto-tune` loop iterates generate -> critique -> fix, logging `results.tsv`.
+1. **First run (zero state)**: with an empty library the homepage becomes a guided surface — drop clips, describe the video in the agent composer (mode, reasoning effort, aspect, duration, references with literal/inspired handling), and submit. That scaffolds `projects/<slug>/` (`meta.json`, `prompt.md`, `edl.json`, `assets/ references/ benchmarks/ transcripts/ renders/`), imports everything, and starts the first generation. With existing projects, "New project" is a name-only dialog and the same composer lives in the editor.
+2. **The editor's Create tab** is a per-project conversation with the agent, persisted to `session.json`. Each submit routes to a generation run (first cut, or adjust-with-notes when a cut exists) or a critique run; script progress streams in as status items. References and Assets tabs hold the project's media; uploads into References auto-attach as `@mentions` in the composer.
+3. Optionally the creator teaches you their look: reference videos in `references/` feed aesthetic learning (References tab → `style.json` + `aesthetic.md`).
+4. You generate the cut by writing `projects/<slug>/edl.json` — the single source of truth — conditioned on `prompt.md` and `style.json`.
+5. The Electron editor live-previews `edl.json` and live-reloads it when you (or the user) change it. The user refines on the timeline and the floating toolbar (theme + per-clip tools); their edits autosave back to `edl.json`.
+6. Critique runs from the composer's Critique mode (benchmark videos upload or arrive by pasted link) into `critique.json`, calibrated against `benchmarks.json` when present; the in-chat card's "Apply changes" runs the auto-tune loop (generate -> critique -> fix, logging `results.tsv`).
 
 ## The contract: edl.json (+ sidecar files)
 
@@ -24,6 +24,7 @@ Per-project sidecar files (each has its own schema + `parse*` helper in `package
 - `meta.json` (`MetaSchema`) — title, platform, status, `styleProfileId`.
 - `style.json` (`StyleProfileSchema`) — learned/selected aesthetic: palette, font, captions, pacing, hook, energy, do/avoid.
 - `benchmarks.json` (`BenchmarksSchema`) — feature distribution of the creator's high-performers, for benchmark-relative critique.
+- `session.json` (`SessionSchema`) — the Create tab's conversation log. App-owned: the editor writes it; don't author it as an external agent (your contract stays `edl.json` + the sidecars above).
 
 ## Skills
 

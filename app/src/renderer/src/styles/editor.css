@@ -73,13 +73,6 @@
   flex: none;
 }
 
-/* ---------- Presets dropdown (positioning only; look lives in ui Menu) ---------- */
-.presets-pop {
-  top: 32px;
-  right: 0;
-  min-width: 240px;
-}
-
 /* ---------- Main row ---------- */
 .editor-main {
   flex: 1;
@@ -132,47 +125,7 @@
   opacity: 1;
 }
 
-/* ---------- Left rail ---------- */
-.left-rail {
-  width: var(--left-rail-w, 300px);
-  flex: none;
-  background: var(--background-primary);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: var(--space-8);
-}
-
-.rail-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding-bottom: var(--space-16);
-  border-bottom: 0.5px solid var(--border-primary);
-}
-
-.rail-section:last-child {
-  border-bottom: none;
-}
-
-.rail-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  padding: 16px 16px 8px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  color: var(--foreground-secondary);
-}
-
-.rail-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  padding: 0 16px;
-}
-
+/* ---------- Narration textarea (Voiceover dialog) ---------- */
 .rail-textarea {
   width: 100%;
   height: 80px;
@@ -195,85 +148,6 @@
 
 .rail-textarea:focus {
   box-shadow: 0 0 0 1.5px var(--border-secondary);
-}
-
-.upload-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
-  height: 140px;
-  width: 100%;
-  padding: 24px 16px;
-  background: var(--background-page);
-  border: 0.5px dashed var(--border-secondary);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
-}
-
-.upload-area:hover,
-.upload-area.drag {
-  border-color: var(--foreground-muted);
-  background: var(--background-secondary);
-}
-
-.upload-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  color: var(--foreground-primary);
-}
-
-.upload-sub {
-  font-size: 10px;
-  line-height: 14px;
-  color: var(--foreground-muted);
-  text-align: center;
-}
-
-.upload-formats {
-  font-size: 10px;
-  line-height: 12px;
-  color: var(--foreground-disabled);
-  text-align: center;
-}
-
-.url-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.url-input {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  padding: 6px 8px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--background-page);
-  font-family: var(--font-ui);
-  font-size: 12px;
-  color: var(--foreground-primary);
-  outline: none;
-  transition: box-shadow 120ms ease;
-}
-
-.url-input::placeholder {
-  color: var(--foreground-muted);
-}
-
-.url-input:focus {
-  box-shadow: 0 0 0 1.5px var(--border-secondary);
-}
-
-.url-input:disabled {
-  opacity: 0.6;
 }
 
 .clip-list {
@@ -1000,18 +874,6 @@
   gap: var(--space-6);
 }
 
-.insp-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6);
-}
-
-.insp-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 6px;
-}
-
 .seg-group {
   display: inline-flex;
   gap: 1px;
@@ -1117,13 +979,6 @@
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
-}
-
-.subflow-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding: 12px 16px 4px;
 }
 
 .insp-slider {
