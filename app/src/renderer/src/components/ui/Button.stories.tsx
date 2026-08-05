@@ -4,9 +4,9 @@ import { Button } from "./Button";
 const meta = {
   title: "UI Kit/Button",
   component: Button,
-  args: { children: "New project", variant: "primary", size: "sm" },
+  args: { children: "New project", variant: "primary", size: "md" },
   argTypes: {
-    variant: { control: "radio", options: ["primary", "secondary", "ghost"] },
+    variant: { control: "radio", options: ["primary", "secondary", "tertiary", "danger"] },
     size: { control: "radio", options: ["sm", "md"] },
     icon: { control: false },
   },
@@ -19,7 +19,9 @@ export const Primary: Story = {};
 
 export const Secondary: Story = { args: { variant: "secondary", children: "Back" } };
 
-export const Ghost: Story = { args: { variant: "ghost", children: "Presets" } };
+export const Tertiary: Story = { args: { variant: "tertiary", children: "Settings" } };
+
+export const Danger: Story = { args: { variant: "danger", children: "Delete" } };
 
 export const WithIcon: Story = { args: { icon: "clapboard-wide", children: "New project" } };
 
@@ -27,19 +29,26 @@ export const Disabled: Story = { args: { disabled: true } };
 
 export const AllVariants: Story = {
   render: () => (
-    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-      <Button variant="primary" size="sm" icon="clapboard-wide">
-        Primary
-      </Button>
-      <Button variant="secondary" size="sm">
-        Secondary
-      </Button>
-      <Button variant="ghost" size="sm" icon="magic-wand">
-        Ghost
-      </Button>
-      <Button variant="primary" size="sm" disabled>
-        Disabled
-      </Button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {(["md", "sm"] as const).map((size) => (
+        <div key={size} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <Button variant="primary" size={size}>
+            Button
+          </Button>
+          <Button variant="secondary" size={size}>
+            Button
+          </Button>
+          <Button variant="tertiary" size={size}>
+            Button
+          </Button>
+          <Button variant="danger" size={size}>
+            Button
+          </Button>
+          <Button variant="primary" size={size} disabled>
+            Button
+          </Button>
+        </div>
+      ))}
     </div>
   ),
 };

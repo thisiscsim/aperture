@@ -34,21 +34,23 @@
 
 .ui-btn--sm {
   height: 24px;
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--ap-radius-md);
+  font-size: var(--ap-font-size-xs);
   line-height: 16px;
 }
 
 .ui-btn--md {
   height: 28px;
-  padding: 6px 10px;
-  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: var(--ap-radius-lg);
+  font-size: var(--ap-font-size-sm);
   line-height: 20px;
 }
 
 .ui-btn--primary {
-  background: var(--background-primary-inverted);
-  color: var(--foreground-primary-inverted);
+  background: var(--ap-color-background-primary-inverted);
+  color: var(--ap-color-foreground-primary-inverted);
 }
 
 .ui-btn--primary:hover:not(:disabled) {
@@ -56,22 +58,33 @@
 }
 
 .ui-btn--secondary {
-  background: var(--background-secondary);
-  color: var(--foreground-primary);
+  background: var(--ap-color-background-secondary);
+  color: var(--ap-color-foreground-primary);
 }
 
 .ui-btn--secondary:hover:not(:disabled) {
-  background: var(--background-subtle-pressed);
+  background: var(--ap-color-background-tertiary);
 }
 
+/* `ghost` is the legacy name for `tertiary`. */
+.ui-btn--tertiary,
 .ui-btn--ghost {
   background: transparent;
-  color: var(--foreground-secondary);
+  color: var(--ap-color-foreground-primary);
 }
 
+.ui-btn--tertiary:hover:not(:disabled),
 .ui-btn--ghost:hover:not(:disabled) {
-  background: var(--background-secondary);
-  color: var(--foreground-primary);
+  background: var(--ap-color-background-secondary);
+}
+
+.ui-btn--danger {
+  background: var(--ap-color-foreground-danger);
+  color: #ffffff;
+}
+
+.ui-btn--danger:hover:not(:disabled) {
+  opacity: 0.88;
 }
 
 /* ---------- IconButton ---------- */
@@ -124,42 +137,44 @@
   color: #ffffff;
 }
 
-/* ---------- Modal ---------- */
+/* ---------- Modal (Figma Dialog spec: blurred scrim, borderless sections) ---------- */
 .ui-modal-overlay {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.3);
+  background: color-mix(in srgb, var(--ap-color-background-primary) 60%, transparent);
+  backdrop-filter: blur(12px);
   z-index: 60;
 }
 
 .ui-modal {
   display: flex;
   flex-direction: column;
-  width: 420px;
+  width: 400px;
   max-width: calc(100vw - 48px);
   max-height: calc(100vh - 96px);
-  background: var(--background-primary);
-  border-radius: var(--radius-lg);
+  background: var(--ap-color-background-primary);
+  border-radius: var(--ap-radius-xl);
   box-shadow: var(--shadow-modal);
   overflow: hidden;
 }
 
 .ui-modal-header {
   padding: 12px 16px;
-  border-bottom: 0.5px solid var(--border-primary);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
-  color: var(--foreground-primary);
+  font-size: var(--ap-font-size-md);
+  font-weight: var(--ap-font-weight-medium);
+  line-height: 24px;
+  color: var(--ap-color-foreground-primary);
 }
 
 .ui-modal-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
-  padding: 16px 20px 28px;
+  padding: 4px 16px 28px;
+  font-size: var(--ap-font-size-sm);
+  line-height: 20px;
   overflow-y: auto;
 }
 
@@ -169,7 +184,6 @@
   justify-content: flex-end;
   gap: var(--space-8);
   padding: 12px 16px;
-  border-top: 0.5px solid var(--border-primary);
 }
 
 /* ---------- Field / inputs ---------- */
@@ -190,14 +204,14 @@
 .ui-textarea,
 .ui-select {
   width: 100%;
-  background: var(--background-secondary);
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 6px 8px;
+  background: var(--ap-color-background-primary);
+  border: 0.5px solid var(--ap-color-border-secondary);
+  border-radius: var(--ap-radius-lg);
+  padding: 4px 10px;
   font-family: var(--font-ui);
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--foreground-primary);
+  font-size: var(--ap-font-size-sm);
+  line-height: 20px;
+  color: var(--ap-color-foreground-primary);
   outline: none;
   transition: box-shadow 120ms ease, background 120ms ease;
 }
@@ -208,13 +222,13 @@
 
 .ui-input::placeholder,
 .ui-textarea::placeholder {
-  color: var(--foreground-muted);
+  color: var(--ap-color-foreground-secondary);
 }
 
 .ui-input:focus,
 .ui-textarea:focus,
 .ui-select:focus {
-  box-shadow: 0 0 0 1.5px var(--border-secondary);
+  box-shadow: 0 0 0 1.5px var(--ap-color-border-secondary);
 }
 
 .ui-textarea {
@@ -255,12 +269,41 @@
   z-index: 30;
   min-width: 240px;
   padding: 4px;
-  background: var(--background-primary);
-  border: 0.5px solid var(--border-primary);
-  border-radius: var(--radius-lg);
+  background: var(--ap-color-background-primary);
+  border: 0.5px solid var(--ap-color-border-primary);
+  border-radius: var(--ap-radius-xl);
   box-shadow: var(--shadow-popover);
   display: flex;
   flex-direction: column;
+}
+
+/* Sectioned popovers carry their own 4px insets + hairline dividers. */
+.menu-pop:has(> .menu-section) {
+  padding: 0;
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.menu-section + .menu-section {
+  border-top: 0.5px solid var(--ap-color-border-secondary);
+}
+
+.menu-header {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: var(--ap-font-weight-medium);
+  letter-spacing: -0.18px;
+  color: var(--foreground-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .menu-item-wrap {
@@ -273,15 +316,15 @@
   height: 32px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--ap-space-md);
   padding: 6px 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--ap-radius-lg);
   background: none;
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--ap-font-size-sm);
   line-height: 20px;
-  color: var(--foreground-primary);
+  color: var(--ap-color-foreground-primary);
   cursor: pointer;
   text-align: left;
 }
@@ -358,13 +401,13 @@
 }
 
 .menu-item-name {
-  font-size: 12px;
+  font-size: var(--ap-font-size-sm);
   line-height: 16px;
-  color: var(--foreground-primary);
+  color: var(--ap-color-foreground-primary);
 }
 
 .menu-item-hint {
-  font-size: 10px;
+  font-size: var(--ap-font-size-xs);
   line-height: 14px;
   color: var(--foreground-muted);
 }
@@ -380,9 +423,9 @@
 
 .tile-thumb {
   aspect-ratio: 1 / 1;
-  border-radius: 8px;
+  border-radius: var(--ap-radius-xl);
   overflow: hidden;
-  background: var(--background-secondary);
+  background: var(--ap-color-background-secondary);
 }
 
 /* Hover lift lives on the media only — titles/metadata stay put.
@@ -428,18 +471,18 @@
 }
 
 .tile-title {
-  font-size: 14px;
+  font-size: var(--ap-font-size-sm);
   line-height: 20px;
-  color: var(--foreground-primary);
+  color: var(--ap-color-foreground-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .tile-meta {
-  font-size: 12px;
+  font-size: var(--ap-font-size-xs);
   line-height: 16px;
-  color: var(--foreground-secondary);
+  color: var(--ap-color-foreground-secondary);
   font-variant-numeric: lining-nums proportional-nums;
 }
 
@@ -454,14 +497,14 @@
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding: 8px;
-  border: 0.5px solid var(--border-primary);
-  border-radius: 8px;
-  background: var(--background-primary);
+  border: 1px solid var(--ap-color-border-primary);
+  border-radius: var(--ap-radius-xl);
+  background: var(--ap-color-background-primary);
   overflow: hidden;
 }
 
 .album-cover-cell {
-  border-radius: 6px;
+  border-radius: var(--ap-radius-lg);
   overflow: hidden;
   min-height: 0;
   min-width: 0;
@@ -479,8 +522,8 @@
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 6px;
-  background: var(--background-secondary);
+  border-radius: var(--ap-radius-lg);
+  background: var(--ap-color-background-secondary);
 }
 
 /* ---------- New project tile ---------- */
@@ -491,13 +534,13 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-4);
-  border: 1px dashed var(--border-primary);
-  border-radius: 8px;
-  background: var(--background-primary);
+  border: 1px dashed var(--ap-color-border-primary);
+  border-radius: var(--ap-radius-xl);
+  background: var(--ap-color-background-secondary);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--ap-font-size-sm);
   line-height: 20px;
-  color: var(--foreground-primary);
+  color: var(--ap-color-foreground-primary);
   cursor: pointer;
   transition:
     border-color 120ms ease,
@@ -534,4 +577,102 @@
 .tile-menu-pop {
   top: calc(100% + 4px);
   right: 0;
+}
+
+/* ---------- Tooltip (Figma tooltip spec: inverted pill above trigger) ---------- */
+.ui-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.ui-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 2px 10px;
+  border-radius: var(--ap-radius-pill);
+  background: var(--ap-color-background-primary-inverted);
+  color: var(--ap-color-foreground-primary-inverted);
+  font-size: var(--ap-font-size-sm);
+  line-height: 20px;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px 1px rgba(68, 64, 60, 0.24);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 120ms ease 0ms,
+    visibility 120ms ease 0ms;
+}
+
+.ui-tooltip-wrap:hover .ui-tooltip,
+.ui-tooltip-wrap:focus-within .ui-tooltip {
+  opacity: 1;
+  visibility: visible;
+  /* Intent delay: only show after the cursor has settled. */
+  transition-delay: 400ms;
+}
+
+/* ---------- Thumbnail (media thumb + optional duration badge) ---------- */
+.ui-thumb {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  background: var(--ap-color-background-secondary);
+}
+
+.ui-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ui-thumb-empty {
+  width: 100%;
+  height: 100%;
+  background: var(--ap-color-background-secondary);
+}
+
+.ui-thumb-duration {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  font-size: 9px;
+  line-height: 12px;
+  font-weight: var(--ap-font-weight-medium);
+  font-variant-numeric: lining-nums tabular-nums;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- ShaderOrb (agent-presence gradient sphere) ---------- */
+.ui-orb {
+  display: inline-flex;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.ui-orb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ui-orb--spinning img {
+  animation: ui-orb-spin 2.4s linear infinite;
+}
+
+@keyframes ui-orb-spin {
+  to {
+    rotate: 360deg;
+  }
 }
