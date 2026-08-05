@@ -320,24 +320,25 @@
   position: relative;
 }
 
-/* ---------- Generating state on the canvas (img-fx WebGL mosaic) ---------- */
+/* ---------- Generating state on the canvas (fluted-glass shader) ---------- */
 .gen-loader {
   position: absolute;
   inset: 0;
 }
 
-/* The library's root is inline-block sized to its child; pin both to the card. */
-.gen-loader .gen-loader-fx {
+/* Pin the shader canvas to the device card. */
+.gen-loader .gen-glass {
   position: absolute;
   inset: 0;
-  display: block;
-}
-
-.gen-loader-card {
   width: 100%;
   height: 100%;
   border-radius: 7px;
-  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+/* No poster yet (fresh project mid-import): a quiet surface under the label. */
+.gen-glass-blank {
+  background: var(--ap-color-background-tertiary);
 }
 
 .gen-loader-label {
