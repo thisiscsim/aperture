@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { parseEdl, type Edl } from "@reel/edl";
-import { InspectorPanel } from "./InspectorPanel";
+import { FloatingToolbar } from "./FloatingToolbar";
 import { useEditor } from "../store";
 
 afterEach(cleanup);
 
-describe("InspectorPanel", () => {
-  it("renders Design + Format for the project when nothing is selected", () => {
+describe("FloatingToolbar", () => {
+  it("renders the four theme tools when nothing is selected", () => {
     const edl = parseEdl({ tracks: [{ id: "v", type: "video", clips: [] }] }).edl!;
     useEditor.setState({ edl, slug: "demo", selectedClipId: null });
-    render(<InspectorPanel />);
-    expect(screen.getByText("Design")).toBeInTheDocument();
-    expect(screen.getByText("Format")).toBeInTheDocument();
+    render(<FloatingToolbar />);
+    for (const label of ["Alignment", "Typeface", "Padding", "Color"]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
   });
 
   // Regression: an EDL parsed by an older schema (no theme.textAlignment, e.g.
@@ -21,14 +22,16 @@ describe("InspectorPanel", () => {
     const edl = parseEdl({ tracks: [{ id: "v", type: "video", clips: [] }] }).edl!;
     delete (edl.theme as Partial<Edl["theme"]>).textAlignment;
     useEditor.setState({ edl, slug: "demo", selectedClipId: null });
-    render(<InspectorPanel />);
-    expect(screen.getByText("Design")).toBeInTheDocument();
+    render(<FloatingToolbar />);
+    fireEvent.click(screen.getByLabelText("Alignment"));
+    expect(screen.getByText("Alignment", { selector: ".ftb-pop-title" })).toBeInTheDocument();
   });
 
   it("hex color field is typeable and commits only a complete hex on blur", () => {
     const edl = parseEdl({ tracks: [{ id: "v", type: "video", clips: [] }] }).edl!;
     useEditor.setState({ edl, slug: "demo", selectedClipId: null });
-    render(<InspectorPanel />);
+    render(<FloatingToolbar />);
+    fireEvent.click(screen.getByLabelText("Color"));
     const input = screen.getByLabelText("Text color") as HTMLInputElement;
 
     // Intermediate keystrokes stay in the field (old behavior reverted them).
@@ -46,12 +49,15 @@ describe("InspectorPanel", () => {
     expect(useEditor.getState().edl?.theme.palette[0]).toBe("#123456");
   });
 
-  it("number field does not snap to 0 while clearing; commits on blur", () => {
+  it("selecting a text clip swaps to clip tools; number field commits on blur only", () => {
     const edl = parseEdl({
       tracks: [{ id: "t", type: "text", clips: [{ id: "t1", start: 1, end: 3, text: "hi" }] }],
     }).edl!;
     act(() => useEditor.setState({ edl, slug: "demo", selectedClipId: "t1" }));
-    render(<InspectorPanel />);
+    render(<FloatingToolbar />);
+
+    expect(screen.getByLabelText("Back to project design")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Timing"));
     const start = screen.getByLabelText("Start (s)") as HTMLInputElement;
 
     // Clearing the field must not write 0 to the clip.
@@ -72,5 +78,15 @@ describe("InspectorPanel", () => {
       const t = useEditor.getState().edl?.tracks.find((tr) => tr.type === "text");
       return t?.type === "text" ? t.clips[0]?.start : undefined;
     }
+  });
+
+  it("the deselect button returns to the theme scope", () => {
+    const edl = parseEdl({
+      tracks: [{ id: "t", type: "text", clips: [{ id: "t1", start: 1, end: 3, text: "hi" }] }],
+    }).edl!;
+    act(() => useEditor.setState({ edl, slug: "demo", selectedClipId: "t1" }));
+    render(<FloatingToolbar />);
+    fireEvent.click(screen.getByLabelText("Back to project design"));
+    expect(useEditor.getState().selectedClipId).toBeNull();
   });
 });
