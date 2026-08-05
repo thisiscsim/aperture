@@ -1,46 +1,97 @@
 /*
- * Aperture design tokens.
+ * Aperture design tokens — the v1.5 `ap-` variable system.
  *
- * Light values are authoritative (from the Figma V0 variable set / token sheet).
- * Dark values are derived pending design review — same semantic names, inverted
- * neutrals, nudged chroma so the accent + action hues read on dark surfaces.
+ * Source of truth: Figma "V1" page variable collections (ap-color-neutral,
+ * ap-color-{background,foreground,border,action}, ap-border-radius,
+ * ap-spacing, ap-font-*). Values verified against get_variable_defs.
+ *
+ * Structure:
+ *   1. Construction + typography primitives (theme-independent).
+ *   2. Neutral ramp per theme. The ramp inverts across themes, so semantic
+ *      tokens are declared ONCE as ramp references and resolve per theme.
+ *   3. Per-theme raw values that live off-ramp (action hues, strokes, shadows).
+ *   4. Legacy aliases (pre-v1.5 names) mapped onto ap- tokens. New code uses
+ *      --ap-*; the aliases keep existing surfaces working until the cleanup PR.
  *
  * Themes key off <html data-theme="light|dark"> (set by the store).
  */
 
+:root {
+  /* construction — radii */
+  --ap-radius-sm: 4px;
+  --ap-radius-md: 6px;
+  --ap-radius-lg: 8px;
+  --ap-radius-xl: 12px;
+  --ap-radius-2xl: 16px;
+  --ap-radius-pill: 999999px;
+
+  /* construction — spacing */
+  --ap-space-sm: 4px;
+  --ap-space-md: 8px;
+  --ap-space-lg: 12px;
+  --ap-space-xl: 16px;
+  --ap-space-2xl: 20px;
+
+  /* typography */
+  --ap-font-family-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI",
+    sans-serif;
+  --ap-font-family-display: "Bradford", "Bradford Trial", Georgia, "Times New Roman", serif;
+  --ap-font-weight-normal: 400;
+  --ap-font-weight-medium: 500;
+  --ap-font-size-xs: 11px;
+  --ap-font-size-sm: 13px;
+  --ap-font-size-md: 15px;
+  --ap-font-size-lg: 17px;
+  --ap-font-size-xl: 24px;
+
+  /* semantics — ramp references, valid for both themes (the ramp inverts) */
+  --ap-color-background-primary: var(--ap-neutral-0);
+  --ap-color-background-secondary: var(--ap-neutral-50);
+  --ap-color-background-tertiary: var(--ap-neutral-100);
+  --ap-color-background-primary-inverted: var(--ap-neutral-1000);
+
+  --ap-color-foreground-primary: var(--ap-neutral-1000);
+  --ap-color-foreground-secondary: var(--ap-neutral-500);
+  --ap-color-foreground-primary-inverted: var(--ap-neutral-0);
+  --ap-color-foreground-disabled: var(--ap-neutral-300);
+  --ap-color-foreground-accent: #1a5bdb;
+  --ap-color-foreground-danger: #ed404b;
+
+  --ap-color-border-primary: var(--ap-neutral-100);
+  --ap-color-border-secondary: var(--ap-neutral-200);
+}
+
 :root,
 :root[data-theme="light"] {
-  /* background */
-  --background-primary: #ffffff;
-  --background-secondary: #f5f5f4;
-  --background-page: #fafafa;
-  --background-primary-inverted: #0f0e0d;
-  --background-subtle-pressed: #e4e1dd;
-
-  /* foreground */
-  --foreground-primary: #0f0e0d;
-  --foreground-secondary: #6a6660;
-  --foreground-muted: #848079;
-  --foreground-disabled: #b8b5b0;
-  --foreground-primary-inverted: #ffffff;
-  --foreground-accent: #1a5bdb;
-  --foreground-danger: #ed404b;
-
-  /* border / stroke */
-  --border-primary: #ebe9e8;
-  --border-secondary: #e4e1dd;
-  --border-base: #f1efec;
-  --stroke-outline: rgba(16, 16, 16, 0.08);
+  /* neutral ramp — light */
+  --ap-neutral-0: #ffffff;
+  --ap-neutral-50: #f9f9f9;
+  --ap-neutral-100: #f0f0f0;
+  --ap-neutral-200: #e5e5e5;
+  --ap-neutral-300: #d6d6d6;
+  --ap-neutral-400: #a5a5a5;
+  --ap-neutral-500: #767676;
+  --ap-neutral-600: #565656;
+  --ap-neutral-700: #434343;
+  --ap-neutral-800: #292929;
+  --ap-neutral-900: #1a1a1a;
+  --ap-neutral-950: #141414;
+  --ap-neutral-1000: #000000;
 
   /* actions (timeline track types) */
-  --action-audio-bg: #f4e7ee;
-  --action-audio-border: #912f5d;
-  --action-video-bg: #e8edf9;
-  --action-video-border: #1e4199;
-  --action-text-bg: #fef5e6;
-  --action-text-border: #fac166;
+  --ap-color-action-audio-bg: #f4e7ee;
+  --ap-color-action-audio-border: #912f5d;
+  --ap-color-action-video-bg: #e8edf9;
+  --ap-color-action-video-border: #1e4199;
+  --ap-color-action-text-bg: #fef5e6;
+  --ap-color-action-text-border: #fac166;
 
-  /* elevation */
+  /* strokes + elevation */
+  --stroke-outline: rgba(16, 16, 16, 0.08);
+  --ap-shadow-sm:
+    0 0.5px 1.3px rgba(0, 0, 0, 0.008), 0 1.2px 3.1px rgba(0, 0, 0, 0.012),
+    0 2.3px 5.8px rgba(0, 0, 0, 0.016), 0 4px 10.5px rgba(0, 0, 0, 0.02),
+    0 7.5px 19px rgba(0, 0, 0, 0.024), 0 18px 47px rgba(0, 0, 0, 0.031);
   --shadow-modal: 0 0 0 0.5px var(--stroke-outline), 0 28px 32px 0 rgba(0, 0, 0, 0.08);
   --shadow-popover: 0 0 0.5px 0.5px var(--stroke-outline), 0 3px 3px -1.5px rgba(16, 16, 16, 0.04),
     0 8px 8px -4px rgba(16, 16, 16, 0.04), 0 28px 32px -4px rgba(16, 16, 16, 0.08);
@@ -48,58 +99,82 @@
 }
 
 :root[data-theme="dark"] {
-  /* background */
-  --background-primary: #171614;
-  --background-secondary: #201f1c;
-  --background-page: #121110;
-  --background-primary-inverted: #f5f5f4;
-  --background-subtle-pressed: #2c2a27;
+  /* neutral ramp — dark */
+  --ap-neutral-0: #000000;
+  --ap-neutral-50: #1a1a1a;
+  --ap-neutral-100: #2e2e2e;
+  --ap-neutral-200: #383838;
+  --ap-neutral-300: #474747;
+  --ap-neutral-400: #5b5b5b;
+  --ap-neutral-500: #707070;
+  --ap-neutral-600: #949494;
+  --ap-neutral-700: #bababa;
+  --ap-neutral-800: #d6d6d6;
+  --ap-neutral-900: #eaeaea;
+  --ap-neutral-950: #f2f2f2;
+  --ap-neutral-1000: #ffffff;
 
-  /* foreground */
-  --foreground-primary: #f2f0ed;
-  --foreground-secondary: #a39f98;
-  --foreground-muted: #7d7972;
-  --foreground-disabled: #57544f;
-  --foreground-primary-inverted: #0f0e0d;
-  --foreground-accent: #5b8def;
-  --foreground-danger: #f26670;
+  /* actions (timeline track types) — derived for dark surfaces */
+  --ap-color-action-audio-bg: #3a2230;
+  --ap-color-action-audio-border: #c4638f;
+  --ap-color-action-video-bg: #1f2a44;
+  --ap-color-action-video-border: #6e93e8;
+  --ap-color-action-text-bg: #3a2f1a;
+  --ap-color-action-text-border: #d9a453;
 
-  /* border / stroke */
-  --border-primary: #2b2926;
-  --border-secondary: #34312d;
-  --border-base: #242220;
+  /* strokes + elevation */
   --stroke-outline: rgba(255, 255, 255, 0.1);
-
-  /* actions (timeline track types) */
-  --action-audio-bg: #3a2230;
-  --action-audio-border: #c4638f;
-  --action-video-bg: #1f2a44;
-  --action-video-border: #6e93e8;
-  --action-text-bg: #3a2f1a;
-  --action-text-border: #d9a453;
-
-  /* elevation */
+  --ap-shadow-sm:
+    0 0.5px 1.3px rgba(0, 0, 0, 0.06), 0 1.2px 3.1px rgba(0, 0, 0, 0.09),
+    0 2.3px 5.8px rgba(0, 0, 0, 0.12), 0 4px 10.5px rgba(0, 0, 0, 0.15),
+    0 7.5px 19px rgba(0, 0, 0, 0.18), 0 18px 47px rgba(0, 0, 0, 0.23);
   --shadow-modal: 0 0 0 0.5px var(--stroke-outline), 0 28px 32px 0 rgba(0, 0, 0, 0.45);
   --shadow-popover: 0 0 0.5px 0.5px var(--stroke-outline), 0 3px 3px -1.5px rgba(0, 0, 0, 0.2),
     0 8px 8px -4px rgba(0, 0, 0, 0.2), 0 28px 32px -4px rgba(0, 0, 0, 0.4);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
+/*
+ * Legacy aliases (pre-v1.5 token names) — resolve through the ap- system so
+ * both themes keep working. Do not use in new code; removed in the cleanup PR.
+ */
 :root {
-  /* radii */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-lg: 10px;
+  --background-primary: var(--ap-color-background-primary);
+  --background-secondary: var(--ap-color-background-secondary);
+  --background-page: var(--ap-color-background-primary);
+  --background-primary-inverted: var(--ap-color-background-primary-inverted);
+  --background-subtle-pressed: var(--ap-neutral-100);
 
-  /* spacing */
-  --space-4: 4px;
-  --space-6: 6px;
-  --space-8: 8px;
-  --space-12: 12px;
-  --space-16: 16px;
-  --space-24: 24px;
+  --foreground-primary: var(--ap-color-foreground-primary);
+  --foreground-secondary: var(--ap-color-foreground-secondary);
+  --foreground-muted: var(--ap-neutral-400);
+  --foreground-disabled: var(--ap-color-foreground-disabled);
+  --foreground-primary-inverted: var(--ap-color-foreground-primary-inverted);
+  --foreground-accent: var(--ap-color-foreground-accent);
+  --foreground-danger: var(--ap-color-foreground-danger);
 
-  /* typography */
-  --font-brand: "Bradford", "Bradford Trial", Georgia, "Times New Roman", serif;
-  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+  --border-primary: var(--ap-color-border-primary);
+  --border-secondary: var(--ap-color-border-secondary);
+  --border-base: var(--ap-color-border-primary);
+
+  --action-audio-bg: var(--ap-color-action-audio-bg);
+  --action-audio-border: var(--ap-color-action-audio-border);
+  --action-video-bg: var(--ap-color-action-video-bg);
+  --action-video-border: var(--ap-color-action-video-border);
+  --action-text-bg: var(--ap-color-action-text-bg);
+  --action-text-border: var(--ap-color-action-text-border);
+
+  --radius-xs: var(--ap-radius-sm);
+  --radius-sm: var(--ap-radius-md);
+  --radius-lg: var(--ap-radius-lg);
+
+  --space-4: var(--ap-space-sm);
+  --space-6: 6px; /* legacy literal, no ap- equivalent */
+  --space-8: var(--ap-space-md);
+  --space-12: var(--ap-space-lg);
+  --space-16: var(--ap-space-xl);
+  --space-24: 24px; /* legacy literal, no ap- equivalent */
+
+  --font-brand: var(--ap-font-family-display);
+  --font-ui: var(--ap-font-family-sans);
 }
