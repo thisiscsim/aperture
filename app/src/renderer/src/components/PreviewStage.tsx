@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
-import { ImageGeneration } from "img-fx";
+import { FlutedGlass } from "@paper-design/shaders-react";
 import { durationFrames, type Edl } from "@reel/edl";
 import { SocialVideo } from "../motion/SocialVideo";
 import { useEditor } from "../store";
 
 /**
- * Centered floating device frame on the secondary background (Figma V0).
- * Playback is driven by the timeline transport (no built-in Player chrome);
- * clicking the video still toggles play. While Generate / Auto-improve runs,
- * the canvas shows ONLY img-fx's WebGL mosaic — no image reveals, no player —
- * until the new cut has fully loaded (the busy flags outlive the reload).
+ * Centered floating device frame on the secondary background. Playback is
+ * driven by the timeline transport (no built-in Player chrome); clicking the
+ * video still toggles play. While Generate / Auto-improve runs, the canvas
+ * shows the project's poster frame behind an animated wave of fluted glass
+ * (the V1 loading frames' vertical ribs) — no player — until the new cut has
+ * fully loaded (the busy flags outlive the reload).
  */
 export function PreviewStage(): JSX.Element {
   const edl = useEditor((s) => s.edl);
@@ -77,14 +78,7 @@ export function PreviewStage(): JSX.Element {
     <section className="preview-stage">
       <div className="device-card" style={{ aspectRatio: aspect }}>
         {busy ? (
-          <div className="gen-loader">
-            <ImageGeneration preset="pixels-organic" theme="auto" borderRadius={7} className="gen-loader-fx">
-              <div className="gen-loader-card" />
-            </ImageGeneration>
-            <span className="gen-loader-label">
-              {autotuning ? "Improving your cut…" : "Generating your cut…"}
-            </span>
-          </div>
+          <GenerationGlass slug={slug} label={autotuning ? "Improving your cut…" : "Generating your cut…"} />
         ) : hasContent ? (
           <Player
             ref={ref}
@@ -105,5 +99,72 @@ export function PreviewStage(): JSX.Element {
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * The in-progress canvas: the cut being generated shows through an animated
+ * fluted-glass wave (paper-design shader). FlutedGlass is an image filter, so
+ * the "video behind the glass" is the project's poster frame; the glass ribs
+ * sweep across it by animating the texture `shift` uniform.
+ */
+function GenerationGlass({ slug, label }: { slug: string | null; label: string }): JSX.Element {
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [shift, setShift] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setThumb(null);
+    if (slug) {
+      window.api
+        ?.projectThumbnail(slug)
+        .then((url) => alive && setThumb(url))
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
+  }, [slug]);
+
+  // Gentle back-and-forth sweep. State lives in this leaf, so the ~30fps
+  // updates re-render only the shader while the Player is unmounted anyway.
+  useEffect(() => {
+    let raf = 0;
+    let last = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      if (now - last < 33) return;
+      last = now;
+      setShift(Math.sin((now - start) / 1800) * 0.55);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div className="gen-loader">
+      {thumb ? (
+        <FlutedGlass
+          className="gen-glass"
+          image={thumb}
+          fit="cover"
+          shape="wave"
+          distortionShape="contour"
+          size={0.16}
+          distortion={0.6}
+          stretch={0.25}
+          shift={shift}
+          shadows={0.22}
+          highlights={0.12}
+          blur={0.12}
+          edges={0.3}
+          colorBack="#00000000"
+        />
+      ) : (
+        <div className="gen-glass gen-glass-blank" />
+      )}
+      <span className="gen-loader-label">{label}</span>
+    </div>
   );
 }
