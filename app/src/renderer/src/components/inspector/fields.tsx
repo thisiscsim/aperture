@@ -1,22 +1,12 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon, type IconName } from "../ui";
 
 /**
- * The Inspector's form primitives, split out of InspectorPanel. Several are
- * "draft + commit-on-blur" wrappers that coalesce edits into one undo step
- * (and fix the untypeable hex field / number 0-snap) — see individual notes.
+ * The floating toolbar's form primitives (originally split out of the docked
+ * InspectorPanel). Several are "draft + commit-on-blur" wrappers that coalesce
+ * edits into one undo step (and fix the untypeable hex field / number 0-snap)
+ * — see individual notes.
  */
-
-export function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
-  return (
-    <div className="rail-section">
-      <div className="rail-head">{title}</div>
-      <div className="rail-body" style={{ gap: 12 }}>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export function SegGroup({
   options,
