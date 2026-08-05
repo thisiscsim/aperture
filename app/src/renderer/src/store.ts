@@ -9,6 +9,7 @@ import {
   buildRunArgs,
   completeAssistantTurn,
   emptySession,
+  markCritiqueApplied,
   toSessionSettings,
   upsertAssistantStatus,
 } from "./lib/session";
@@ -257,6 +258,8 @@ interface EditorState {
     settings: ComposerSettings;
     attachments?: SessionAttachment[];
   }) => Promise<void>;
+  /** "Apply the suggested changes" on a critique card → an autotune run. */
+  applyCritiqueFixes: (turnIndex: number, itemIndex: number) => Promise<void>;
   setSeek: (fn: (frame: number) => void) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -543,6 +546,67 @@ export const useEditor = create<EditorState>()((set, get) => ({
       if (get().slug === slug) {
         set({ sessionBusy: false, ...(mode === "generation" ? { generating: false } : {}) });
       }
+    }
+  },
+  applyCritiqueFixes: async (turnIndex, itemIndex) => {
+    const { slug, sessionBusy } = get();
+    if (!slug || sessionBusy) return;
+
+    let session = markCritiqueApplied(get().session ?? emptySession(), turnIndex, itemIndex);
+    session = appendAssistantTurn(session, "generation");
+    session = upsertAssistantStatus(session, {
+      type: "status",
+      icon: "thinking",
+      label: "applying the suggested fixes",
+    });
+    set({ session, sessionBusy: true, autotuning: true });
+    void window.api.saveSession(slug, session);
+
+    const offPhase = window.api.onPhase("autotune", (phase) => {
+      if (get().slug !== slug) return;
+      set({
+        session: upsertAssistantStatus(get().session ?? emptySession(), {
+          type: "status",
+          icon: "thinking",
+          label: phase,
+        }),
+      });
+    });
+    const startedAt = Date.now();
+
+    try {
+      const res = await window.api.autoTune(slug);
+      await get().reloadProject();
+      if (get().slug !== slug) return;
+
+      let s = get().session ?? emptySession();
+      if (res.ok) {
+        const secs = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        const took = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+        s = upsertAssistantStatus(s, {
+          type: "status",
+          icon: "generated",
+          label: `Applied the suggested changes in ${took}`,
+        });
+        s = appendAssistantItem(s, {
+          type: "text",
+          text: "The cut has been re-tuned around the critique's top fixes — run Critique again to see the new score.",
+        });
+        s = completeAssistantTurn(s);
+      } else {
+        s = completeAssistantTurn(s, res.error ?? "Couldn't apply the fixes.");
+      }
+      set({ session: s });
+      void window.api.saveSession(slug, s);
+    } catch (err) {
+      if (get().slug === slug) {
+        const s = completeAssistantTurn(get().session ?? emptySession(), String(err));
+        set({ session: s });
+        void window.api.saveSession(slug, s);
+      }
+    } finally {
+      offPhase();
+      if (get().slug === slug) set({ sessionBusy: false, autotuning: false });
     }
   },
   setSeek: (fn) => set({ seek: fn }),

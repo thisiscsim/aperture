@@ -7,6 +7,7 @@ import {
   buildRunArgs,
   completeAssistantTurn,
   emptySession,
+  markCritiqueApplied,
   toSessionSettings,
   upsertAssistantStatus,
 } from "./session";
@@ -49,6 +50,27 @@ describe("session turn builders", () => {
     const s = appendUserTurn(emptySession(), { text: "hi", settings });
     expect(appendAssistantItem(s, { type: "text", text: "x" })).toBe(s);
     expect(completeAssistantTurn(s)).toBe(s);
+  });
+
+  it("markCritiqueApplied flips the card in place and no-ops on wrong targets", () => {
+    let s = appendAssistantTurn(emptySession(), "critique");
+    s = appendAssistantItem(s, {
+      type: "critique-card",
+      score: 62,
+      verdict: "",
+      subscores: [],
+      fixes: ["add music"],
+      applied: false,
+    });
+    const applied = markCritiqueApplied(s, 0, 0);
+    const turn = applied.turns[0];
+    if (turn.role !== "assistant" || turn.items[0].type !== "critique-card") {
+      throw new Error("expected critique card");
+    }
+    expect(turn.items[0].applied).toBe(true);
+    // Wrong indices leave the session untouched.
+    expect(markCritiqueApplied(s, 5, 0)).toBe(s);
+    expect(markCritiqueApplied(s, 0, 9)).toBe(s);
   });
 });
 

@@ -4,7 +4,7 @@ import { useEditor } from "../../store";
 import { DEFAULT_COMPOSER_SETTINGS, type ComposerSettings } from "../../lib/composer";
 import { pathsFrom } from "../../lib/files";
 import { Composer, type ComposerReference } from "../composer/Composer";
-import { Icon, ShaderOrb, Thumbnail, type IconName } from "../ui";
+import { Button, Icon, ShaderOrb, Thumbnail, type IconName } from "../ui";
 
 const STATUS_ICONS: Record<string, IconName> = {
   thinking: "slide-add",
@@ -25,6 +25,7 @@ export function CreateTab(): JSX.Element {
   const sessionBusy = useEditor((s) => s.sessionBusy);
   const loadSession = useEditor((s) => s.loadSession);
   const submitCreate = useEditor((s) => s.submitCreate);
+  const pushNotice = useEditor((s) => s.pushNotice);
   const promptText = useEditor((s) => s.promptText);
   const hasClips = useEditor((s) =>
     Boolean(s.edl?.assets.some((a) => a.kind === "video" || a.kind === "image")),
@@ -32,6 +33,9 @@ export function CreateTab(): JSX.Element {
   const [text, setText] = useState("");
   const [settings, setSettings] = useState<ComposerSettings>(DEFAULT_COMPOSER_SETTINGS);
   const [references, setReferences] = useState<string[]>([]);
+  /** Benchmark files imported while composing the next critique turn. */
+  const [pendingBenchmarks, setPendingBenchmarks] = useState<string[]>([]);
+  const [benchBusy, setBenchBusy] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,15 +77,66 @@ export function CreateTab(): JSX.Element {
     });
   };
 
+  const addBenchmarks = async (files: File[]) => {
+    if (!slug || benchBusy) return;
+    const paths = pathsFrom(files);
+    if (paths.length === 0) return;
+    setBenchBusy(true);
+    try {
+      const res = await window.api.importBenchmarks(slug, paths);
+      if (res.ok && res.files.length > 0) {
+        setPendingBenchmarks((prev) => [...prev, ...res.files.filter((f) => !prev.includes(f))]);
+        // Feature extraction so the critique scores against these immediately.
+        await window.api.analyzeBenchmarks(slug);
+      } else if (!res.ok) {
+        pushNotice("error", `Couldn't import benchmarks: ${res.error ?? "unknown error"}`);
+      }
+    } finally {
+      setBenchBusy(false);
+    }
+  };
+
+  const fetchBenchmarkUrl = async (url: string) => {
+    if (!slug || benchBusy) return;
+    setBenchBusy(true);
+    try {
+      const res = await window.api.benchmarkFromUrl(slug, url);
+      if (res.ok && res.files.length > 0) {
+        setPendingBenchmarks((prev) => [...prev, ...res.files.filter((f) => !prev.includes(f))]);
+        await window.api.analyzeBenchmarks(slug);
+      } else {
+        pushNotice("error", `Couldn't fetch the video: ${res.error ?? "unknown error"}`);
+      }
+    } finally {
+      setBenchBusy(false);
+    }
+  };
+
   const submit = () => {
-    if (!text.trim() || sessionBusy) return;
-    const attachments: SessionAttachment[] = references.map((file) => ({
-      kind: "reference",
-      name: file,
-      src: `references/${file}`,
-    }));
-    void submitCreate({ text: text.trim(), settings, attachments });
+    if (!text.trim() || sessionBusy || benchBusy) return;
+    const trimmed = text.trim();
+    // In critique mode a pasted link fetches the benchmark video instead of
+    // running a turn — "paste a link and Aperture finds the related video".
+    if (settings.mode === "critique" && /^https?:\/\/\S+$/i.test(trimmed)) {
+      void fetchBenchmarkUrl(trimmed);
+      setText("");
+      return;
+    }
+    const attachments: SessionAttachment[] = [
+      ...references.map((file): SessionAttachment => ({
+        kind: "reference",
+        name: file,
+        src: `references/${file}`,
+      })),
+      ...pendingBenchmarks.map((file): SessionAttachment => ({
+        kind: "benchmark",
+        name: file,
+        src: `benchmarks/${file}`,
+      })),
+    ];
+    void submitCreate({ text: trimmed, settings, attachments });
     setText("");
+    setPendingBenchmarks([]);
   };
 
   const composerRefs: ComposerReference[] = references.map((file) => ({
@@ -89,6 +144,15 @@ export function CreateTab(): JSX.Element {
     name: file,
     thumb: null,
   }));
+
+  // "X has joined the session" separators fire when the acting agent changes.
+  const agentBefore = (index: number): "generation" | "critique" | null => {
+    for (let i = index - 1; i >= 0; i--) {
+      const t = session?.turns[i];
+      if (t?.role === "assistant") return t.agent;
+    }
+    return null;
+  };
 
   return (
     <div className="create-tab">
@@ -100,10 +164,26 @@ export function CreateTab(): JSX.Element {
           </p>
         )}
         {session?.turns.map((turn, i) => (
-          <Turn key={i} turn={turn} slug={slug} />
+          <Turn
+            key={i}
+            turn={turn}
+            turnIndex={i}
+            slug={slug}
+            joined={
+              turn.role === "assistant" && agentBefore(i) !== null && agentBefore(i) !== turn.agent
+                ? turn.agent
+                : null
+            }
+          />
         ))}
       </div>
       <div className="create-composer">
+        {benchBusy && (
+          <div className="create-status" style={{ padding: "0 4px 8px" }}>
+            <ShaderOrb type="critique" size={14} spinning />
+            <span>Fetching benchmark…</span>
+          </div>
+        )}
         <Composer
           value={text}
           onValueChange={setText}
@@ -115,9 +195,10 @@ export function CreateTab(): JSX.Element {
             if (!slug) return;
             void window.api.removeReference(slug, id).then(refreshReferences);
           }}
+          onAddBenchmarks={(files) => void addBenchmarks(files)}
           onSubmit={submit}
           busy={sessionBusy}
-          canSubmit={text.trim().length > 0 && hasClips}
+          canSubmit={text.trim().length > 0 && (settings.mode === "critique" || hasClips)}
           placeholder={hasClips ? "Describe the video you want to make…" : "Add clips first (Assets tab)…"}
         />
       </div>
@@ -125,26 +206,75 @@ export function CreateTab(): JSX.Element {
   );
 }
 
-function Turn({ turn, slug }: { turn: SessionTurn; slug: string | null }): JSX.Element {
+function Turn({
+  turn,
+  turnIndex,
+  slug,
+  joined,
+}: {
+  turn: SessionTurn;
+  turnIndex: number;
+  slug: string | null;
+  joined: "generation" | "critique" | null;
+}): JSX.Element {
   if (turn.role === "user") {
-    return <div className="create-bubble">{turn.text}</div>;
+    return (
+      <div className="create-user">
+        <div className="create-bubble">{turn.text}</div>
+        {turn.attachments.length > 0 && (
+          <div className="create-thumbs create-thumbs-user">
+            {turn.attachments.map((a) => (
+              <Thumbnail
+                key={a.name}
+                src={slug && a.src ? `reel-asset://${slug}/${a.src}` : null}
+                size={48}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
   return (
-    <div className="create-assistant">
-      {turn.items.map((item, i) => (
-        <TurnItem key={i} item={item} slug={slug} />
-      ))}
-      {turn.pending && turn.items.length === 0 && (
-        <div className="create-status">
-          <ShaderOrb type={turn.agent} size={16} spinning />
-          <span>Thinking…</span>
+    <>
+      {joined && (
+        <div className="create-joined">
+          <span className="create-joined-line" />
+          <span className="create-joined-label">
+            <ShaderOrb type={joined} size={12} />
+            {joined === "critique" ? "Critique has joined the session" : "Generation has joined the session"}
+          </span>
+          <span className="create-joined-line" />
         </div>
       )}
-    </div>
+      <div className="create-assistant">
+        {turn.items.map((item, i) => (
+          <TurnItem key={i} item={item} itemIndex={i} turnIndex={turnIndex} slug={slug} />
+        ))}
+        {turn.pending && turn.items.length === 0 && (
+          <div className="create-status">
+            <ShaderOrb type={turn.agent} size={16} spinning />
+            <span>Thinking…</span>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
-function TurnItem({ item, slug }: { item: SessionItem; slug: string | null }): JSX.Element | null {
+function TurnItem({
+  item,
+  itemIndex,
+  turnIndex,
+  slug,
+}: {
+  item: SessionItem;
+  itemIndex: number;
+  turnIndex: number;
+  slug: string | null;
+}): JSX.Element | null {
+  const sessionBusy = useEditor((s) => s.sessionBusy);
+  const applyCritiqueFixes = useEditor((s) => s.applyCritiqueFixes);
   switch (item.type) {
     case "text":
       return <p className="create-text">{item.text}</p>;
@@ -191,6 +321,23 @@ function TurnItem({ item, slug }: { item: SessionItem; slug: string | null }): J
                 <li key={i}>{fix}</li>
               ))}
             </ul>
+          )}
+          {item.fixes.length > 0 && (
+            <div className="create-critique-apply">
+              <span className="create-critique-apply-title">Apply the suggested changes</span>
+              <span className="create-critique-apply-sub">
+                Auto-tune re-edits the cut around the top fixes and logs the result.
+              </span>
+              <Button
+                variant="primary"
+                size="md"
+                disabled={sessionBusy || item.applied}
+                onClick={() => void applyCritiqueFixes(turnIndex, itemIndex)}
+                style={{ width: "100%" }}
+              >
+                {item.applied ? "Changes applied" : "Apply changes"}
+              </Button>
+            </div>
           )}
         </div>
       );

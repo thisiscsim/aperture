@@ -37,6 +37,51 @@
   color: var(--ap-color-foreground-primary);
 }
 
+/* Critique mode: benchmark dropzone above the prompt/link field. */
+.composer-benchmarks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ap-space-sm);
+  margin: 10px 10px 0;
+  padding: 16px 12px;
+  border: 1px dashed var(--ap-color-border-secondary);
+  border-radius: var(--ap-radius-lg);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.composer-benchmarks:hover,
+.composer-benchmarks.drag {
+  background: var(--ap-color-background-secondary);
+  border-color: var(--foreground-muted);
+}
+
+.composer-benchmarks-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ap-space-md);
+  font-size: 12px;
+  font-weight: var(--ap-font-weight-medium);
+  line-height: 16px;
+  color: var(--ap-color-foreground-primary);
+}
+
+.composer-benchmarks-sub {
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--ap-color-foreground-secondary);
+}
+
+.composer-benchmarks-formats {
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--ap-color-foreground-disabled);
+}
+
 .composer-input::placeholder {
   color: var(--ap-color-foreground-disabled);
 }

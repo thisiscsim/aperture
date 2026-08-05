@@ -1,4 +1,4 @@
-import { type ChangeEvent, type ReactNode, useRef } from "react";
+import { type ChangeEvent, type ReactNode, useRef, useState } from "react";
 import {
   ASPECT_LABELS,
   ASPECT_ORDER,
@@ -34,6 +34,7 @@ export function Composer({
   references,
   onAddReferences,
   onRemoveReference,
+  onAddBenchmarks,
   onSubmit,
   busy = false,
   canSubmit,
@@ -49,6 +50,8 @@ export function Composer({
   /** Called with the picked files; staging/import is the call site's job. */
   onAddReferences: (files: File[]) => void;
   onRemoveReference: (id: string) => void;
+  /** Critique mode: benchmark videos dropped/picked for scoring context. */
+  onAddBenchmarks?: (files: File[]) => void;
   onSubmit: () => void;
   busy?: boolean;
   canSubmit: boolean;
@@ -57,7 +60,14 @@ export function Composer({
   autoFocus?: boolean;
 }): JSX.Element {
   const refInput = useRef<HTMLInputElement>(null);
+  const benchInput = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const [benchDrag, setBenchDrag] = useState(false);
+
+  const critiqueMode = settings.mode === "critique" && Boolean(onAddBenchmarks);
+  const effectivePlaceholder = critiqueMode
+    ? "You can copy and paste a link here and Aperture will find the related video."
+    : placeholder;
 
   const set = (patch: Partial<ComposerSettings>) => onSettingsChange({ ...settings, ...patch });
 
@@ -78,12 +88,50 @@ export function Composer({
   return (
     <div className="composer">
       <div className="composer-main">
+        {critiqueMode && (
+          <div
+            className={`composer-benchmarks ${benchDrag ? "drag" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => benchInput.current?.click()}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && benchInput.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setBenchDrag(true);
+            }}
+            onDragLeave={() => setBenchDrag(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setBenchDrag(false);
+              if (e.dataTransfer.files.length) onAddBenchmarks?.(Array.from(e.dataTransfer.files));
+            }}
+          >
+            <span className="composer-benchmarks-title">
+              <Icon name="arrow-out-of-box" size={16} />
+              Upload reference
+            </span>
+            <span className="composer-benchmarks-sub">Drag and drop files here or click to upload</span>
+            <span className="composer-benchmarks-formats">MP4, MOV, HEIC, WebM, JPEGs, PNGs</span>
+          </div>
+        )}
+        <input
+          ref={benchInput}
+          type="file"
+          accept="video/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            if (files.length) onAddBenchmarks?.(files);
+            e.target.value = "";
+          }}
+        />
         <textarea
           ref={textRef}
           className="composer-input"
           rows={2}
           value={value}
-          placeholder={placeholder}
+          placeholder={effectivePlaceholder}
           autoFocus={autoFocus}
           disabled={busy}
           onChange={(e) => {
