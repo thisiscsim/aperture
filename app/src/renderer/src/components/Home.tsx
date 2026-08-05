@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useEditor } from "../store";
 import { buildTiles, relativeTime, SORT_LABELS, type HomeSort } from "../lib/home";
+import { HomeZero } from "./HomeZero";
 import { SettingsButton } from "./SettingsModal";
 import {
   AlbumCover,
@@ -54,6 +55,9 @@ export function Home(): JSX.Element {
   const openAlbum = openAlbumId ? (albums.find((a) => a.id === openAlbumId) ?? null) : null;
   const tiles = buildTiles({ projects, albums, tab, openAlbumId, sort, query });
 
+  // First run: no projects at all → the guided zero-state experience.
+  const zeroState = !loading && projects.length === 0 && albums.length === 0;
+
   // Seamless navigation: load the project while Home is still showing and
   // switch views only once the data is in the store — no empty-editor flash.
   // If the disk read is genuinely slow (>250ms), fall back to the classic
@@ -90,86 +94,92 @@ export function Home(): JSX.Element {
         </div>
         <div className="home-header-actions">
           <SettingsButton />
-          <Button variant="primary" size="md" onClick={() => setCreating(true)}>
-            New project
-          </Button>
+          {!zeroState && (
+            <Button variant="primary" size="md" onClick={() => setCreating(true)}>
+              New project
+            </Button>
+          )}
         </div>
       </header>
 
-      <main className="home-content">
-        <div className="home-toolbar">
-          {openAlbum ? (
-            <Button variant="secondary" size="sm" onClick={() => setOpenAlbumId(null)}>
-              Back
-            </Button>
+      {zeroState ? (
+        <HomeZero onCreated={refresh} />
+      ) : (
+        <main className="home-content">
+          <div className="home-toolbar">
+            {openAlbum ? (
+              <Button variant="secondary" size="sm" onClick={() => setOpenAlbumId(null)}>
+                Back
+              </Button>
+            ) : (
+              <div className="home-tabs" role="tablist">
+                <button
+                  role="tab"
+                  aria-selected={tab === "all"}
+                  className={`home-tab ${tab === "all" ? "active" : ""}`}
+                  onClick={() => setTab("all")}
+                >
+                  All
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={tab === "albums"}
+                  className={`home-tab ${tab === "albums" ? "active" : ""}`}
+                  onClick={() => setTab("albums")}
+                >
+                  Albums
+                </button>
+              </div>
+            )}
+            <div className="home-toolbar-right">
+              <SortMenu sort={sort} onChange={setSort} />
+              <Input
+                className="home-search"
+                type="text"
+                placeholder="Search..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="home-loading">Loading projects…</p>
+          ) : tiles.length === 0 && tab === "albums" && !openAlbum && query.trim() === "" ? (
+            <p className="home-empty">No albums yet</p>
           ) : (
-            <div className="home-tabs" role="tablist">
-              <button
-                role="tab"
-                aria-selected={tab === "all"}
-                className={`home-tab ${tab === "all" ? "active" : ""}`}
-                onClick={() => setTab("all")}
-              >
-                All
-              </button>
-              <button
-                role="tab"
-                aria-selected={tab === "albums"}
-                className={`home-tab ${tab === "albums" ? "active" : ""}`}
-                onClick={() => setTab("albums")}
-              >
-                Albums
-              </button>
+            <div className="tile-grid">
+              {tiles.map((tile) =>
+                tile.kind === "project" ? (
+                  <ProjectTile
+                    key={tile.project.slug}
+                    project={tile.project}
+                    albums={albums}
+                    inAlbum={Boolean(openAlbumId)}
+                    onOpen={() => void openSeamlessly(tile.project.slug)}
+                    onChanged={refresh}
+                    onNewAlbum={() => setNamingFor(tile.project.slug)}
+                  />
+                ) : (
+                  <AlbumTile
+                    key={tile.album.id}
+                    album={tile.album}
+                    members={tile.members}
+                    updatedAt={tile.updatedAt}
+                    onOpen={() => setOpenAlbumId(tile.album.id)}
+                    onChanged={refresh}
+                  />
+                ),
+              )}
+              {!openAlbum && tab === "all" && (
+                <NewTile icon="clapboard-wide" onClick={() => setCreating(true)}>
+                  New project
+                </NewTile>
+              )}
             </div>
           )}
-          <div className="home-toolbar-right">
-            <SortMenu sort={sort} onChange={setSort} />
-            <Input
-              className="home-search"
-              type="text"
-              placeholder="Search..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {loading ? (
-          <p className="home-loading">Loading projects…</p>
-        ) : tiles.length === 0 && tab === "albums" && !openAlbum && query.trim() === "" ? (
-          <p className="home-empty">No albums yet</p>
-        ) : (
-          <div className="tile-grid">
-            {tiles.map((tile) =>
-              tile.kind === "project" ? (
-                <ProjectTile
-                  key={tile.project.slug}
-                  project={tile.project}
-                  albums={albums}
-                  inAlbum={Boolean(openAlbumId)}
-                  onOpen={() => void openSeamlessly(tile.project.slug)}
-                  onChanged={refresh}
-                  onNewAlbum={() => setNamingFor(tile.project.slug)}
-                />
-              ) : (
-                <AlbumTile
-                  key={tile.album.id}
-                  album={tile.album}
-                  members={tile.members}
-                  updatedAt={tile.updatedAt}
-                  onOpen={() => setOpenAlbumId(tile.album.id)}
-                  onChanged={refresh}
-                />
-              ),
-            )}
-            {!openAlbum && tab === "all" && (
-              <NewTile icon="clapboard-wide" onClick={() => setCreating(true)}>
-                New project
-              </NewTile>
-            )}
-          </div>
-        )}
-      </main>
+        </main>
+      )}
 
       {creating && (
         <CreateProjectDialog

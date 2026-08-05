@@ -3,11 +3,18 @@ import apertureLogomark from "../../assets/icons/aperture-logomark.svg?raw";
 import arrowLeft from "../../assets/icons/arrow-left.svg?raw";
 import arrowOutOfBox from "../../assets/icons/arrow-out-of-box.svg?raw";
 import arrowRotate from "../../assets/icons/arrow-rotate.svg?raw";
+import arrowUp from "../../assets/icons/arrow-up.svg?raw";
+import aspectRatio from "../../assets/icons/aspect-ratio.svg?raw";
+import batteryFull from "../../assets/icons/battery-full.svg?raw";
+import batteryLow from "../../assets/icons/battery-low.svg?raw";
+import batteryMedium from "../../assets/icons/battery-medium.svg?raw";
+import checkmark from "../../assets/icons/checkmark.svg?raw";
 import chevronRightSmall from "../../assets/icons/chevron-right-small.svg?raw";
 import chevronTop from "../../assets/icons/chevron-top.svg?raw";
 import circleQuestionmark from "../../assets/icons/circle-questionmark.svg?raw";
 import clapboardSparkle from "../../assets/icons/clapboard-sparkle.svg?raw";
 import clapboardWide from "../../assets/icons/clapboard-wide.svg?raw";
+import clock from "../../assets/icons/clock.svg?raw";
 import ellipsis from "../../assets/icons/ellipsis.svg?raw";
 import finder from "../../assets/icons/finder.svg?raw";
 import folder from "../../assets/icons/folder.svg?raw";
@@ -20,6 +27,7 @@ import horizontalAlignBottom from "../../assets/icons/horizontal-align-bottom.sv
 import horizontalAlignCenter from "../../assets/icons/horizontal-align-center.svg?raw";
 import horizontalAlignTop from "../../assets/icons/horizontal-align-top.svg?raw";
 import layoutAlignLeft from "../../assets/icons/layout-align-left.svg?raw";
+import lightningBolt from "../../assets/icons/lightning-bolt.svg?raw";
 import linear from "../../assets/icons/linear.svg?raw";
 import inputForm from "../../assets/icons/input-form.svg?raw";
 import magicWand from "../../assets/icons/magic-wand.svg?raw";
@@ -32,10 +40,13 @@ import record from "../../assets/icons/record.svg?raw";
 import settingsGear from "../../assets/icons/settings-gear.svg?raw";
 import shareOs from "../../assets/icons/share-os.svg?raw";
 import skip from "../../assets/icons/skip.svg?raw";
+import slideAdd from "../../assets/icons/slide-add.svg?raw";
+import speedMiddle from "../../assets/icons/speed-middle.svg?raw";
 import squareArrowDown from "../../assets/icons/square-arrow-down.svg?raw";
 import stepBack from "../../assets/icons/step-back.svg?raw";
 import stepForwards from "../../assets/icons/step-forwards.svg?raw";
 import textMotion from "../../assets/icons/text-motion.svg?raw";
+import threeD from "../../assets/icons/three-d.svg?raw";
 import trashCan from "../../assets/icons/trash-can.svg?raw";
 import verticalAlignCenter from "../../assets/icons/vertical-align-center.svg?raw";
 import verticalAlignLeft from "../../assets/icons/vertical-align-left.svg?raw";
@@ -52,11 +63,18 @@ const ICONS = {
   "arrow-left": arrowLeft,
   "arrow-out-of-box": arrowOutOfBox,
   "arrow-rotate": arrowRotate,
+  "arrow-up": arrowUp,
+  "aspect-ratio": aspectRatio,
+  "battery-full": batteryFull,
+  "battery-low": batteryLow,
+  "battery-medium": batteryMedium,
+  checkmark,
   "chevron-right-small": chevronRightSmall,
   "chevron-top": chevronTop,
   "circle-questionmark": circleQuestionmark,
   "clapboard-sparkle": clapboardSparkle,
   "clapboard-wide": clapboardWide,
+  clock,
   ellipsis,
   finder,
   folder,
@@ -69,6 +87,7 @@ const ICONS = {
   "horizontal-align-center": horizontalAlignCenter,
   "horizontal-align-top": horizontalAlignTop,
   "layout-align-left": layoutAlignLeft,
+  "lightning-bolt": lightningBolt,
   linear,
   "input-form": inputForm,
   "magic-wand": magicWand,
@@ -81,10 +100,13 @@ const ICONS = {
   "settings-gear": settingsGear,
   "share-os": shareOs,
   skip,
+  "slide-add": slideAdd,
+  "speed-middle": speedMiddle,
   "square-arrow-down": squareArrowDown,
   "step-back": stepBack,
   "step-forwards": stepForwards,
   "text-motion": textMotion,
+  "three-d": threeD,
   "trash-can": trashCan,
   "vertical-align-center": verticalAlignCenter,
   "vertical-align-left": verticalAlignLeft,

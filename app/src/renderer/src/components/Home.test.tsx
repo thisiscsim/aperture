@@ -11,6 +11,19 @@ afterEach(() => {
 });
 
 function openDialog() {
+  // A non-empty library keeps the header's New project button around (a fully
+  // empty one renders the zero-state experience without it).
+  vi.mocked(window.api.listProjects).mockResolvedValue([
+    {
+      slug: "existing",
+      title: "Existing project",
+      platform: "reels",
+      status: "draft",
+      durationSec: 10,
+      assetCount: 1,
+      updatedAt: "2026-07-18T00:00:00Z",
+    },
+  ]);
   useEditor.setState({ view: "home", projects: [] });
   const utils = render(<Home />);
   fireEvent.click(screen.getAllByText("New project")[0]);
@@ -105,7 +118,19 @@ describe("Home albums", () => {
   });
 
   it("shows a centered empty state on the Albums tab", async () => {
-    vi.mocked(window.api.listProjects).mockResolvedValue([]);
+    // One project so the regular (tabbed) home renders — a fully empty library
+    // shows the zero-state experience instead.
+    vi.mocked(window.api.listProjects).mockResolvedValue([
+      {
+        slug: "napa",
+        title: "Birthday in Napa Valley",
+        platform: "reels",
+        status: "draft",
+        durationSec: 24.9,
+        assetCount: 3,
+        updatedAt: "2026-07-18T00:00:00Z",
+      },
+    ]);
     vi.mocked(window.api.listAlbums).mockResolvedValue([]);
     useEditor.setState({ view: "home", projects: [] });
     render(<Home />);

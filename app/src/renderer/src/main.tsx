@@ -6,6 +6,7 @@ import { useEditor } from "./store";
 import "./styles/tokens.css";
 import "./styles/fonts.css";
 import "./styles/ui.css";
+import "./styles/composer.css";
 import "./styles/editor.css";
 import "./styles.css";
 
