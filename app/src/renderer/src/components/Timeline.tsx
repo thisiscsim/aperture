@@ -1,5 +1,5 @@
 import { type DragEvent, type MouseEvent, useRef, useState } from "react";
-import { durationFrames, durationSeconds, MAX_TIMELINE_SEC, type Track } from "@reel/edl";
+import { durationFrames, durationSeconds, MAX_TIMELINE_SEC, type Asset, type Track } from "@reel/edl";
 import { useEditor } from "../store";
 import { addAssets, addTrack, renameTrack } from "../lib/edl-edit";
 import { pathsFrom } from "../lib/files";
@@ -24,7 +24,10 @@ import {
   round,
   type TextLike,
 } from "../lib/timeline-geometry";
-import { Button, Icon, IconButton, Menu, MenuItem, type IconName } from "./ui";
+import { Icon, IconButton, Menu, MenuItem, type IconName } from "./ui";
+
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 3;
 
 export function Timeline(): JSX.Element {
   const edl = useEditor((s) => s.edl);
@@ -40,6 +43,7 @@ export function Timeline(): JSX.Element {
 
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghost, setGhost] = useState<{ trackId: string; start: number; dur: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
   const dragging = useRef(false);
   const videoInput = useRef<HTMLInputElement>(null);
   const audioInput = useRef<HTMLInputElement>(null);
@@ -51,10 +55,11 @@ export function Timeline(): JSX.Element {
   if (!edl) return <section className="tl" />;
 
   const fps = edl.format.fps;
+  const pxPerSec = PX_PER_SEC * zoom;
   // Clamp so a corrupt/hostile EDL can never drive the tick loop or lane width
   // unbounded (schema bounds timings too; this is belt-and-braces).
   const dur = Math.min(Math.max(durationSeconds(edl), 6), MAX_TIMELINE_SEC);
-  const lanePx = dur * PX_PER_SEC;
+  const lanePx = dur * pxPerSec;
   const tracks = edl.tracks.filter((t): t is LaneTrack => t.type !== "caption");
 
   /* ---------- scrub / drag (unchanged mechanics) ---------- */
@@ -64,7 +69,7 @@ export function Timeline(): JSX.Element {
     const rect = e.currentTarget.getBoundingClientRect();
     const seekAt = (clientX: number) => {
       const x = clientX - rect.left - LABEL_W;
-      const sec = Math.min(dur, Math.max(0, x / PX_PER_SEC));
+      const sec = Math.min(dur, Math.max(0, x / pxPerSec));
       seek(Math.round(sec * fps));
     };
     seekAt(e.clientX);
@@ -108,7 +113,7 @@ export function Timeline(): JSX.Element {
     let lastX = e.clientX;
     const apply = () => {
       raf = 0;
-      const dSec = (lastX - startX) / PX_PER_SEC;
+      const dSec = (lastX - startX) / pxPerSec;
       if (dSec !== 0) moved = true;
       preview = computePreview(track.type, mode, orig, dSec, assetDur);
       setDrag({ clipId: clip.id, trackType: track.type, preview });
@@ -135,7 +140,7 @@ export function Timeline(): JSX.Element {
 
   const laneSec = (e: { clientX: number; currentTarget: EventTarget & HTMLElement }): number => {
     const rect = e.currentTarget.getBoundingClientRect();
-    return Math.max(0, (e.clientX - rect.left) / PX_PER_SEC);
+    return Math.max(0, (e.clientX - rect.left) / pxPerSec);
   };
 
   // Drag on an empty text lane sketches a new text clip.
@@ -160,7 +165,7 @@ export function Timeline(): JSX.Element {
       window.removeEventListener("mouseup", onUp);
       setGhost(null);
       // A plain click (no meaningful drag) just clears the selection.
-      if ((b - a) * PX_PER_SEC < 4) {
+      if ((b - a) * pxPerSec < 4) {
         select(null);
         setTimeout(() => (dragging.current = false), 0);
         return;
@@ -228,7 +233,7 @@ export function Timeline(): JSX.Element {
     });
   };
 
-  // Drops from the left rail (existing assets).
+  // Drops from the Assets tab (existing assets).
   const onAssetDrop = (e: DragEvent<HTMLDivElement>, track: LaneTrack) => {
     const raw = e.dataTransfer.getData(ASSET_MIME);
     if (!raw) return;
@@ -258,39 +263,59 @@ export function Timeline(): JSX.Element {
 
   const totalFrames = durationFrames(edl);
   const ticks: number[] = [];
-  for (let s = 0; s <= Math.ceil(dur); s += 5) ticks.push(s);
+  for (let s = 0; s <= Math.ceil(dur); s += 2) ticks.push(s);
+
+  const zoomBy = (factor: number) =>
+    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * factor * 100) / 100)));
 
   return (
     <section className="tl">
       <div className="tl-bar">
         <div className="tl-bar-side">
-          <LayerButton onAdd={(type) => updateEdl((d) => addTrack(d, type, undefined))} />
-        </div>
-        <div className="tl-bar-center">
+          <IconButton icon="step-back" label="Jump to start" onClick={() => seek(0)} className="tl-bar-btn" />
           <IconButton
-            icon="skip"
-            label="Jump to start"
-            onClick={() => seek(0)}
-            style={{ transform: "scaleX(-1)" }}
+            icon="step-forwards"
+            label="Jump to end"
+            onClick={() => seek(Math.max(0, totalFrames - 1))}
+            className="tl-bar-btn"
           />
-          <button
-            className="ui-icon-btn"
-            onClick={() => playerCtl?.toggle()}
-            title={playing ? "Pause (Space)" : "Play (Space)"}
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {playing ? <PauseGlyph /> : <Icon name="play-circle" size={16} />}
-          </button>
-          <IconButton icon="skip" label="Jump to end" onClick={() => seek(Math.max(0, totalFrames - 1))} />
+          <span className="tl-bar-divider" />
           <IconButton
             icon="volume-full"
             label={muted ? "Unmute" : "Mute"}
             onClick={toggleMuted}
+            className="tl-bar-btn"
             style={muted ? { opacity: 0.35 } : undefined}
           />
         </div>
-        <div className="tl-bar-side tl-time">
-          <TimeReadout fps={fps} dur={dur} />
+        <div className="tl-bar-center">
+          <button
+            className="ui-icon-btn tl-play"
+            onClick={() => playerCtl?.toggle()}
+            title={playing ? "Pause (Space)" : "Play (Space)"}
+            aria-label={playing ? "Pause" : "Play"}
+          >
+            {playing ? <PauseGlyph /> : <Icon name="play" size={20} />}
+          </button>
+          <span className="tl-time">
+            <TimeReadout fps={fps} dur={dur} />
+          </span>
+        </div>
+        <div className="tl-bar-side tl-bar-right">
+          <IconButton
+            icon="zoom-in"
+            label="Zoom in"
+            onClick={() => zoomBy(1.25)}
+            disabled={zoom >= ZOOM_MAX}
+            className="tl-bar-btn"
+          />
+          <IconButton
+            icon="zoom-out"
+            label="Zoom out"
+            onClick={() => zoomBy(1 / 1.25)}
+            disabled={zoom <= ZOOM_MIN}
+            className="tl-bar-btn"
+          />
         </div>
       </div>
 
@@ -300,16 +325,19 @@ export function Timeline(): JSX.Element {
             <div className="tl-ruler-gutter" />
             <div className="tl-ruler-ticks" style={{ width: lanePx }}>
               {ticks.map((s) => (
-                <div key={s} className="tl-tick" style={{ left: s * PX_PER_SEC }}>
-                  <span>{s}s</span>
+                <div key={s} className="tl-tick" style={{ left: s * pxPerSec }}>
+                  <span>{String(s).padStart(2, "0")}</span>
                 </div>
+              ))}
+              {ticks.slice(0, -1).map((s) => (
+                <span key={`d-${s}`} className="tl-tick-divider" style={{ left: (s + 1) * pxPerSec }} />
               ))}
             </div>
           </div>
 
           {tracks.map((track) => (
-            <div key={track.id} className="tl-row">
-              <TrackLabel
+            <div key={track.id} className={`tl-row tl-row-${track.type}`}>
+              <TrackGutter
                 track={track}
                 onRename={(name) => updateEdl((d) => renameTrack(d, track.id, name))}
                 onDelete={
@@ -339,7 +367,7 @@ export function Timeline(): JSX.Element {
                     <div
                       key={clip.id}
                       className={`tl-chip tl-chip-${track.type} ${selected ? "selected" : ""}`}
-                      style={{ left: geom.start * PX_PER_SEC, width: Math.max(14, geom.dur * PX_PER_SEC) }}
+                      style={{ left: geom.start * pxPerSec, width: Math.max(18, geom.dur * pxPerSec) }}
                       onMouseDown={(e) => startDrag(e, clip, track, "move")}
                       role="button"
                       tabIndex={0}
@@ -361,8 +389,7 @@ export function Timeline(): JSX.Element {
                         className="tl-chip-handle left"
                         onMouseDown={(e) => startDrag(e, clip, track, "left")}
                       />
-                      <Icon name={chipIcon(track.type)} size={12} />
-                      <span className="tl-chip-label">{labelOf(track.type, clip)}</span>
+                      <ChipBody track={track} clip={clip} slug={slug} />
                       <div
                         className="tl-chip-handle right"
                         onMouseDown={(e) => startDrag(e, clip, track, "right")}
@@ -373,7 +400,7 @@ export function Timeline(): JSX.Element {
                 {ghost && ghost.trackId === track.id && (
                   <div
                     className="tl-chip tl-chip-text ghost"
-                    style={{ left: ghost.start * PX_PER_SEC, width: Math.max(8, ghost.dur * PX_PER_SEC) }}
+                    style={{ left: ghost.start * pxPerSec, width: Math.max(8, ghost.dur * pxPerSec) }}
                   />
                 )}
                 {track.clips.length === 0 && !ghost && (
@@ -383,7 +410,13 @@ export function Timeline(): JSX.Element {
             </div>
           ))}
 
-          <Playhead fps={fps} />
+          <div className="tl-row tl-row-add">
+            <div className="tl-row-gutter">
+              <AddTrackButton onAdd={(type) => updateEdl((d) => addTrack(d, type, undefined))} />
+            </div>
+          </div>
+
+          <Playhead fps={fps} pxPerSec={pxPerSec} />
         </div>
       </div>
 
@@ -413,13 +446,59 @@ export function Timeline(): JSX.Element {
   );
 }
 
+/* ---------- chip content per track type ---------- */
+
+function ChipBody({
+  track,
+  clip,
+  slug,
+}: {
+  track: LaneTrack;
+  clip: AnyClip;
+  slug: string | null;
+}): JSX.Element {
+  if (track.type === "video") {
+    const edl = useEditor.getState().edl;
+    const asset = edl?.assets.find((a) => a.id === (clip as MediaLike & { assetId?: string }).assetId);
+    return <VideoChipMedia asset={asset} slug={slug} />;
+  }
+  if (track.type === "text") {
+    return <span className="tl-chip-label">{labelOf(track.type, clip)}</span>;
+  }
+  // Audio: decorative waveform bars (real peaks are a follow-up); the label
+  // stays for identification.
+  return (
+    <>
+      <span className="tl-chip-wave" aria-hidden />
+      <span className="tl-chip-label">{labelOf(track.type, clip)}</span>
+    </>
+  );
+}
+
+/** First-frame preview inside a video chip (proxy first when available). */
+function VideoChipMedia({ asset, slug }: { asset: Asset | undefined; slug: string | null }): JSX.Element {
+  if (!asset || !slug) return <span className="tl-chip-media tl-chip-media-empty" />;
+  if (asset.kind === "image") {
+    return <img className="tl-chip-media" src={`reel-asset://${slug}/${asset.src}`} alt="" />;
+  }
+  return (
+    <video
+      className="tl-chip-media"
+      src={`reel-asset://${slug}/${asset.proxySrc ?? asset.src}`}
+      muted
+      playsInline
+      preload="metadata"
+    />
+  );
+}
+
 // Leaf components that subscribe to currentFrame themselves, so playback (a
 // per-frame store write at 30fps) re-renders only the playhead + time readout
 // instead of the entire Timeline (every lane, chip, and tick).
-function Playhead({ fps }: { fps: number }): JSX.Element {
+function Playhead({ fps, pxPerSec }: { fps: number; pxPerSec: number }): JSX.Element {
   const currentSec = useEditor((s) => s.currentFrame) / fps;
   return (
-    <div className="tl-playhead" style={{ left: LABEL_W + currentSec * PX_PER_SEC }}>
+    <div className="tl-playhead" style={{ left: LABEL_W + currentSec * pxPerSec }}>
       <div className="tl-playhead-head" />
     </div>
   );
@@ -434,11 +513,11 @@ function TimeReadout({ fps, dur }: { fps: number; dur: number }): JSX.Element {
   );
 }
 
-/* ---------- layer button ---------- */
+/* ---------- add-track button (the gutter's "+" row) ---------- */
 
-function LayerButton({ onAdd }: { onAdd: (type: "video" | "text" | "audio") => void }): JSX.Element {
+function AddTrackButton({ onAdd }: { onAdd: (type: "video" | "text" | "audio") => void }): JSX.Element {
   const items: { type: "video" | "text" | "audio"; icon: IconName; label: string }[] = [
-    { type: "video", icon: "clapboard-wide", label: "Video layer" },
+    { type: "video", icon: "video-2", label: "Video layer" },
     { type: "text", icon: "text-motion", label: "Text layer" },
     { type: "audio", icon: "voice-high", label: "Audio layer" },
   ];
@@ -447,9 +526,9 @@ function LayerButton({ onAdd }: { onAdd: (type: "video" | "text" | "audio") => v
     <Menu
       popClassName="tl-layer-menu"
       trigger={(toggle) => (
-        <Button variant="ghost" size="sm" icon="form-square" onClick={toggle}>
-          Layer
-        </Button>
+        <button className="tl-gutter-btn" onClick={toggle} title="Add layer" aria-label="Add layer">
+          <Icon name="plus-medium" size={20} />
+        </button>
       )}
     >
       {items.map((i) => (
@@ -461,9 +540,9 @@ function LayerButton({ onAdd }: { onAdd: (type: "video" | "text" | "audio") => v
   );
 }
 
-/* ---------- track label ---------- */
+/* ---------- track gutter (icon per lane) ---------- */
 
-function TrackLabel({
+function TrackGutter({
   track,
   onRename,
   onDelete,
@@ -484,14 +563,17 @@ function TrackLabel({
 
   return (
     <div
-      className="tl-row-label"
+      className="tl-row-gutter"
+      title={`${name} — double-click to rename`}
       onDoubleClick={() => {
         setDraft(name);
         setEditing(true);
       }}
     >
-      <Icon name={chipIcon(track.type)} size={14} />
-      {editing ? (
+      <span className="tl-gutter-btn" aria-label={name}>
+        <Icon name={chipIcon(track.type)} size={20} />
+      </span>
+      {editing && (
         <input
           className="tl-rename"
           value={draft}
@@ -503,10 +585,6 @@ function TrackLabel({
             if (e.key === "Escape") setEditing(false);
           }}
         />
-      ) : (
-        <span className="name" title="Double-click to rename">
-          {name}
-        </span>
       )}
       {onDelete && !editing && (
         <button
@@ -530,16 +608,16 @@ function defaultName(track: Track): string {
 }
 
 function chipIcon(type: Track["type"]): IconName {
-  if (type === "video") return "clapboard-wide";
+  if (type === "video") return "video-2";
   if (type === "text") return "text-motion";
   return "voice-high";
 }
 
 function PauseGlyph(): JSX.Element {
   return (
-    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden>
-      <rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor" />
-      <rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor" />
+    <svg width={20} height={20} viewBox="0 0 20 20" fill="none" aria-hidden>
+      <rect x="4.5" y="3.5" width="4" height="13" rx="1.5" fill="currentColor" />
+      <rect x="11.5" y="3.5" width="4" height="13" rx="1.5" fill="currentColor" />
     </svg>
   );
 }

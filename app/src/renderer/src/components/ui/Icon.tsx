@@ -37,8 +37,10 @@ import inputForm from "../../assets/icons/input-form.svg?raw";
 import magicWand from "../../assets/icons/magic-wand.svg?raw";
 import moveFolder from "../../assets/icons/move-folder.svg?raw";
 import multiMedia from "../../assets/icons/multi-media.svg?raw";
+import play from "../../assets/icons/play.svg?raw";
 import playCircle from "../../assets/icons/play-circle.svg?raw";
 import plusLarge from "../../assets/icons/plus-large.svg?raw";
+import plusMedium from "../../assets/icons/plus-medium.svg?raw";
 import prompt from "../../assets/icons/prompt.svg?raw";
 import record from "../../assets/icons/record.svg?raw";
 import settingsGear from "../../assets/icons/settings-gear.svg?raw";
@@ -52,6 +54,9 @@ import stepForwards from "../../assets/icons/step-forwards.svg?raw";
 import textMotion from "../../assets/icons/text-motion.svg?raw";
 import threeD from "../../assets/icons/three-d.svg?raw";
 import trashCan from "../../assets/icons/trash-can.svg?raw";
+import video2 from "../../assets/icons/video-2.svg?raw";
+import zoomIn from "../../assets/icons/zoom-in.svg?raw";
+import zoomOut from "../../assets/icons/zoom-out.svg?raw";
 import verticalAlignCenter from "../../assets/icons/vertical-align-center.svg?raw";
 import verticalAlignLeft from "../../assets/icons/vertical-align-left.svg?raw";
 import verticalAlignRight from "../../assets/icons/vertical-align-right.svg?raw";
@@ -101,8 +106,10 @@ const ICONS = {
   "magic-wand": magicWand,
   "move-folder": moveFolder,
   "multi-media": multiMedia,
+  play,
   "play-circle": playCircle,
   "plus-large": plusLarge,
+  "plus-medium": plusMedium,
   prompt,
   record,
   "settings-gear": settingsGear,
@@ -116,6 +123,9 @@ const ICONS = {
   "text-motion": textMotion,
   "three-d": threeD,
   "trash-can": trashCan,
+  "video-2": video2,
+  "zoom-in": zoomIn,
+  "zoom-out": zoomOut,
   "vertical-align-center": verticalAlignCenter,
   "vertical-align-left": verticalAlignLeft,
   "vertical-align-right": verticalAlignRight,
