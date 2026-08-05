@@ -255,6 +255,34 @@ describe("submitCreate (session orchestration)", () => {
     expect(assistant.items.at(-1)).toMatchObject({ type: "status", icon: "error", label: "no clips" });
   });
 
+  it("a rejecting session:save (e.g. stale main without the handler) degrades to a log line", async () => {
+    vi.mocked(window.api.generateProject).mockResolvedValue({ ok: true });
+    vi.mocked(window.api.saveSession).mockRejectedValue(
+      new Error("No handler registered for 'session:save'"),
+    );
+    useEditor.setState({
+      edl,
+      slug: "demo",
+      view: "editor",
+      session: { version: 1, turns: [] },
+      sessionBusy: false,
+      notices: [],
+      reloadProject: () => {},
+    });
+
+    await useEditor.getState().submitCreate({ text: "go", settings });
+    // Let the fire-and-forget persistence promises settle.
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The run itself completed, nothing toasted, and the failure was logged.
+    expect(useEditor.getState().session?.turns).toHaveLength(2);
+    expect(useEditor.getState().notices).toHaveLength(0);
+    expect(window.api.logRenderer).toHaveBeenCalledWith(
+      "warn",
+      expect.stringContaining("session save failed"),
+    );
+  });
+
   it("applyCritiqueFixes marks the card applied and logs the autotune turn", async () => {
     vi.mocked(window.api.autoTune).mockResolvedValue({ ok: true });
     vi.mocked(window.api.saveSession).mockResolvedValue({ ok: true });

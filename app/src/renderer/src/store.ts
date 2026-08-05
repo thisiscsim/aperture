@@ -177,6 +177,25 @@ export interface ExportResult {
   error?: string;
 }
 
+/**
+ * Best-effort session persistence. The in-memory log is authoritative while a
+ * run streams; a failed write (disk error, or a stale main process without the
+ * session:save handler after an update) must degrade to a log line — not an
+ * unhandled rejection that toasts "Something failed" at the user mid-run.
+ */
+function persistSession(slug: string, session: Session): void {
+  void window.api
+    ?.saveSession(slug, session)
+    .then((res) => {
+      if (res && res.ok === false) {
+        void window.api?.logRenderer("warn", `session save failed: ${res.error ?? "unknown error"}`);
+      }
+    })
+    .catch((err) => {
+      void window.api?.logRenderer("warn", `session save failed: ${String(err)}`);
+    });
+}
+
 interface EditorState {
   view: View;
   projects: ProjectSummary[];
@@ -470,7 +489,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
     });
     session = appendAssistantTurn(session, mode);
     set({ session, sessionBusy: true, ...(mode === "generation" ? { generating: true } : {}) });
-    void window.api.saveSession(slug, session);
+    persistSession(slug, session);
 
     const prefix = mode === "generation" ? "generate" : "critique";
     const offPhase = window.api.onPhase(prefix, (phase) => {
@@ -534,12 +553,12 @@ export const useEditor = create<EditorState>()((set, get) => ({
         s = completeAssistantTurn(s, res.error ?? "The run failed.");
       }
       set({ session: s });
-      void window.api.saveSession(slug, s);
+      persistSession(slug, s);
     } catch (err) {
       if (get().slug === slug) {
         const s = completeAssistantTurn(get().session ?? emptySession(), String(err));
         set({ session: s });
-        void window.api.saveSession(slug, s);
+        persistSession(slug, s);
       }
     } finally {
       offPhase();
@@ -560,7 +579,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       label: "applying the suggested fixes",
     });
     set({ session, sessionBusy: true, autotuning: true });
-    void window.api.saveSession(slug, session);
+    persistSession(slug, session);
 
     const offPhase = window.api.onPhase("autotune", (phase) => {
       if (get().slug !== slug) return;
@@ -597,12 +616,12 @@ export const useEditor = create<EditorState>()((set, get) => ({
         s = completeAssistantTurn(s, res.error ?? "Couldn't apply the fixes.");
       }
       set({ session: s });
-      void window.api.saveSession(slug, s);
+      persistSession(slug, s);
     } catch (err) {
       if (get().slug === slug) {
         const s = completeAssistantTurn(get().session ?? emptySession(), String(err));
         set({ session: s });
-        void window.api.saveSession(slug, s);
+        persistSession(slug, s);
       }
     } finally {
       offPhase();
