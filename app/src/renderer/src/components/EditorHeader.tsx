@@ -1,7 +1,6 @@
 import { useEditor } from "../store";
 import { SettingsButton } from "./SettingsModal";
-import { Button, Icon, IconButton, Menu, MenuItem } from "./ui";
-import { VISUAL_STYLES, getVisualStyle } from "../styles/visual-styles";
+import { Button, Icon } from "./ui";
 
 export function EditorHeader(): JSX.Element {
   const edl = useEditor((s) => s.edl);
@@ -13,10 +12,6 @@ export function EditorHeader(): JSX.Element {
   const setExportPhase = useEditor((s) => s.setExportPhase);
   const finishExport = useEditor((s) => s.finishExport);
   const goHome = useEditor((s) => s.goHome);
-  const canUndo = useEditor((s) => s.edlPast.length > 0);
-  const canRedo = useEditor((s) => s.edlFuture.length > 0);
-  const undoEdl = useEditor((s) => s.undoEdl);
-  const redoEdl = useEditor((s) => s.redoEdl);
   const saveError = useEditor((s) => s.saveError);
 
   const onExport = async () => {
@@ -57,49 +52,12 @@ export function EditorHeader(): JSX.Element {
       </div>
 
       <div className="editor-header-actions">
-        <IconButton icon="step-back" label="Undo (⌘Z)" disabled={!canUndo} onClick={undoEdl} />
-        <IconButton icon="step-forwards" label="Redo (⇧⌘Z)" disabled={!canRedo} onClick={redoEdl} />
+        <SettingsButton labeled />
         <span className="editor-divider" />
-        <SettingsButton />
-        <span className="editor-divider" />
-        <PresetsMenu />
-        <span className="editor-divider" />
-        <Button variant="primary" size="sm" icon="share-os" onClick={onExport} disabled={exporting || !edl}>
-          {exporting ? "Exporting…" : "Export"}
+        <Button variant="tertiary" size="md" icon="share-os" onClick={onExport} disabled={exporting || !edl}>
+          {exporting ? "Exporting…" : "Share"}
         </Button>
       </div>
     </header>
-  );
-}
-
-function PresetsMenu(): JSX.Element {
-  const updateEdl = useEditor((s) => s.updateEdl);
-
-  const apply = (id: string) => {
-    const preset = getVisualStyle(id);
-    if (!preset) return;
-    updateEdl((d) => {
-      d.theme.stylePreset = preset.id;
-      d.theme.fontFamily = preset.fontFamily;
-      d.theme.palette = [...preset.palette];
-      d.theme.captionStyle = preset.captionStyle;
-    });
-  };
-
-  return (
-    <Menu
-      popClassName="presets-pop"
-      trigger={(toggle) => (
-        <Button variant="ghost" size="sm" icon="magic-wand" onClick={toggle}>
-          Presets
-        </Button>
-      )}
-    >
-      {VISUAL_STYLES.map((s) => (
-        <MenuItem key={s.id} hint={s.inspiration} onSelect={() => apply(s.id)}>
-          {s.name}
-        </MenuItem>
-      ))}
-    </Menu>
   );
 }

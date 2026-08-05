@@ -26,7 +26,8 @@ describe("view routing", () => {
       selectedClipId: "x",
       currentFrame: 42,
       edlPast: [edl],
-      rightTab: "critique",
+      panelTab: "assets",
+      session: { version: 1, turns: [] },
     });
     useEditor.getState().enterProject({ edl, slug: "demo", promptText: "hi" });
     expect(useEditor.getState()).toMatchObject({
@@ -35,7 +36,8 @@ describe("view routing", () => {
       promptText: "hi",
       selectedClipId: null,
       currentFrame: 0,
-      rightTab: "inspector",
+      panelTab: "create",
+      session: null,
     });
     expect(useEditor.getState().edl).toBe(edl);
     expect(useEditor.getState().edlPast).toHaveLength(0);
@@ -190,5 +192,89 @@ describe("autosave", () => {
     await vi.advanceTimersByTimeAsync(400);
     expect(useEditor.getState().dirty).toBe(false);
     expect(useEditor.getState().saveError).toBeNull();
+  });
+});
+
+describe("submitCreate (session orchestration)", () => {
+  const settings = {
+    mode: "generation" as const,
+    effort: "high" as const,
+    fastMode: false,
+    aspect: "9:16" as const,
+    durationSec: 12,
+    referenceMode: "literal" as const,
+  };
+
+  it("logs user + assistant turns, runs generation, and completes the turn", async () => {
+    vi.mocked(window.api.generateProject).mockResolvedValue({ ok: true });
+    vi.mocked(window.api.saveSession).mockResolvedValue({ ok: true });
+    useEditor.setState({
+      edl,
+      slug: "demo",
+      view: "editor",
+      session: { version: 1, turns: [] },
+      sessionBusy: false,
+      reloadProject: () => {},
+    });
+
+    await useEditor.getState().submitCreate({ text: "make it dreamy", settings });
+
+    const { session, sessionBusy, generating } = useEditor.getState();
+    expect(sessionBusy).toBe(false);
+    expect(generating).toBe(false);
+    expect(session?.turns).toHaveLength(2);
+    expect(session?.turns[0]).toMatchObject({ role: "user", text: "make it dreamy" });
+    const assistant = session?.turns[1];
+    expect(assistant?.role === "assistant" && assistant.pending).toBe(false);
+    // The empty EDL has no cut, so the first run is a fresh build (no adjust).
+    expect(window.api.generateProject).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({ durationSec: 12, effort: "high" }),
+    );
+    expect(vi.mocked(window.api.generateProject).mock.calls[0][1]?.adjust).toBeUndefined();
+    expect(window.api.saveSession).toHaveBeenCalled();
+  });
+
+  it("records a failed run as an error status on the assistant turn", async () => {
+    vi.mocked(window.api.generateProject).mockResolvedValue({ ok: false, error: "no clips" });
+    vi.mocked(window.api.saveSession).mockResolvedValue({ ok: true });
+    useEditor.setState({
+      edl,
+      slug: "demo",
+      view: "editor",
+      session: { version: 1, turns: [] },
+      sessionBusy: false,
+      reloadProject: () => {},
+    });
+
+    await useEditor.getState().submitCreate({ text: "go", settings });
+
+    const assistant = useEditor.getState().session?.turns[1];
+    if (assistant?.role !== "assistant") throw new Error("expected assistant turn");
+    expect(assistant.pending).toBe(false);
+    expect(assistant.items.at(-1)).toMatchObject({ type: "status", icon: "error", label: "no clips" });
+  });
+
+  it("passes adjust + notes when a cut already exists", async () => {
+    const cutEdl = parseEdl({
+      tracks: [{ id: "v", type: "video", clips: [{ id: "c1", assetId: "a", start: 0, in: 0, out: 4 }] }],
+    }).edl!;
+    vi.mocked(window.api.generateProject).mockResolvedValue({ ok: true });
+    vi.mocked(window.api.saveSession).mockResolvedValue({ ok: true });
+    useEditor.setState({
+      edl: cutEdl,
+      slug: "demo",
+      view: "editor",
+      session: { version: 1, turns: [] },
+      sessionBusy: false,
+      reloadProject: () => {},
+    });
+
+    await useEditor.getState().submitCreate({ text: "tighter hook", settings });
+
+    expect(window.api.generateProject).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({ adjust: true, notes: "tighter hook" }),
+    );
   });
 });

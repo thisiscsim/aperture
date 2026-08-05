@@ -154,24 +154,18 @@ export function HomeZero({ onCreated }: { onCreated: () => void }): JSX.Element 
       });
       onCreated();
 
-      // First generation starts immediately; the editor's canvas loader takes
-      // over. Runs through the store so it survives this component unmounting.
-      // Composer settings beyond aspect (effort, duration, reference mode)
-      // start flowing into the run when the session backend lands.
-      const store = useEditor.getState();
-      store.setGenerating(true);
-      window.api
-        .generateProject(slug)
-        .then(async (res) => {
-          await useEditor.getState().reloadProject();
-          if (!res.ok) {
-            useEditor.getState().pushNotice("error", `Generate failed: ${res.error ?? "unknown error"}`);
-          }
-        })
-        .catch((err) => {
-          useEditor.getState().pushNotice("error", `Generate failed: ${String(err)}`);
-        })
-        .finally(() => useEditor.getState().setGenerating(false));
+      // First generation starts immediately as the session's opening turn —
+      // the Create tab the user lands on shows it streaming. Runs through the
+      // store so it survives this component unmounting.
+      void useEditor.getState().submitCreate({
+        text: promptText.trim(),
+        settings,
+        attachments: refs.map((r) => ({
+          kind: "reference" as const,
+          name: r.name,
+          src: `references/${r.name}`,
+        })),
+      });
     } finally {
       setBusy(false);
     }

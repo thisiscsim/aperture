@@ -1,8 +1,19 @@
 import { create } from "zustand";
-import type { Edl, Meta } from "@reel/edl";
+import { parseCritique, type Edl, type Meta, type Session, type SessionAttachment } from "@reel/edl";
 import type { ProjectSummary } from "../../preload";
+import type { ComposerSettings } from "./lib/composer";
+import {
+  appendAssistantItem,
+  appendAssistantTurn,
+  appendUserTurn,
+  buildRunArgs,
+  completeAssistantTurn,
+  emptySession,
+  toSessionSettings,
+  upsertAssistantStatus,
+} from "./lib/session";
 
-export type RightTab = "inspector" | "style" | "critique";
+export type PanelTab = "create" | "references" | "assets";
 export type Theme = "dark" | "light";
 export type View = "home" | "editor";
 
@@ -13,10 +24,10 @@ export type PanelId = "left" | "right" | "timeline";
 /** Resize clamps: [min, max] px. Left/right are widths, timeline is height. */
 export const PANEL_LIMITS: Record<PanelId, [number, number]> = {
   left: [220, 440],
-  right: [240, 440],
+  right: [300, 480],
   timeline: [160, 440],
 };
-const PANEL_DEFAULTS: Record<PanelId, number> = { left: 300, right: 300, timeline: 240 };
+const PANEL_DEFAULTS: Record<PanelId, number> = { left: 300, right: 380, timeline: 240 };
 
 function initialPanelSizes(): Record<PanelId, number> {
   try {
@@ -182,8 +193,13 @@ interface EditorState {
 
   selectedClipId: string | null;
   currentFrame: number;
-  rightTab: RightTab;
+  panelTab: PanelTab;
   theme: Theme;
+
+  /** Create-tab conversation log (null until loaded for the open project). */
+  session: Session | null;
+  /** True while a Create-tab run (generation/critique) is in flight. */
+  sessionBusy: boolean;
   seek: (frame: number) => void;
   playing: boolean;
   muted: boolean;
@@ -233,7 +249,14 @@ interface EditorState {
   saveNow: () => Promise<void>;
   select: (id: string | null) => void;
   setCurrentFrame: (frame: number) => void;
-  setRightTab: (tab: RightTab) => void;
+  setPanelTab: (tab: PanelTab) => void;
+  loadSession: () => Promise<void>;
+  /** Submit a Create-tab turn: log it, run the mapped script, stream status. */
+  submitCreate: (input: {
+    text: string;
+    settings: ComposerSettings;
+    attachments?: SessionAttachment[];
+  }) => Promise<void>;
   setSeek: (fn: (frame: number) => void) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -278,8 +301,10 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   selectedClipId: null,
   currentFrame: 0,
-  rightTab: "inspector",
+  panelTab: "create",
   theme: initialTheme(),
+  session: null,
+  sessionBusy: false,
   seek: () => {},
   playing: false,
   muted: false,
@@ -313,7 +338,9 @@ export const useEditor = create<EditorState>()((set, get) => ({
       currentFrame: 0,
       playing: false,
       notices: [],
-      rightTab: "inspector",
+      panelTab: "create",
+      session: null,
+      sessionBusy: false,
     });
   },
   enterProject: (p) => {
@@ -334,7 +361,9 @@ export const useEditor = create<EditorState>()((set, get) => ({
       currentFrame: 0,
       playing: false,
       notices: [],
-      rightTab: "inspector",
+      panelTab: "create",
+      session: null,
+      sessionBusy: false,
       edlPast: [],
       edlFuture: [],
     });
@@ -407,9 +436,115 @@ export const useEditor = create<EditorState>()((set, get) => ({
         selectedClipId: clipExists(next, s.selectedClipId) ? s.selectedClipId : null,
       };
     }),
-  select: (id) => set({ selectedClipId: id, rightTab: id ? "inspector" : get().rightTab }),
+  select: (id) => set({ selectedClipId: id }),
   setCurrentFrame: (frame) => set({ currentFrame: frame }),
-  setRightTab: (tab) => set({ rightTab: tab }),
+  setPanelTab: (tab) => set({ panelTab: tab }),
+  loadSession: async () => {
+    const { slug } = get();
+    if (!slug) return;
+    try {
+      const res = await window.api.loadSession(slug);
+      // The project may have changed while the read was in flight.
+      if (get().slug === slug) set({ session: res.ok ? (res.session ?? emptySession()) : emptySession() });
+    } catch {
+      if (get().slug === slug) set({ session: emptySession() });
+    }
+  },
+  submitCreate: async ({ text, settings, attachments }) => {
+    const { slug, sessionBusy, edl } = get();
+    if (!slug || sessionBusy) return;
+
+    const mode = settings.mode;
+    const hasCut = Boolean(edl?.tracks.some((t) => t.type === "video" && t.clips.length > 0));
+    // A generation follow-up on an existing cut adjusts it; the first run
+    // builds from scratch. The prompt text rides along as follow-up notes.
+    const adjust = mode === "generation" && hasCut;
+
+    let session = appendUserTurn(get().session ?? emptySession(), {
+      text,
+      settings: toSessionSettings(settings),
+      attachments,
+    });
+    session = appendAssistantTurn(session, mode);
+    set({ session, sessionBusy: true, ...(mode === "generation" ? { generating: true } : {}) });
+    void window.api.saveSession(slug, session);
+
+    const prefix = mode === "generation" ? "generate" : "critique";
+    const offPhase = window.api.onPhase(prefix, (phase) => {
+      if (get().slug !== slug) return;
+      set({
+        session: upsertAssistantStatus(get().session ?? emptySession(), {
+          type: "status",
+          icon: "thinking",
+          label: phase,
+        }),
+      });
+    });
+    const startedAt = Date.now();
+
+    try {
+      const args = buildRunArgs(settings, { notes: adjust ? text : undefined, adjust });
+      const res =
+        mode === "generation"
+          ? await window.api.generateProject(slug, args)
+          : await window.api.runCritique(slug, args);
+      await get().reloadProject();
+      if (get().slug !== slug) return;
+
+      let s = get().session ?? emptySession();
+      if (res.ok) {
+        const secs = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        const took = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+        if (mode === "generation") {
+          s = upsertAssistantStatus(s, {
+            type: "status",
+            icon: "generated",
+            label: `Generated ${adjust ? "an updated" : "the first"} cut in ${took}`,
+          });
+          s = appendAssistantItem(s, {
+            type: "text",
+            text: "Done — the cut is on your timeline. Tell me what to change, or switch to Critique for a scored review.",
+          });
+        } else {
+          s = upsertAssistantStatus(s, {
+            type: "status",
+            icon: "critiqued",
+            label: `Critique completed in ${took}`,
+          });
+          const critique = parseCritique(await window.api.loadCritique(slug));
+          if (critique) {
+            s = appendAssistantItem(s, {
+              type: "critique-card",
+              score: critique.score,
+              verdict: critique.summary ?? "",
+              subscores: critique.subscores.map((sub) => ({
+                label: sub.label,
+                value: Math.round((sub.score / sub.max) * 100),
+              })),
+              fixes: critique.fixes.map((f) => f.fix),
+              applied: false,
+            });
+          }
+        }
+        s = completeAssistantTurn(s);
+      } else {
+        s = completeAssistantTurn(s, res.error ?? "The run failed.");
+      }
+      set({ session: s });
+      void window.api.saveSession(slug, s);
+    } catch (err) {
+      if (get().slug === slug) {
+        const s = completeAssistantTurn(get().session ?? emptySession(), String(err));
+        set({ session: s });
+        void window.api.saveSession(slug, s);
+      }
+    } finally {
+      offPhase();
+      if (get().slug === slug) {
+        set({ sessionBusy: false, ...(mode === "generation" ? { generating: false } : {}) });
+      }
+    }
+  },
   setSeek: (fn) => set({ seek: fn }),
   setTheme: (theme) => {
     withViewTransition(() => {

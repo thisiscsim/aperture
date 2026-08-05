@@ -88,8 +88,22 @@ describe("HomeZero", () => {
     expect(savedEdl.format).toMatchObject({ width: 1080, height: 1920 });
     expect(savedEdl.assets.map((a: { id: string }) => a.id)).toContain("beach");
 
-    await waitFor(() => expect(window.api.generateProject).toHaveBeenCalledWith("napa"));
+    // The first generation runs as the session's opening turn with composer args.
+    await waitFor(() =>
+      expect(window.api.generateProject).toHaveBeenCalledWith(
+        "napa",
+        expect.objectContaining({ durationSec: 12, effort: "high", referenceMode: "literal" }),
+      ),
+    );
     expect(onCreated).toHaveBeenCalled();
     expect(useEditor.getState().view).toBe("editor");
+    // The submitted prompt is logged as the session's first user turn.
+    await waitFor(() => {
+      const session = useEditor.getState().session;
+      expect(session?.turns[0]).toMatchObject({
+        role: "user",
+        text: "A day trip through Napa Valley. Make it dreamy.",
+      });
+    });
   });
 });
