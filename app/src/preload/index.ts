@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from "electron";
-import type { Benchmarks, Edl, Meta, StyleProfile } from "@reel/edl";
+import type { Benchmarks, Edl, Meta, Session, StyleProfile } from "@reel/edl";
+
+/** Composer inputs forwarded to a generate/critique run (sanitized in main). */
+export interface RunArgs {
+  notes?: string;
+  durationSec?: number;
+  effort?: "low" | "medium" | "high" | "ultra";
+  fastMode?: boolean;
+  referenceMode?: "literal" | "inspired";
+  adjust?: boolean;
+}
 
 /**
  * The full settings shape as written to disk. API-key fields are write-only
@@ -219,7 +229,14 @@ const api = {
   ): Promise<{ iter: number; score: number; delta: string; change: string }[]> =>
     ipcRenderer.invoke("autotune:results", slug),
   exportProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("export:start", slug),
-  generateProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("generate:start", slug),
+  generateProject: (slug: string, args?: RunArgs): Promise<ExportResult> =>
+    ipcRenderer.invoke("generate:start", slug, args),
+  loadSession: (slug: string): Promise<{ ok: boolean; session?: Session; error?: string }> =>
+    ipcRenderer.invoke("session:load", slug),
+  saveSession: (slug: string, session: Session): Promise<SaveResult> =>
+    ipcRenderer.invoke("session:save", slug, session),
+  benchmarkFromUrl: (slug: string, url: string): Promise<ImportFilesResult> =>
+    ipcRenderer.invoke("benchmark:fromUrl", slug, url),
   generateMode: (): Promise<{
     mode: "llm" | "baseline";
     provider: string;
@@ -229,7 +246,8 @@ const api = {
   }> => ipcRenderer.invoke("generate:mode"),
   transcribeProject: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("transcribe:start", slug),
   loadCritique: (slug: string): Promise<unknown> => ipcRenderer.invoke("critique:load", slug),
-  runCritique: (slug: string): Promise<ExportResult> => ipcRenderer.invoke("critique:run", slug),
+  runCritique: (slug: string, args?: RunArgs): Promise<ExportResult> =>
+    ipcRenderer.invoke("critique:run", slug, args),
   revealItem: (filePath: string): Promise<void> => ipcRenderer.invoke("shell:reveal", filePath),
   getAppInfo: (): Promise<{
     version: string;

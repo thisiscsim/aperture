@@ -51,3 +51,51 @@ export function resolveAudioSource(raw: string): ResolvedAudioSource {
   }
   return { ok: true, id: source.id, label: source.label, url: url.toString() };
 }
+
+/**
+ * Video sources for "paste a link and Aperture will find the related video"
+ * (benchmark import). Same yt-dlp download path, video-oriented allowlist —
+ * the social platforms whose posts creators benchmark against.
+ */
+const VIDEO_SOURCES: AudioSource[] = [
+  {
+    id: "youtube",
+    label: "YouTube",
+    matches: (u) => /(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(u.hostname),
+  },
+  {
+    id: "tiktok",
+    label: "TikTok",
+    matches: (u) => /(^|\.)tiktok\.com$/.test(u.hostname),
+  },
+  {
+    id: "instagram",
+    label: "Instagram",
+    matches: (u) => /(^|\.)instagram\.com$/.test(u.hostname),
+  },
+  {
+    id: "direct",
+    label: "Direct video URL",
+    matches: (u) => /\.(mp4|mov|webm|m4v)$/i.test(u.pathname),
+  },
+];
+
+export function resolveVideoSource(raw: string): ResolvedAudioSource {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return { ok: false, error: "That doesn't look like a URL." };
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return { ok: false, error: "Only http(s) links are supported." };
+  }
+  const source = VIDEO_SOURCES.find((s) => s.matches(url));
+  if (!source) {
+    return {
+      ok: false,
+      error: "Unsupported source — paste a YouTube, TikTok, or Instagram link, or a direct video URL.",
+    };
+  }
+  return { ok: true, id: source.id, label: source.label, url: url.toString() };
+}

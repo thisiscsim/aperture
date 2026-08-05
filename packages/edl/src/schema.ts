@@ -380,3 +380,78 @@ export const CritiqueSchema = z.object({
   benchmarksUsed: z.boolean().optional(),
   summary: z.string().max(2000).optional(),
 });
+
+/* ------------------------------------------------------------------ */
+/* Create-session log (projects/<slug>/session.json)                   */
+/* ------------------------------------------------------------------ */
+
+/** Composer settings captured with a user turn — the run's inputs. */
+export const SessionSettingsSchema = z.object({
+  mode: z.enum(["generation", "critique"]).default("generation"),
+  effort: z.enum(["low", "medium", "high", "ultra"]).default("high"),
+  fastMode: z.boolean().default(false),
+  aspect: z.enum(["9:16", "1:1", "4:3", "16:9", "4:5"]).default("9:16"),
+  durationSec: z.number().finite().positive().max(600).default(12),
+  referenceMode: z.enum(["literal", "inspired"]).default("literal"),
+});
+
+/** Media attached to a user turn (references, benchmark videos). */
+export const SessionAttachmentSchema = z.object({
+  kind: z.enum(["reference", "benchmark"]),
+  name: z.string().max(256),
+  /** Project-relative path once imported (e.g. "references/clip.mp4"). */
+  src: RelativePathSchema.optional(),
+});
+
+/** One block inside an assistant turn — text, a status line, thumbnails, or a critique card. */
+export const SessionItemSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), text: z.string().max(8000) }),
+  z.object({
+    type: z.literal("status"),
+    icon: z.enum(["thinking", "generated", "critiqued", "benchmarks", "error"]).default("thinking"),
+    label: z.string().max(500),
+  }),
+  z.object({
+    type: z.literal("thumbnails"),
+    srcs: z.array(RelativePathSchema).max(24).default([]),
+  }),
+  z.object({
+    type: z.literal("critique-card"),
+    score: z.number().finite().min(0).max(100),
+    verdict: z.string().max(2000).default(""),
+    subscores: z
+      .array(z.object({ label: z.string().max(128), value: z.number().finite().min(0).max(100) }))
+      .max(20)
+      .default([]),
+    fixes: z.array(z.string().max(2000)).max(50).default([]),
+    /** Set once "Apply the suggested changes" has run. */
+    applied: z.boolean().default(false),
+  }),
+]);
+
+export const SessionTurnSchema = z.discriminatedUnion("role", [
+  z.object({
+    role: z.literal("user"),
+    at: z.string().max(64),
+    text: z.string().max(8000).default(""),
+    settings: SessionSettingsSchema.optional(),
+    attachments: z.array(SessionAttachmentSchema).max(24).default([]),
+  }),
+  z.object({
+    role: z.literal("assistant"),
+    at: z.string().max(64),
+    agent: z.enum(["generation", "critique"]).default("generation"),
+    items: z.array(SessionItemSchema).max(64).default([]),
+    /** True while the run streams; cleared (or flipped to an error item) on completion. */
+    pending: z.boolean().default(false),
+  }),
+]);
+
+/**
+ * The Create tab's conversation log. App-owned (not agent-written), but
+ * validated like every project file since it lives in a shareable folder.
+ */
+export const SessionSchema = z.object({
+  version: z.literal(1).default(1),
+  turns: z.array(SessionTurnSchema).max(500).default([]),
+});
