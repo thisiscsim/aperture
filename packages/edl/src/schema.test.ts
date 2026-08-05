@@ -6,7 +6,9 @@ import {
   parseCritique,
   parseEdl,
   parseMeta,
+  parseSession,
   parseStyleProfile,
+  SessionSchema,
 } from "@reel/edl";
 
 describe("parseEdl", () => {
@@ -234,5 +236,94 @@ describe("sidecar parsers", () => {
 
   it("parseBenchmarks defaults", () => {
     expect(parseBenchmarks({})).toMatchObject({ count: 0, videos: [], distribution: {} });
+  });
+});
+
+describe("session log", () => {
+  it("parseSession degrades corrupt/missing input to an empty session", () => {
+    expect(parseSession(null)).toEqual({ version: 1, turns: [] });
+    expect(parseSession("garbage")).toEqual({ version: 1, turns: [] });
+    expect(parseSession({ version: 2, turns: [] })).toEqual({ version: 1, turns: [] });
+  });
+
+  it("accepts a full generation + critique exchange with defaults", () => {
+    const session = parseSession({
+      turns: [
+        {
+          role: "user",
+          at: "2026-08-04T00:00:00Z",
+          text: "Create a 45-second vertical video",
+          settings: { mode: "generation", durationSec: 45 },
+          attachments: [{ kind: "reference", name: "ref.mp4", src: "references/ref.mp4" }],
+        },
+        {
+          role: "assistant",
+          at: "2026-08-04T00:00:05Z",
+          agent: "generation",
+          items: [
+            { type: "text", text: "I'll create a 45-second vertical video." },
+            { type: "status", icon: "generated", label: "Generated first cut in 3m 47s" },
+            { type: "thumbnails", srcs: ["assets/a.mp4"] },
+            {
+              type: "critique-card",
+              score: 62,
+              verdict: "Readable hook, silence limits it.",
+              subscores: [{ label: "Hook", value: 60 }],
+              fixes: ["Add a trending audio bed"],
+            },
+          ],
+        },
+      ],
+    });
+    expect(session.turns).toHaveLength(2);
+    const user = session.turns[0];
+    expect(user.role === "user" && user.settings?.effort).toBe("high");
+    const assistant = session.turns[1];
+    expect(assistant.role === "assistant" && assistant.pending).toBe(false);
+    expect(
+      assistant.role === "assistant" &&
+        assistant.items[3].type === "critique-card" &&
+        assistant.items[3].applied,
+    ).toBe(false);
+  });
+
+  it("rejects hostile input: traversal thumbnails, absolute attachment paths, oversize logs", () => {
+    const traversal = SessionSchema.safeParse({
+      turns: [
+        {
+          role: "assistant",
+          at: "now",
+          items: [{ type: "thumbnails", srcs: ["../../etc/passwd"] }],
+        },
+      ],
+    });
+    expect(traversal.success).toBe(false);
+
+    const absolute = SessionSchema.safeParse({
+      turns: [
+        {
+          role: "user",
+          at: "now",
+          attachments: [{ kind: "reference", name: "x", src: "/etc/passwd" }],
+        },
+      ],
+    });
+    expect(absolute.success).toBe(false);
+
+    const oversize = SessionSchema.safeParse({
+      turns: Array.from({ length: 501 }, () => ({ role: "user", at: "now", text: "hi" })),
+    });
+    expect(oversize.success).toBe(false);
+
+    const infiniteScore = SessionSchema.safeParse({
+      turns: [
+        {
+          role: "assistant",
+          at: "now",
+          items: [{ type: "critique-card", score: Number.POSITIVE_INFINITY }],
+        },
+      ],
+    });
+    expect(infiniteScore.success).toBe(false);
   });
 });

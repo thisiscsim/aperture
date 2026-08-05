@@ -1,5 +1,12 @@
-import { BenchmarksSchema, CritiqueSchema, EdlSchema, MetaSchema, StyleProfileSchema } from "./schema.js";
-import type { Benchmarks, Critique, Edl, Meta, StyleProfile, Track } from "./types.js";
+import {
+  BenchmarksSchema,
+  CritiqueSchema,
+  EdlSchema,
+  MetaSchema,
+  SessionSchema,
+  StyleProfileSchema,
+} from "./schema.js";
+import type { Benchmarks, Critique, Edl, Meta, Session, StyleProfile, Track } from "./types.js";
 
 export * from "./schema.js";
 export * from "./types.js";
@@ -49,6 +56,15 @@ export function parseBenchmarks(input: unknown): Benchmarks {
 export function parseCritique(input: unknown): Critique | null {
   const result = CritiqueSchema.safeParse(input);
   return result.success ? result.data : null;
+}
+
+/**
+ * Parse + validate (with defaults) a session.json conversation log. A corrupt
+ * file degrades to an empty session rather than blocking the Create tab.
+ */
+export function parseSession(input: unknown): Session {
+  const result = SessionSchema.safeParse(input ?? {});
+  return result.success ? result.data : { version: 1, turns: [] };
 }
 
 /** Total duration in seconds = the latest end time across all tracks/clips. */

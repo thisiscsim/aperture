@@ -138,14 +138,12 @@ function formatLabel(baselineJson) {
   }
 }
 
-function buildPrompt(baselineJson, promptMd, profile) {
-  return [
-    `You are an expert short-form (${formatLabel(baselineJson)}) video editor.`,
-    "Refine the BASELINE edit decision list (edl.json) into a polished first cut that closely matches the creator's STYLE.",
-    "",
-    "Return ONLY a single JSON object — the complete updated edl.json. No prose, no code fences.",
-    "",
-    "Rules:",
+function buildPrompt(baselineJson, promptMd, profile, run = {}) {
+  const { notes, durationTarget, refsMode, adjust } = run;
+  const task = adjust
+    ? "Adjust the CURRENT cut (edl.json) per the FOLLOW-UP NOTES while keeping everything that already works."
+    : "Refine the BASELINE edit decision list (edl.json) into a polished first cut that closely matches the creator's STYLE.";
+  const rules = [
     "- Keep the exact same shape/keys as the baseline (it is already schema-valid).",
     "- Only use assets that exist in the baseline `assets` array (same `id` and `src`).",
     "- Keep every audio track and its clips from the baseline (music bed, voiceover) — never remove or silence them unless the CREATOR PROMPT explicitly asks.",
@@ -155,16 +153,43 @@ function buildPrompt(baselineJson, promptMd, profile) {
     "- Set theme.palette, theme.fontFamily, theme.captionStyle, and theme.grade to match the STYLE.",
     "- Respect theme.safeMargins; keep captions/text out of platform UI zones.",
     "- Mirror the STYLE's pacing, hook, transitions, and text treatment as closely as the available clips allow.",
+  ];
+  if (durationTarget) {
+    rules.push(`- Target a total duration of about ${durationTarget}s (within ±10%).`);
+  }
+  if (refsMode === "literal") {
+    rules.push(
+      "- Treat the STYLE exemplars as a literal template: mirror their beats and structure closely.",
+    );
+  } else if (refsMode === "inspired") {
+    rules.push(
+      "- Use the STYLE as inspiration only: capture the vibe, pacing, and palette without copying beats.",
+    );
+  }
+  const sections = [
+    `You are an expert short-form (${formatLabel(baselineJson)}) video editor.`,
+    task,
+    "",
+    "Return ONLY a single JSON object — the complete updated edl.json. No prose, no code fences.",
+    "",
+    "Rules:",
+    ...rules,
     "",
     "=== CREATOR PROMPT (prompt.md) ===",
     promptMd || "(none)",
+  ];
+  if (notes) {
+    sections.push("", "=== FOLLOW-UP NOTES (the user's latest request — prioritize these) ===", notes);
+  }
+  sections.push(
     "",
     "=== STYLE (learned from the creator's reference videos) ===",
     styleBlock(profile),
     "",
-    "=== BASELINE edl.json ===",
+    adjust ? "=== CURRENT edl.json ===" : "=== BASELINE edl.json ===",
     baselineJson,
-  ].join("\n");
+  );
+  return sections.join("\n");
 }
 
 async function main() {
@@ -175,21 +200,41 @@ async function main() {
     process.exit(3);
   }
 
+  // Composer inputs (all optional): follow-up notes, a duration target, how to
+  // apply references, and adjust mode (edit the current cut instead of
+  // rebuilding the baseline).
+  const notes = arg("notes");
+  const durationTarget = Number(arg("duration")) || null;
+  const refsMode = arg("refs-mode");
+  const adjustRequested = process.argv.includes("--adjust");
+
   const projectDir = resolveProjectDir(repoRoot, slug);
   const edlPath = path.join(projectDir, "edl.json");
 
-  // 1) Deterministic baseline (probes clips, writes a valid edl.json skeleton).
-  console.log("PHASE assembling baseline");
-  // process.execPath is a system node when run via CLI, or Electron's bundled
-  // node when spawned by the app (ELECTRON_RUN_AS_NODE is inherited) — so this
-  // works in a packaged app with no `node` on PATH.
-  const baseline = spawnSync(process.execPath, [path.join(__dirname, "analyze.mjs"), "--slug", slug], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-  if (baseline.status !== 0) {
-    console.error(`ERROR baseline assembly failed: ${baseline.stderr || baseline.status}`);
-    process.exit(2);
+  // Adjust mode only makes sense when a cut with video clips already exists;
+  // otherwise fall through to the normal baseline path.
+  const currentEdl = readJsonMaybe(edlPath);
+  const hasCut = Boolean(
+    currentEdl?.tracks?.some((t) => t?.type === "video" && Array.isArray(t.clips) && t.clips.length > 0),
+  );
+  const adjust = adjustRequested && hasCut;
+
+  if (adjust) {
+    console.log("PHASE adjusting the current cut");
+  } else {
+    // 1) Deterministic baseline (probes clips, writes a valid edl.json skeleton).
+    console.log("PHASE assembling baseline");
+    // process.execPath is a system node when run via CLI, or Electron's bundled
+    // node when spawned by the app (ELECTRON_RUN_AS_NODE is inherited) — so this
+    // works in a packaged app with no `node` on PATH.
+    const baseline = spawnSync(process.execPath, [path.join(__dirname, "analyze.mjs"), "--slug", slug], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    if (baseline.status !== 0) {
+      console.error(`ERROR baseline assembly failed: ${baseline.stderr || baseline.status}`);
+      process.exit(2);
+    }
   }
 
   const baselineJson = readMaybe(edlPath);
@@ -216,7 +261,7 @@ async function main() {
   );
 
   const llm = resolveModel();
-  const base = buildPrompt(baselineJson, promptMd, profile);
+  const base = buildPrompt(baselineJson, promptMd, profile, { notes, durationTarget, refsMode, adjust });
   let prompt = base;
   let edl = null;
   let lastError = "";

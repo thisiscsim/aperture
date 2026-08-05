@@ -15,6 +15,11 @@ import type {
   GradeSchema,
   MetaSchema,
   SafeMarginsSchema,
+  SessionAttachmentSchema,
+  SessionItemSchema,
+  SessionSchema,
+  SessionSettingsSchema,
+  SessionTurnSchema,
   StyleExemplarSchema,
   StyleProfileSchema,
   SubScoreSchema,
@@ -61,3 +66,9 @@ export type BenchmarkMetric = z.infer<typeof BenchmarkMetricSchema>;
 export type BenchmarkCompare = z.infer<typeof BenchmarkCompareSchema>;
 export type SubScore = z.infer<typeof SubScoreSchema>;
 export type Critique = z.infer<typeof CritiqueSchema>;
+
+export type Session = z.infer<typeof SessionSchema>;
+export type SessionTurn = z.infer<typeof SessionTurnSchema>;
+export type SessionItem = z.infer<typeof SessionItemSchema>;
+export type SessionSettings = z.infer<typeof SessionSettingsSchema>;
+export type SessionAttachment = z.infer<typeof SessionAttachmentSchema>;

@@ -18,7 +18,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
-import { resolveAudioSource } from "./audio-sources";
+import { resolveAudioSource, resolveVideoSource } from "./audio-sources";
 import {
   assertSlug,
   assetKindFor,
@@ -51,7 +51,10 @@ import {
   parseEdl,
   parseEdlOrThrow,
   parseMeta,
+  parseSession,
   parseStyleProfile,
+  type Session,
+  SessionSchema,
   type StyleProfile,
 } from "@reel/edl";
 
@@ -1146,6 +1149,80 @@ async function importAudioFromUrl(
   }
 }
 
+/**
+ * Download a video from an allowlisted URL (yt-dlp) and import it into a
+ * project subfolder — the "paste a link and Aperture finds the video" path
+ * for benchmark references. Mirrors importAudioFromUrl's hardening: pinned
+ * binary, size cap, hard timeout, tmp cleanup.
+ */
+async function importVideoFromUrl(
+  slug: string,
+  rawUrl: string,
+  into: "benchmarks" | "references",
+  event: IpcMainInvokeEvent,
+): Promise<{ ok: boolean; files: string[]; error?: string }> {
+  const source = resolveVideoSource(rawUrl);
+  if (!source.ok) return { ok: false, files: [], error: source.error };
+  const send = (channel: string, value: unknown) => {
+    if (!event.sender.isDestroyed()) event.sender.send(channel, value);
+  };
+  let tmp: string | null = null;
+  try {
+    if (!existsSync(YTDLP_BIN)) send("videourl:phase", "getting the downloader (first run)");
+    const bin = await ensureYtDlp();
+    tmp = mkdtempSync(join(tmpdir(), "aperture-video-"));
+    send("videourl:phase", `fetching from ${source.label}`);
+
+    const args = [
+      "--no-playlist",
+      "--no-warnings",
+      "--newline",
+      "--max-filesize",
+      "500m",
+      "-f",
+      "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
+      "--merge-output-format",
+      "mp4",
+      "--ffmpeg-location",
+      ffmpegPath as string,
+      "-o",
+      join(tmp, "%(title).120B.%(ext)s"),
+      source.url,
+    ];
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(bin, args);
+      let stderr = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        const m = chunk.toString().match(/\[download\]\s+([\d.]+)%/);
+        if (m) send("videourl:progress", Math.round(Number(m[1])));
+      });
+      child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error("timed out after 5 minutes"));
+      }, 300_000);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        if (code === 0) resolve();
+        else reject(new Error(stderr.trim().split("\n").pop() || `downloader exited with code ${code}`));
+      });
+      child.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+
+    const produced = readdirSync(tmp).find((f) => assetKindFor(f) === "video");
+    if (!produced) return { ok: false, files: [], error: "The link didn't yield a video file." };
+    send("videourl:phase", "importing");
+    return importInto(slug, into, [join(tmp, produced)]);
+  } catch (err) {
+    return { ok: false, files: [], error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (tmp) rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 function importInto(
   slug: string,
   sub: string,
@@ -1175,6 +1252,7 @@ function runScriptArgs(
   args: string[],
   event: IpcMainInvokeEvent,
   channelPrefix: string,
+  envOverrides: Record<string, string> = {},
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
   return new Promise((resolve) => {
     const runLog = openScriptLog(channelPrefix);
@@ -1184,7 +1262,7 @@ function runScriptArgs(
     // this also lets nested spawns reuse process.execPath.
     const child = spawn(process.execPath, [scriptPath, ...args], {
       cwd: REPO_ROOT,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      env: { ...process.env, ...envOverrides, ELECTRON_RUN_AS_NODE: "1" },
     });
     let output = "";
     let stderr = "";
@@ -1231,13 +1309,54 @@ function runScript(
   event: IpcMainInvokeEvent,
   channelPrefix: string,
   extraArgs: string[] = [],
+  envOverrides: Record<string, string> = {},
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
   // Engine scripts join the slug onto the projects dir themselves, so enforce
   // slug shape at this IPC boundary (same rule slugify produces).
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(slug)) {
     return Promise.resolve({ ok: false, error: "invalid project id" });
   }
-  return runScriptArgs(scriptPath, ["--slug", slug, ...extraArgs], event, channelPrefix);
+  return runScriptArgs(scriptPath, ["--slug", slug, ...extraArgs], event, channelPrefix, envOverrides);
+}
+
+/**
+ * Composer inputs a run can carry (renderer-supplied — sanitize every field).
+ * Effort maps onto the LLM layer's reasoning-effort env (per-run override of
+ * the setting; "ultra" rides the highest supported tier and fast mode drops
+ * to the lowest for latency).
+ */
+export interface RunArgs {
+  notes?: string;
+  durationSec?: number;
+  effort?: "low" | "medium" | "high" | "ultra";
+  fastMode?: boolean;
+  referenceMode?: "literal" | "inspired";
+  adjust?: boolean;
+}
+
+function sanitizeRunArgs(raw: unknown): { extraArgs: string[]; env: Record<string, string> } {
+  const extraArgs: string[] = [];
+  const env: Record<string, string> = {};
+  if (!raw || typeof raw !== "object") return { extraArgs, env };
+  const a = raw as Record<string, unknown>;
+  if (typeof a.notes === "string" && a.notes.trim()) {
+    extraArgs.push("--notes", a.notes.slice(0, 8000));
+  }
+  if (typeof a.durationSec === "number" && Number.isFinite(a.durationSec) && a.durationSec > 0) {
+    extraArgs.push("--duration", String(Math.min(600, Math.round(a.durationSec))));
+  }
+  if (a.referenceMode === "literal" || a.referenceMode === "inspired") {
+    extraArgs.push("--refs-mode", a.referenceMode);
+  }
+  if (a.adjust === true) extraArgs.push("--adjust");
+  if (a.fastMode === true) {
+    env["APERTURE_REASONING_EFFORT"] = "low";
+  } else if (a.effort === "low" || a.effort === "medium" || a.effort === "high") {
+    env["APERTURE_REASONING_EFFORT"] = a.effort;
+  } else if (a.effort === "ultra") {
+    env["APERTURE_REASONING_EFFORT"] = "high";
+  }
+  return { extraArgs, env };
 }
 
 // ---- Global style library (styles/<id>/ : sources/, .frames/, profile.json) ----
@@ -1690,14 +1809,15 @@ app.whenReady().then(() => {
     runScript(llmInfo().configured ? AUTOTUNE_LLM_SCRIPT : AUTOTUNE_SCRIPT, slug, event, "autotune"),
   );
   // LLM critique writes critique.json; requires a configured model.
-  ipcMain.handle("critique:run", (event, slug: string) => {
+  ipcMain.handle("critique:run", (event, slug: string, rawArgs?: RunArgs) => {
     if (!llmInfo().configured) {
       return Promise.resolve({
         ok: false,
         error: "No model configured (set OPENAI_API_KEY in app/.env.local).",
       });
     }
-    return runScript(CRITIQUE_LLM_SCRIPT, slug, event, "critique");
+    const { extraArgs, env } = sanitizeRunArgs(rawArgs);
+    return runScript(CRITIQUE_LLM_SCRIPT, slug, event, "critique", extraArgs, env);
   });
   ipcMain.handle("autotune:results", (_event, slug: string) => {
     try {
@@ -1744,9 +1864,44 @@ app.whenReady().then(() => {
     return { ok: true, homeDir: result.filePaths[0] };
   });
   // Generate runs the LLM editor (reads prompt + style, crafts a real edit) when
-  // a model is configured; otherwise the deterministic offline baseline.
-  ipcMain.handle("generate:start", (event, slug: string) =>
-    runScript(llmInfo().configured ? GENERATE_LLM_SCRIPT : ANALYZE_SCRIPT, slug, event, "generate"),
+  // a model is configured; otherwise the deterministic offline baseline. The
+  // optional args object carries composer inputs (notes/duration/effort/...);
+  // the baseline script simply ignores flags it doesn't know.
+  ipcMain.handle("generate:start", (event, slug: string, rawArgs?: RunArgs) => {
+    const { extraArgs, env } = sanitizeRunArgs(rawArgs);
+    return runScript(
+      llmInfo().configured ? GENERATE_LLM_SCRIPT : ANALYZE_SCRIPT,
+      slug,
+      event,
+      "generate",
+      extraArgs,
+      env,
+    );
+  });
+  // ---- Create-session log (projects/<slug>/session.json) ----
+  ipcMain.handle("session:load", (_event, slug: string) => {
+    try {
+      const file = safeProjectPath(slug, "session.json");
+      if (!existsSync(file)) return { ok: true, session: parseSession(null) };
+      return { ok: true, session: parseSession(JSON.parse(readFileSync(file, "utf8"))) };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+  ipcMain.handle("session:save", (_event, slug: string, session: Session) => {
+    try {
+      // Renderer-supplied — validate before it lands next to shareable files.
+      const parsed = SessionSchema.safeParse(session);
+      if (!parsed.success) return { ok: false, error: "invalid session payload" };
+      writeFileAtomic(safeProjectPath(slug, "session.json"), `${JSON.stringify(parsed.data, null, 2)}\n`);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+  // Benchmark by link: yt-dlp fetches the post's video into benchmarks/.
+  ipcMain.handle("benchmark:fromUrl", (event, slug: string, url: string) =>
+    importVideoFromUrl(slug, url, "benchmarks", event),
   );
   ipcMain.handle("generate:mode", () => {
     const info = llmInfo();
