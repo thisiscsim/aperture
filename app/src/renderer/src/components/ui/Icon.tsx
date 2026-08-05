@@ -15,7 +15,9 @@ import circleQuestionmark from "../../assets/icons/circle-questionmark.svg?raw";
 import clapboardSparkle from "../../assets/icons/clapboard-sparkle.svg?raw";
 import clapboardWide from "../../assets/icons/clapboard-wide.svg?raw";
 import clock from "../../assets/icons/clock.svg?raw";
+import colorPalette from "../../assets/icons/color-palette.svg?raw";
 import ellipsis from "../../assets/icons/ellipsis.svg?raw";
+import fontStyle from "../../assets/icons/font-style.svg?raw";
 import finder from "../../assets/icons/finder.svg?raw";
 import folder from "../../assets/icons/folder.svg?raw";
 import folderAddLeft from "../../assets/icons/folder-add-left.svg?raw";
@@ -27,6 +29,8 @@ import horizontalAlignBottom from "../../assets/icons/horizontal-align-bottom.sv
 import horizontalAlignCenter from "../../assets/icons/horizontal-align-center.svg?raw";
 import horizontalAlignTop from "../../assets/icons/horizontal-align-top.svg?raw";
 import layoutAlignLeft from "../../assets/icons/layout-align-left.svg?raw";
+import layoutAllSides from "../../assets/icons/layout-all-sides.svg?raw";
+import layoutDashboard from "../../assets/icons/layout-dashboard.svg?raw";
 import lightningBolt from "../../assets/icons/lightning-bolt.svg?raw";
 import linear from "../../assets/icons/linear.svg?raw";
 import inputForm from "../../assets/icons/input-form.svg?raw";
@@ -75,6 +79,7 @@ const ICONS = {
   "clapboard-sparkle": clapboardSparkle,
   "clapboard-wide": clapboardWide,
   clock,
+  "color-palette": colorPalette,
   ellipsis,
   finder,
   folder,
@@ -86,7 +91,10 @@ const ICONS = {
   "horizontal-align-bottom": horizontalAlignBottom,
   "horizontal-align-center": horizontalAlignCenter,
   "horizontal-align-top": horizontalAlignTop,
+  "font-style": fontStyle,
   "layout-align-left": layoutAlignLeft,
+  "layout-all-sides": layoutAllSides,
+  "layout-dashboard": layoutDashboard,
   "lightning-bolt": lightningBolt,
   linear,
   "input-form": inputForm,

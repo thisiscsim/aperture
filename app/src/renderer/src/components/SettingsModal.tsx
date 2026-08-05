@@ -3,6 +3,7 @@ import { useEditor } from "../store";
 import { Button, Icon, IconButton } from "./ui";
 import { useEscapeKey } from "./ui/useEscapeKey";
 import { Divider, modelLabel, SettingRow, SettingSelect, Toggle } from "./settings/controls";
+import { VoiceoverTools } from "./Voiceover";
 import type { AppSettings, PublicSettings, VoiceSummary } from "../../../preload";
 
 type SettingsTab = "general" | "export" | "agent" | "voices";
@@ -433,6 +434,15 @@ function VoicesTab({
           <Divider />
 
           <SettingRow
+            title="Voiceover"
+            sub="Record with your mic, or synthesize a drafted narration into the open project"
+          >
+            <span />
+          </SettingRow>
+          <VoiceoverTools />
+          <Divider />
+
+          <SettingRow
             title="Clone a voice"
             sub="1-5 minutes of clean speech. Requires a paid ElevenLabs plan."
           >
@@ -514,11 +524,17 @@ function VoicesTab({
 }
 
 /** Gear button + modal in one — drop it into any bar (Home, editor header). */
-export function SettingsButton(): JSX.Element {
+export function SettingsButton({ labeled = false }: { labeled?: boolean }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <IconButton icon="settings-gear" label="Settings" onClick={() => setOpen(true)} />
+      {labeled ? (
+        <Button variant="tertiary" size="md" icon="settings-gear" onClick={() => setOpen(true)}>
+          Settings
+        </Button>
+      ) : (
+        <IconButton icon="settings-gear" label="Settings" onClick={() => setOpen(true)} />
+      )}
       {open && <SettingsModal onClose={() => setOpen(false)} />}
     </>
   );

@@ -1,8 +1,8 @@
 import { type CSSProperties, memo, useEffect } from "react";
 import { EditorHeader } from "./components/EditorHeader";
-import { LeftRail } from "./components/LeftRail";
+import { FloatingToolbar } from "./components/FloatingToolbar";
 import { PreviewStage } from "./components/PreviewStage";
-import { RightPanel } from "./components/RightPanel";
+import { EditorPanel } from "./components/panel/EditorPanel";
 import { Timeline } from "./components/Timeline";
 import { ExportModal } from "./components/ExportModal";
 import { Home } from "./components/Home";
@@ -13,9 +13,9 @@ import { cancelPendingSave, useEditor, type Notice, type PanelId } from "./store
 // an App re-render (e.g. a per-pixel panel drag) from re-rendering all of them
 // — most importantly the Remotion Player subtree inside PreviewStage.
 const EditorHeaderM = memo(EditorHeader);
-const LeftRailM = memo(LeftRail);
 const PreviewStageM = memo(PreviewStage);
-const RightPanelM = memo(RightPanel);
+const EditorPanelM = memo(EditorPanel);
+const FloatingToolbarM = memo(FloatingToolbar);
 const TimelineM = memo(Timeline);
 
 export function App(): JSX.Element {
@@ -145,7 +145,6 @@ export function App(): JSX.Element {
           className={`editor-shell ${panelsHidden ? "panels-hidden" : ""}`}
           style={
             {
-              "--left-rail-w": `${panelSizes.left}px`,
               "--right-panel-w": `${panelSizes.right}px`,
               "--tl-h": `${panelSizes.timeline}px`,
             } as CSSProperties
@@ -153,17 +152,14 @@ export function App(): JSX.Element {
         >
           <EditorHeaderM />
           <div className="editor-main">
-            {!panelsHidden && (
-              <>
-                <LeftRailM />
-                <PanelResizer panel="left" />
-              </>
-            )}
-            <PreviewStageM />
+            <div className="editor-stage-wrap">
+              <PreviewStageM />
+              {!panelsHidden && <FloatingToolbarM />}
+            </div>
             {!panelsHidden && (
               <>
                 <PanelResizer panel="right" />
-                <RightPanelM />
+                <EditorPanelM />
               </>
             )}
           </div>
