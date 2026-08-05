@@ -255,6 +255,46 @@ describe("submitCreate (session orchestration)", () => {
     expect(assistant.items.at(-1)).toMatchObject({ type: "status", icon: "error", label: "no clips" });
   });
 
+  it("applyCritiqueFixes marks the card applied and logs the autotune turn", async () => {
+    vi.mocked(window.api.autoTune).mockResolvedValue({ ok: true });
+    vi.mocked(window.api.saveSession).mockResolvedValue({ ok: true });
+    useEditor.setState({
+      edl,
+      slug: "demo",
+      view: "editor",
+      sessionBusy: false,
+      reloadProject: () => {},
+      session: {
+        version: 1,
+        turns: [
+          {
+            role: "assistant",
+            at: "now",
+            agent: "critique",
+            pending: false,
+            items: [
+              { type: "critique-card", score: 60, verdict: "", subscores: [], fixes: ["x"], applied: false },
+            ],
+          },
+        ],
+      },
+    });
+
+    await useEditor.getState().applyCritiqueFixes(0, 0);
+
+    expect(window.api.autoTune).toHaveBeenCalledWith("demo");
+    const s = useEditor.getState().session!;
+    expect(s.turns).toHaveLength(2);
+    const critiqueTurn = s.turns[0];
+    if (critiqueTurn.role !== "assistant" || critiqueTurn.items[0].type !== "critique-card") {
+      throw new Error("expected critique card");
+    }
+    expect(critiqueTurn.items[0].applied).toBe(true);
+    const tuneTurn = s.turns[1];
+    expect(tuneTurn.role === "assistant" && tuneTurn.pending).toBe(false);
+    expect(useEditor.getState().autotuning).toBe(false);
+  });
+
   it("passes adjust + notes when a cut already exists", async () => {
     const cutEdl = parseEdl({
       tracks: [{ id: "v", type: "video", clips: [{ id: "c1", assetId: "a", start: 0, in: 0, out: 4 }] }],

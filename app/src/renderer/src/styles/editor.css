@@ -576,6 +576,13 @@
   padding: 0 12px;
 }
 
+.create-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--ap-space-md);
+}
+
 .create-bubble {
   align-self: flex-end;
   max-width: 92%;
@@ -588,6 +595,33 @@
   color: var(--ap-color-foreground-primary);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.create-thumbs-user {
+  justify-content: flex-end;
+}
+
+/* "X has joined the session" separator between agents. */
+.create-joined {
+  display: flex;
+  align-items: center;
+  gap: var(--ap-space-md);
+}
+
+.create-joined-line {
+  flex: 1;
+  height: 0.5px;
+  background: var(--ap-color-border-secondary);
+}
+
+.create-joined-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ap-space-md);
+  font-size: var(--ap-font-size-xs);
+  line-height: 14px;
+  color: var(--ap-color-foreground-secondary);
+  white-space: nowrap;
 }
 
 .create-assistant {
@@ -691,6 +725,31 @@
   font-size: var(--ap-font-size-xs);
   line-height: 16px;
   color: var(--ap-color-foreground-secondary);
+}
+
+/* "Apply the suggested changes" widget (Figma HTR widget). */
+.create-critique-apply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ap-space-sm);
+  padding: 16px;
+  border-radius: var(--ap-radius-lg);
+  background: var(--ap-color-background-primary);
+  border: 1px solid var(--ap-color-border-primary);
+}
+
+.create-critique-apply-title {
+  font-size: var(--ap-font-size-sm);
+  font-weight: var(--ap-font-weight-medium);
+  line-height: 20px;
+  color: var(--ap-color-foreground-primary);
+}
+
+.create-critique-apply-sub {
+  font-size: var(--ap-font-size-xs);
+  line-height: 16px;
+  color: var(--ap-color-foreground-secondary);
+  margin-bottom: var(--ap-space-md);
 }
 
 .create-composer {

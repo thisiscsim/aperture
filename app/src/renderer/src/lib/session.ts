@@ -109,3 +109,17 @@ export function completeAssistantTurn(session: Session, error?: string): Session
     turns: [...session.turns.slice(0, -1), { ...last, items, pending: false }],
   };
 }
+
+/** Flip a critique card's `applied` flag once its fixes have been run. */
+export function markCritiqueApplied(session: Session, turnIndex: number, itemIndex: number): Session {
+  const turn = session.turns[turnIndex];
+  if (!turn || turn.role !== "assistant") return session;
+  const item = turn.items[itemIndex];
+  if (!item || item.type !== "critique-card") return session;
+  const items = [...turn.items];
+  items[itemIndex] = { ...item, applied: true };
+  return {
+    ...session,
+    turns: session.turns.map((t, i) => (i === turnIndex ? { ...turn, items } : t)),
+  };
+}
