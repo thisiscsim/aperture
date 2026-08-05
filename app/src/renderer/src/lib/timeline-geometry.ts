@@ -3,7 +3,7 @@ import type { Edl, Track } from "@reel/edl";
 // Pure geometry + placement helpers for the timeline, split out of the
 // Timeline component so they can be unit-tested without a DOM. No React here.
 
-export const LABEL_W = 150;
+export const LABEL_W = 68;
 export const PX_PER_SEC = 60;
 export const MIN_DUR = 0.2;
 export const ASSET_MIME = "application/x-aperture-asset";

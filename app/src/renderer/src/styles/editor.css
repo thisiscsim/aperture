@@ -1307,14 +1307,14 @@
   border-top: 0.5px solid var(--border-primary);
 }
 
-/* ---------- Timeline ---------- */
+/* ---------- Timeline (v1.5: filmstrip chips, icon gutter, 2s ruler) ---------- */
 .tl {
   height: var(--tl-h, 240px);
   flex: none;
   display: flex;
   flex-direction: column;
-  background: var(--background-primary);
-  border-top: 0.5px solid var(--border-primary);
+  background: var(--ap-color-background-primary);
+  border-top: 0.5px solid var(--ap-color-border-primary);
   user-select: none;
 }
 
@@ -1324,32 +1324,63 @@
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 0.5px solid var(--border-primary);
+  border-bottom: 0.5px solid var(--ap-color-border-primary);
 }
 
 .tl-bar-side {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: 0;
+}
+
+.tl-bar-right {
+  justify-content: flex-end;
+}
+
+.tl-bar-btn {
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+}
+
+.tl-bar-divider {
+  width: 1px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--ap-color-border-secondary);
+  margin: 0 var(--ap-space-sm);
+  flex: none;
 }
 
 .tl-bar-center {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
+}
+
+.tl-play {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  color: var(--ap-color-foreground-primary);
 }
 
 .tl-time {
-  justify-content: flex-end;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 16px;
   font-variant-numeric: tabular-nums;
-  color: var(--foreground-primary);
+  color: var(--ap-color-foreground-primary);
+  white-space: nowrap;
 }
 
-/* Opens upward above the transport bar. */
+.tl-time .muted {
+  color: var(--ap-color-foreground-secondary);
+}
+
+/* Opens upward above the add-track button. */
 .tl-layer-menu {
-  bottom: 34px;
+  bottom: calc(100% + 4px);
   left: 0;
   min-width: 160px;
 }
@@ -1368,20 +1399,20 @@
 
 .tl-ruler {
   display: flex;
-  height: 20px;
+  height: 24px;
   position: sticky;
   top: 0;
   z-index: 3;
-  background: var(--background-primary);
+  background: var(--ap-color-background-primary);
   cursor: ew-resize;
 }
 
 .tl-ruler-gutter {
-  width: 150px;
+  width: 68px;
   flex: none;
   position: sticky;
   left: 0;
-  background: var(--background-primary);
+  background: var(--ap-color-background-primary);
 }
 
 .tl-ruler-ticks {
@@ -1392,63 +1423,95 @@
   position: absolute;
   top: 0;
   height: 100%;
-  border-left: 1px solid var(--border-primary);
-  padding-left: 4px;
-  font-size: 9px;
-  line-height: 20px;
-  color: var(--foreground-muted);
+  display: flex;
+  align-items: center;
+  translate: -50% 0;
+  font-size: var(--ap-font-size-xs);
+  line-height: 16px;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--ap-color-foreground-secondary);
+  pointer-events: none;
+}
+
+.tl-tick-divider {
+  position: absolute;
+  top: 6px;
+  width: 1px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--ap-color-border-primary);
+  pointer-events: none;
 }
 
 .tl-row {
   display: flex;
-  align-items: center;
-  height: 40px;
+  align-items: stretch;
+  height: 48px;
+  border-bottom: 0.5px solid var(--ap-color-border-primary);
 }
 
-.tl-row-label {
-  width: 150px;
+.tl-row-video {
+  height: 72px;
+}
+
+.tl-row-add {
+  border-bottom: none;
+}
+
+.tl-row-gutter {
+  width: 68px;
   flex: none;
   position: sticky;
   left: 0;
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: var(--space-6);
-  height: 100%;
-  padding: 0 12px 0 16px;
-  background: var(--background-primary);
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--foreground-secondary);
+  justify-content: center;
+  background: var(--ap-color-background-primary);
 }
 
-.tl-row-label .name {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.tl-gutter-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--ap-radius-lg);
+  background: transparent;
+  color: var(--ap-color-foreground-secondary);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
-.tl-row-label:hover {
-  color: var(--foreground-primary);
+.tl-row-gutter:hover .tl-gutter-btn,
+button.tl-gutter-btn:hover {
+  background: var(--ap-color-background-secondary);
+  color: var(--ap-color-foreground-primary);
 }
 
 .tl-rename {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: var(--background-secondary);
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  z-index: 3;
+  border: 0.5px solid var(--ap-color-border-secondary);
+  border-radius: var(--ap-radius-md);
+  background: var(--ap-color-background-primary);
   padding: 2px 6px;
   font-family: var(--font-ui);
   font-size: 12px;
-  color: var(--foreground-primary);
+  color: var(--ap-color-foreground-primary);
   outline: none;
 }
 
 .tl-row-delete {
   display: none;
+  position: absolute;
+  right: 2px;
+  top: 2px;
   border: none;
   background: none;
   padding: 2px;
@@ -1456,83 +1519,116 @@
   cursor: pointer;
 }
 
-.tl-row-label:hover .tl-row-delete {
+.tl-row-gutter:hover .tl-row-delete {
   display: inline-flex;
 }
 
 .tl-row-delete:hover {
-  color: var(--foreground-primary);
+  color: var(--foreground-danger);
 }
 
 .tl-lane {
   position: relative;
-  height: 32px;
   flex: none;
-  border-radius: var(--radius-sm);
-  background: var(--background-page);
+  height: 100%;
 }
 
 .tl-lane-hint {
   position: sticky;
-  left: 162px;
+  left: 80px;
   display: inline-flex;
   align-items: center;
   height: 100%;
   padding: 0 10px;
   font-size: 10px;
-  color: var(--foreground-disabled);
+  color: var(--ap-color-foreground-disabled);
   pointer-events: none;
   white-space: nowrap;
 }
 
-/* Chips (action tokens) */
+/* Chips: gray card with inset media + pill trim handles (Figma HeaderWrap). */
 .tl-chip {
   position: absolute;
-  top: 3px;
-  bottom: 3px;
+  top: 4px;
+  bottom: 4px;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: 0 8px;
-  border-radius: var(--radius-sm);
-  background: var(--background-secondary);
-  border: 0.5px solid var(--border-primary);
-  color: var(--foreground-primary);
-  font-size: 11px;
-  line-height: 14px;
+  gap: var(--ap-space-sm);
+  padding: 6px 4px;
+  border-radius: var(--ap-radius-xl);
+  background: var(--ap-color-background-tertiary);
+  color: var(--ap-color-foreground-primary);
+  font-size: 12px;
+  line-height: 16px;
   cursor: grab;
   overflow: hidden;
 }
 
-/* Per-type chip tint (the markup emits tl-chip-video/-text/-audio; these were
-   defined as --action-* design tokens but never wired to a rule). */
-.tl-chip-video {
-  background: var(--action-video-bg);
-  border-color: var(--action-video-border);
-}
 .tl-chip-text {
-  background: var(--action-text-bg);
-  border-color: var(--action-text-border);
-}
-.tl-chip-audio {
-  background: var(--action-audio-bg);
-  border-color: var(--action-audio-border);
+  background: var(--ap-color-action-text-bg);
 }
 
-.tl-chip .icon {
-  flex: none;
-  color: var(--foreground-secondary);
+.tl-chip-text .tl-chip-handle {
+  background: color-mix(in srgb, var(--ap-color-action-text-border) 32%, transparent);
+}
+
+.tl-chip-audio {
+  background: var(--ap-color-action-audio-bg);
+}
+
+.tl-chip-audio .tl-chip-handle {
+  background: color-mix(in srgb, var(--ap-color-action-audio-border) 32%, transparent);
+}
+
+.tl-chip-media {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--ap-radius-lg);
+  pointer-events: none;
+  background: var(--ap-color-background-secondary);
+}
+
+.tl-chip-media-empty {
+  display: block;
+}
+
+.tl-chip-wave {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  border-radius: var(--ap-radius-sm);
+  background-image: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ap-color-action-audio-border) 55%, transparent) 0 2px,
+    transparent 2px 5px
+  );
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0 22%,
+    #000 22% 78%,
+    transparent 78% 100%
+  );
+  mask-image: linear-gradient(180deg, transparent 0 22%, #000 22% 78%, transparent 78% 100%);
+}
+
+.tl-chip-audio .tl-chip-label {
+  position: absolute;
+  left: 12px;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--ap-color-action-audio-border) 80%, var(--ap-color-foreground-primary));
 }
 
 .tl-chip-label {
+  padding: 0 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .tl-chip.selected {
-  border-color: var(--foreground-accent);
-  box-shadow: 0 0 0 1px var(--foreground-accent);
+  box-shadow: 0 0 0 1.5px var(--ap-color-foreground-accent);
 }
 
 .tl-chip.ghost {
@@ -1542,29 +1638,23 @@
 }
 
 .tl-chip-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 8px;
+  flex: none;
+  width: 4px;
+  height: min(32px, 70%);
+  border-radius: var(--ap-radius-pill);
+  background: color-mix(in srgb, var(--ap-color-foreground-secondary) 24%, transparent);
   cursor: ew-resize;
   z-index: 1;
-}
-
-.tl-chip-handle.left {
-  left: 0;
-}
-
-.tl-chip-handle.right {
-  right: 0;
+  transition: background 120ms ease;
 }
 
 .tl-chip-handle:hover {
-  background: color-mix(in srgb, var(--foreground-accent) 30%, transparent);
+  background: var(--ap-color-foreground-accent);
 }
 
 .tl-playhead {
   position: absolute;
-  top: 20px;
+  top: 24px;
   bottom: 0;
   width: 1px;
   background: var(--foreground-accent);
