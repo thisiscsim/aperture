@@ -28,7 +28,7 @@
 }
 
 .ui-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.24;
   cursor: not-allowed;
 }
 
@@ -549,8 +549,8 @@
 }
 
 .tile-new:hover {
-  border-color: var(--foreground-muted);
-  background: var(--background-secondary);
+  border-color: var(--ap-color-border-secondary);
+  background: var(--ap-color-background-tertiary);
   transform: translateY(-3px);
   transition:
     border-color 120ms ease,

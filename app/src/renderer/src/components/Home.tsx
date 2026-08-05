@@ -1,6 +1,5 @@
-import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useEditor } from "../store";
-import { addAssets } from "../lib/edl-edit";
 import { buildTiles, relativeTime, SORT_LABELS, type HomeSort } from "../lib/home";
 import { SettingsButton } from "./SettingsModal";
 import {
@@ -16,7 +15,6 @@ import {
   MenuSub,
   Modal,
   NewTile,
-  TextArea,
   Tile,
   TileThumb,
 } from "./ui";
@@ -92,21 +90,13 @@ export function Home(): JSX.Element {
         </div>
         <div className="home-header-actions">
           <SettingsButton />
-          <Button variant="primary" size="sm" icon="clapboard-wide" onClick={() => setCreating(true)}>
+          <Button variant="primary" size="md" onClick={() => setCreating(true)}>
             New project
           </Button>
         </div>
       </header>
 
       <main className="home-content">
-        <div className="home-hero">
-          <h1>Welcome to Aperture</h1>
-          <p>
-            Drop in your clips, describe in natural language, let our creative agent assemble a first cut,
-            refine to your needs and export to your socials.
-          </p>
-        </div>
-
         <div className="home-toolbar">
           {openAlbum ? (
             <Button variant="secondary" size="sm" onClick={() => setOpenAlbumId(null)}>
@@ -182,7 +172,7 @@ export function Home(): JSX.Element {
       </main>
 
       {creating && (
-        <NewProjectModal
+        <CreateProjectDialog
           onClose={() => setCreating(false)}
           onCreated={(slug) => {
             setCreating(false);
@@ -568,12 +558,11 @@ function MemberCoverCell({ slug }: { slug: string }): JSX.Element {
   return <AlbumCoverCell src={thumb} />;
 }
 
-interface StagedFile {
-  path: string;
-  name: string;
-}
-
-function NewProjectModal({
+/**
+ * v1.5 project creation is just a name — clips, references, and the prompt
+ * all live in the editor's Create tab now.
+ */
+function CreateProjectDialog({
   onClose,
   onCreated,
 }: {
@@ -581,158 +570,49 @@ function NewProjectModal({
   onCreated: (slug: string) => void;
 }): JSX.Element {
   const [title, setTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [files, setFiles] = useState<StagedFile[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
-
-  const stage = (list: FileList | File[]) => {
-    // Snapshot synchronously: a FileList is LIVE, and the caller resets the
-    // input right after this call — by the time React runs a deferred state
-    // updater the list would already be empty.
-    const picked: StagedFile[] = [];
-    for (const f of Array.from(list)) {
-      try {
-        const path = window.api.getPathForFile(f);
-        if (path) picked.push({ path, name: f.name });
-      } catch {
-        // not a disk-backed file; skip
-      }
-    }
-    if (picked.length === 0) return;
-    setFiles((prev) => {
-      const next = [...prev];
-      for (const p of picked) {
-        if (!next.some((s) => s.path === p.path)) next.push(p);
-      }
-      return next;
-    });
-  };
 
   const create = async () => {
     if (!title.trim() || busy) return;
-    setBusy("Creating project…");
+    setBusy(true);
     setError(null);
     try {
-      const res = await window.api.createProject({ title, prompt });
+      const res = await window.api.createProject({ title, prompt: "" });
       if (!res.ok || !res.slug) {
         setError(res.error ?? "Could not create project");
         return;
-      }
-      // Import the staged clips and register them in the fresh project's EDL
-      // so the editor opens with everything already in place.
-      if (files.length > 0) {
-        setBusy(`Importing ${files.length} clip${files.length === 1 ? "" : "s"}…`);
-        const imp = await window.api.importAssets(
-          res.slug,
-          files.map((f) => f.path),
-        );
-        if (imp.ok && imp.assets.length > 0) {
-          const proj = await window.api.loadProject(res.slug);
-          if (proj.ok && proj.edl) {
-            addAssets(proj.edl, imp.assets);
-            await window.api.saveEdl(res.slug, proj.edl);
-          }
-        }
       }
       onCreated(res.slug);
     } catch (err) {
       setError(String(err));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
   return (
     <Modal
-      title="New project"
+      title="Create a project"
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={!!busy}>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={create} disabled={!!busy || !title.trim()}>
-            {busy ?? "Create"}
+          <Button variant="primary" onClick={create} disabled={busy || !title.trim()}>
+            Create project
           </Button>
         </>
       }
     >
-      <Field label="Title">
-        <Input
-          autoFocus
-          value={title}
-          placeholder="e.g. Day in the life of startup engineer"
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && create()}
-        />
-      </Field>
-      <Field label="Clips">
-        <div
-          className={`upload-area ${dragOver ? "drag" : ""}`}
-          style={{ height: 96 }}
-          onClick={() => fileInput.current?.click()}
-          onDragOver={(e: DragEvent<HTMLDivElement>) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e: DragEvent<HTMLDivElement>) => {
-            e.preventDefault();
-            setDragOver(false);
-            if (e.dataTransfer.files.length) stage(e.dataTransfer.files);
-          }}
-        >
-          <span className="upload-title">
-            <Icon name="arrow-out-of-box" size={16} />
-            Upload clips
-          </span>
-          <span className="upload-sub">Drag and drop files here or click to upload</span>
-          <span className="upload-formats">MP4, MOV, HEIC, WebM, JPEGs, PNGs</span>
-        </div>
-        <input
-          ref={fileInput}
-          type="file"
-          accept="video/*,image/*"
-          multiple
-          hidden
-          onChange={(e) => {
-            if (e.target.files) stage(e.target.files);
-            e.target.value = "";
-          }}
-        />
-        {files.length > 0 && (
-          <div className="clip-list clip-list-capped" style={{ marginTop: 6 }}>
-            {files.map((f) => (
-              <div key={f.path} className="clip-row" title={f.path}>
-                <Icon name="multi-media" size={14} />
-                <span className="name">{f.name}</span>
-                <button
-                  className="clip-row-remove"
-                  title="Remove"
-                  aria-label={`Remove ${f.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFiles((prev) => prev.filter((s) => s.path !== f.path));
-                  }}
-                >
-                  <Icon name="trash-can" size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Field>
-      <Field label="What do you want to make?">
-        <TextArea
-          rows={4}
-          value={prompt}
-          placeholder="Describe the vibe, beats, hook, length, and any music or captions you want."
-          onChange={(e) => setPrompt(e.target.value)}
-        />
-      </Field>
+      <Input
+        autoFocus
+        value={title}
+        placeholder="e.g. Day in the life of startup engineer"
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && create()}
+      />
       {error && <p className="ui-form-error">{error}</p>}
     </Modal>
   );

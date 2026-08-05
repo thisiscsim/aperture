@@ -145,35 +145,28 @@ describe("Home albums", () => {
   });
 });
 
-describe("NewProjectModal clips staging", () => {
-  it("stages picked files as removable rows (snapshot survives the input reset)", async () => {
-    vi.mocked(window.api.getPathForFile).mockImplementation((f: File) => `/picked/${f.name}`);
-    const { container } = openDialog();
+describe("CreateProjectDialog", () => {
+  it("creates a project from just a name (clips + prompt now live in the editor)", async () => {
+    vi.mocked(window.api.createProject).mockResolvedValue({ ok: true, slug: "my-cut" });
+    openDialog();
 
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-    fireEvent.change(input, { target: { files: [new File(["x"], "beach.mp4", { type: "video/mp4" })] } });
+    // Create is disabled until a name is entered.
+    expect(screen.getByText("Create project").closest("button")).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText(/Day in the life/i), { target: { value: "My cut" } });
+    fireEvent.click(screen.getByText("Create project"));
 
-    expect(await screen.findByText("beach.mp4")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText("Remove beach.mp4"));
-    expect(screen.queryByText("beach.mp4")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.api.createProject).toHaveBeenCalledWith({ title: "My cut", prompt: "" }),
+    );
   });
 
-  it("creates without a platform and imports the staged clips", async () => {
-    vi.mocked(window.api.getPathForFile).mockImplementation((f: File) => `/picked/${f.name}`);
-    vi.mocked(window.api.createProject).mockResolvedValue({ ok: true, slug: "demo" });
-    vi.mocked(window.api.importAssets).mockResolvedValue({ ok: true, assets: [] });
-    const { container } = openDialog();
+  it("surfaces a creation error inside the dialog", async () => {
+    vi.mocked(window.api.createProject).mockResolvedValue({ ok: false, error: "disk full" });
+    openDialog();
 
     fireEvent.change(screen.getByPlaceholderText(/Day in the life/i), { target: { value: "My cut" } });
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-    fireEvent.change(input, { target: { files: [new File(["x"], "beach.mp4", { type: "video/mp4" })] } });
-    await screen.findByText("beach.mp4");
+    fireEvent.click(screen.getByText("Create project"));
 
-    fireEvent.click(screen.getByText("Create"));
-
-    await waitFor(() => expect(window.api.createProject).toHaveBeenCalled());
-    expect(window.api.createProject).toHaveBeenCalledWith({ title: "My cut", prompt: "" });
-    await waitFor(() => expect(window.api.importAssets).toHaveBeenCalledWith("demo", ["/picked/beach.mp4"]));
+    expect(await screen.findByText("disk full")).toBeInTheDocument();
   });
 });
