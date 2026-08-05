@@ -86,6 +86,8 @@ export function MenuItem({
   icon,
   leading,
   hint,
+  trailing,
+  selected,
   danger,
   closeOnSelect = true,
   onSelect,
@@ -96,6 +98,10 @@ export function MenuItem({
   leading?: ReactNode;
   /** Secondary line under the label (e.g. preset inspiration). */
   hint?: string;
+  /** Trailing node (e.g. a toggle); overrides the `selected` checkmark. */
+  trailing?: ReactNode;
+  /** Renders a trailing checkmark (single-choice menus). */
+  selected?: boolean;
   danger?: boolean;
   closeOnSelect?: boolean;
   onSelect?: () => void | Promise<void>;
@@ -109,6 +115,7 @@ export function MenuItem({
     <button
       className={cls}
       role="menuitem"
+      aria-checked={selected}
       onClick={(e) => {
         e.stopPropagation();
         if (closeOnSelect) ctx?.close();
@@ -125,6 +132,7 @@ export function MenuItem({
       ) : (
         <span className="menu-item-label">{children}</span>
       )}
+      {trailing ?? (selected ? <Icon name="checkmark" size={16} className="menu-item-check" /> : null)}
     </button>
   );
 }
