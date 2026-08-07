@@ -7,6 +7,7 @@ import { EditorPanel } from "./components/panel/EditorPanel";
 import { Timeline } from "./components/Timeline";
 import { ExportModal } from "./components/ExportModal";
 import { Home } from "./components/Home";
+import { removeClip } from "./lib/edl-edit";
 import { cancelPendingSave, useEditor, type Notice, type PanelId } from "./store";
 
 // The shell re-renders on panel resize, playback, notices, etc. These panels
@@ -81,6 +82,28 @@ export function App(): JSX.Element {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleTheme]);
+
+  // Delete/Backspace removes the selected timeline clip — searched by id
+  // across every layer, so agent-generated and hand-placed clips behave the
+  // same. Reads through getState at keypress time (selection/EDL stay fresh);
+  // text fields keep their native editing behavior.
+  useEffect(() => {
+    if (view !== "editor") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)
+        return;
+      const s = useEditor.getState();
+      const id = s.selectedClipId;
+      if (!id) return;
+      e.preventDefault();
+      s.updateEdl((d) => removeClip(d, id));
+      s.select(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view]);
 
   // Cmd+Z / Shift+Cmd+Z for EDL history. Text fields keep their native undo.
   useEffect(() => {
