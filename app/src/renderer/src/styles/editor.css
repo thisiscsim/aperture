@@ -706,6 +706,13 @@
   opacity: 0.5;
 }
 
+/* Sortable reorder affordance: the cell the drag would land on. */
+.panel-cell.drop-target,
+.panel-row.drop-target {
+  outline: 1.5px solid var(--ap-color-foreground-accent);
+  outline-offset: -1.5px;
+}
+
 .panel-cell video,
 .panel-cell img {
   width: 100%;

@@ -1,10 +1,27 @@
 import { type DragEvent, useRef, useState } from "react";
-import { useDraggable } from "@dnd-kit/react";
+import { useDragDropMonitor } from "@dnd-kit/react";
+import { isSortable, useSortable } from "@dnd-kit/react/sortable";
+import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
 import type { Asset } from "@reel/edl";
 import { useEditor } from "../../store";
-import { addAssets, addAudioClip } from "../../lib/edl-edit";
+import { addAssets, addAudioClip, reorderAssets } from "../../lib/edl-edit";
 import { pathsFrom } from "../../lib/files";
 import { Icon, Menu, MenuHeader, MenuItem, MenuSection } from "../ui";
+
+/** Sortable groups; also the discriminator for the reorder-commit handler. */
+const CLIP_GROUP = "panel-clips";
+const AUDIO_GROUP = "panel-audio";
+
+/**
+ * Sortable plugins WITHOUT OptimisticSortingPlugin. The optimistic plugin
+ * physically shuffles sibling DOM nodes whenever the pointer crosses another
+ * cell — but the common gesture here is dragging a cell *out* of the grid
+ * toward the timeline, which sweeps across siblings, and the plugin only
+ * restores its DOM mutations on *canceled* drags (not on drops that land
+ * elsewhere, like a lane). Without it, React state stays the single source of
+ * order: reorders commit once, on drop.
+ */
+const PANEL_SORT_PLUGINS = [SortableKeyboardPlugin];
 
 /**
  * Assets tab: everything imported into the project — clips (draggable onto
@@ -20,6 +37,26 @@ export function AssetsTab(): JSX.Element {
   const [dragOver, setDragOver] = useState(false);
   const clipInput = useRef<HTMLInputElement>(null);
   const audioInput = useRef<HTMLInputElement>(null);
+
+  // Commits panel reorders. Drops onto the timeline never reach this branch
+  // (a lane isn't sortable), and the Timeline's own monitor ignores sortable
+  // targets (no trackId) — the two dragend handlers are disjoint by
+  // construction. Ids come from drag data and are re-resolved against the
+  // freshest EDL inside updateEdl, so a mid-drag live reload can't misplace.
+  useDragDropMonitor({
+    onDragEnd(event) {
+      if (event.canceled) return;
+      const { source, target } = event.operation;
+      if (!source || !target || !isSortable(source) || !isSortable(target)) return;
+      if (source.group !== target.group) return;
+      if (source.group !== CLIP_GROUP && source.group !== AUDIO_GROUP) return;
+      const src = (source.data as { assetId?: string } | undefined)?.assetId;
+      const tgt = (target.data as { assetId?: string } | undefined)?.assetId;
+      if (!src || !tgt || src === tgt) return;
+      const family = source.group === AUDIO_GROUP ? "audio" : "clip";
+      useEditor.getState().updateEdl((d) => reorderAssets(d, family, src, tgt));
+    },
+  });
 
   if (!edl) return <div />;
 
@@ -124,8 +161,8 @@ export function AssetsTab(): JSX.Element {
 
       {clips.length > 0 && (
         <div className="panel-grid">
-          {clips.map((a) => (
-            <DraggableClipCell key={a.id} asset={a} slug={slug} />
+          {clips.map((a, i) => (
+            <SortableClipCell key={a.id} asset={a} index={i} slug={slug} />
           ))}
         </div>
       )}
@@ -168,8 +205,8 @@ export function AssetsTab(): JSX.Element {
           <p className="panel-hint">No audio yet — add a music bed, or record a voiceover in Settings.</p>
         ) : (
           <div className="panel-list">
-            {audio.map((a) => (
-              <DraggableAudioRow key={a.id} asset={a} />
+            {audio.map((a, i) => (
+              <SortableAudioRow key={a.id} asset={a} index={i} />
             ))}
           </div>
         )}
@@ -178,18 +215,34 @@ export function AssetsTab(): JSX.Element {
   );
 }
 
-/** dnd-kit drag source: a clip cell the timeline's video lanes accept. */
-function DraggableClipCell({ asset, slug }: { asset: Asset; slug: string | null }): JSX.Element {
-  const { ref, isDragging } = useDraggable({
+/**
+ * Sortable drag source: a clip cell. Reorders within the grid (drop on a
+ * sibling) and doubles as the drag source the timeline's video lanes accept —
+ * `type`/`data` are what the lane `accept` rules and drop handler read.
+ */
+function SortableClipCell({
+  asset,
+  index,
+  slug,
+}: {
+  asset: Asset;
+  index: number;
+  slug: string | null;
+}): JSX.Element {
+  const { ref, isDragging, isDropTarget } = useSortable({
     id: `asset-${asset.id}`,
+    index,
+    group: CLIP_GROUP,
     type: asset.kind,
+    accept: ["video", "image"],
     data: { assetId: asset.id, kind: asset.kind },
+    plugins: PANEL_SORT_PLUGINS,
   });
   return (
     <div
       ref={ref}
-      className={`panel-cell ${isDragging ? "dragging" : ""}`}
-      title={`${asset.src} — drag onto the timeline`}
+      className={`panel-cell ${isDragging ? "dragging" : ""} ${isDropTarget ? "drop-target" : ""}`}
+      title={`${asset.src} — drag onto the timeline, or over a sibling to reorder`}
     >
       {slug &&
         (asset.kind === "image" ? (
@@ -202,18 +255,22 @@ function DraggableClipCell({ asset, slug }: { asset: Asset; slug: string | null 
   );
 }
 
-/** dnd-kit drag source: an audio row the timeline's audio lanes accept. */
-function DraggableAudioRow({ asset }: { asset: Asset }): JSX.Element {
-  const { ref, isDragging } = useDraggable({
+/** Sortable drag source: an audio row; the timeline's audio lanes accept it. */
+function SortableAudioRow({ asset, index }: { asset: Asset; index: number }): JSX.Element {
+  const { ref, isDragging, isDropTarget } = useSortable({
     id: `asset-${asset.id}`,
+    index,
+    group: AUDIO_GROUP,
     type: asset.kind,
+    accept: ["audio"],
     data: { assetId: asset.id, kind: asset.kind },
+    plugins: PANEL_SORT_PLUGINS,
   });
   return (
     <div
       ref={ref}
-      className={`panel-row ${isDragging ? "dragging" : ""}`}
-      title={`${asset.src} — drag onto an audio layer`}
+      className={`panel-row ${isDragging ? "dragging" : ""} ${isDropTarget ? "drop-target" : ""}`}
+      title={`${asset.src} — drag onto an audio layer, or over a sibling to reorder`}
     >
       <Icon name="voice-high" size={14} />
       <span className="panel-row-name">{asset.src.replace(/^assets\//, "")}</span>

@@ -70,6 +70,32 @@ export function addAudioClip(
   }
 }
 
+/**
+ * Move one asset to another's position within its Assets-tab family (clips =
+ * everything non-audio, or audio). `edl.assets` interleaves both families, so
+ * only that family's slots are re-filled — the other family's positions are
+ * untouched. Resolves by id, not index: a drop stays safe even if the EDL was
+ * live-reloaded (agent write, undo) mid-drag. Unknown ids are a no-op.
+ */
+export function reorderAssets(
+  edl: Edl,
+  family: "clip" | "audio",
+  sourceId: string,
+  targetId: string,
+): void {
+  if (sourceId === targetId) return;
+  const inFamily = (a: Asset) => (family === "audio" ? a.kind === "audio" : a.kind !== "audio");
+  const subset = edl.assets.filter(inFamily);
+  const from = subset.findIndex((a) => a.id === sourceId);
+  const to = subset.findIndex((a) => a.id === targetId);
+  if (from === -1 || to === -1) return;
+  // arrayMove semantics (`to` measured before removal): dragging forward lands
+  // after the target, dragging backward lands before it.
+  subset.splice(to, 0, ...subset.splice(from, 1));
+  let i = 0;
+  edl.assets = edl.assets.map((a) => (inFamily(a) ? subset[i++] : a));
+}
+
 /** Append a new empty timeline layer of the given type. */
 export function addTrack(edl: Edl, type: "video" | "text" | "audio", name?: string): void {
   const id = `${type}-${Date.now().toString(36)}`;
