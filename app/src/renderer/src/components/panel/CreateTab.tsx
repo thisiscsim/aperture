@@ -200,6 +200,7 @@ export function CreateTab(): JSX.Element {
           busy={sessionBusy}
           canSubmit={text.trim().length > 0 && (settings.mode === "critique" || hasClips)}
           placeholder={hasClips ? "Describe the video you want to make…" : "Add clips first (Assets tab)…"}
+          variant="compact"
         />
       </div>
     </div>
