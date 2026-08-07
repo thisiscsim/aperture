@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { parseEdl, type AudioTrack } from "@reel/edl";
-import { addAssets, addAudioClip, findVideoClip, mutateTextClip, mutateVideoClip } from "./edl-edit";
+import { parseEdl, type Asset, type AudioTrack } from "@reel/edl";
+import {
+  addAssets,
+  addAudioClip,
+  findVideoClip,
+  mutateTextClip,
+  mutateVideoClip,
+  reorderAssets,
+} from "./edl-edit";
 
 function baseEdl() {
   return parseEdl({
@@ -76,6 +83,50 @@ describe("addAudioClip", () => {
     addAudioClip(edl, "vo", "voiceover", 5);
     const ids = edl.tracks.filter((t) => t.type === "audio").map((t) => t.id);
     expect(ids).toEqual(["aud", "vo"]);
+  });
+});
+
+describe("reorderAssets", () => {
+  // Clips and audio interleaved on purpose: reordering one family must keep
+  // the other family's slots fixed.
+  const mixed = (): Asset[] => [
+    { id: "c1", kind: "video", src: "assets/c1.mp4" },
+    { id: "m1", kind: "audio", src: "assets/m1.mp3" },
+    { id: "c2", kind: "video", src: "assets/c2.mp4" },
+    { id: "c3", kind: "image", src: "assets/c3.jpg" },
+    { id: "m2", kind: "audio", src: "assets/m2.mp3" },
+  ];
+
+  it("moves a clip forward, landing after the target (arrayMove semantics)", () => {
+    const edl = baseEdl();
+    edl.assets = mixed();
+    reorderAssets(edl, "clip", "c1", "c3");
+    expect(edl.assets.map((a) => a.id)).toEqual(["c2", "m1", "c3", "c1", "m2"]);
+  });
+
+  it("moves a clip backward, landing before the target", () => {
+    const edl = baseEdl();
+    edl.assets = mixed();
+    reorderAssets(edl, "clip", "c3", "c1");
+    expect(edl.assets.map((a) => a.id)).toEqual(["c3", "m1", "c1", "c2", "m2"]);
+  });
+
+  it("reorders audio without disturbing clip positions", () => {
+    const edl = baseEdl();
+    edl.assets = mixed();
+    reorderAssets(edl, "audio", "m2", "m1");
+    expect(edl.assets.map((a) => a.id)).toEqual(["c1", "m2", "c2", "c3", "m1"]);
+  });
+
+  it("no-ops on identical ids or ids missing from the family", () => {
+    const edl = baseEdl();
+    edl.assets = mixed();
+    const before = edl.assets.map((a) => a.id);
+    reorderAssets(edl, "clip", "c1", "c1");
+    reorderAssets(edl, "clip", "c1", "ghost");
+    // m1 is audio — not in the clip family view, so this must not move c1.
+    reorderAssets(edl, "clip", "c1", "m1");
+    expect(edl.assets.map((a) => a.id)).toEqual(before);
   });
 });
 
