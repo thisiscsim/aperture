@@ -1,4 +1,5 @@
 import { type CSSProperties, memo, useEffect } from "react";
+import { DragDropProvider } from "@dnd-kit/react";
 import { EditorHeader } from "./components/EditorHeader";
 import { FloatingToolbar } from "./components/FloatingToolbar";
 import { PreviewStage } from "./components/PreviewStage";
@@ -141,45 +142,49 @@ export function App(): JSX.Element {
       {view === "home" ? (
         <Home />
       ) : (
-        <div
-          className={`editor-shell ${panelsHidden ? "panels-hidden" : ""}`}
-          style={
-            {
-              "--right-panel-w": `${panelSizes.right}px`,
-              "--tl-h": `${panelSizes.timeline}px`,
-            } as CSSProperties
-          }
-        >
-          <EditorHeaderM />
-          {/* Figma 346:9830: the timeline lives INSIDE the left column (it ends
+        // The provider spans the Assets tab (drag sources) and the timeline
+        // lanes (drop targets); the Timeline monitors drops itself.
+        <DragDropProvider>
+          <div
+            className={`editor-shell ${panelsHidden ? "panels-hidden" : ""}`}
+            style={
+              {
+                "--right-panel-w": `${panelSizes.right}px`,
+                "--tl-h": `${panelSizes.timeline}px`,
+              } as CSSProperties
+            }
+          >
+            <EditorHeaderM />
+            {/* Figma 346:9830: the timeline lives INSIDE the left column (it ends
               where the panel starts); the right panel runs full height. */}
-          <div className="editor-main">
-            <div className="editor-left">
-              <div className="editor-stage-wrap">
-                <PreviewStageM />
-                {!panelsHidden && <FloatingToolbarM />}
+            <div className="editor-main">
+              <div className="editor-left">
+                <div className="editor-stage-wrap">
+                  <PreviewStageM />
+                  {!panelsHidden && <FloatingToolbarM />}
+                </div>
+                {!panelsHidden && (
+                  <>
+                    <PanelResizer panel="timeline" />
+                    <TimelineM />
+                  </>
+                )}
               </div>
               {!panelsHidden && (
                 <>
-                  <PanelResizer panel="timeline" />
-                  <TimelineM />
+                  <PanelResizer panel="right" />
+                  <EditorPanelM />
                 </>
               )}
             </div>
-            {!panelsHidden && (
-              <>
-                <PanelResizer panel="right" />
-                <EditorPanelM />
-              </>
+            <ExportModal />
+            {!hasEdl && (
+              <div className="boot">
+                {loadError ? `Could not load project: ${loadError}` : "Loading project…"}
+              </div>
             )}
           </div>
-          <ExportModal />
-          {!hasEdl && (
-            <div className="boot">
-              {loadError ? `Could not load project: ${loadError}` : "Loading project…"}
-            </div>
-          )}
-        </div>
+        </DragDropProvider>
       )}
       {notices.length > 0 && (
         <div className="toast-stack" role="region" aria-label="Notifications">

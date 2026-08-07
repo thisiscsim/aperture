@@ -701,6 +701,11 @@
   cursor: grab;
 }
 
+.panel-cell.dragging,
+.panel-row.dragging {
+  opacity: 0.5;
+}
+
 .panel-cell video,
 .panel-cell img {
   width: 100%;
@@ -1454,6 +1459,13 @@ button.tl-gutter-btn:hover {
   position: relative;
   flex: none;
   height: 100%;
+}
+
+/* dnd-kit: an Assets-tab drag is hovering a lane that accepts it. */
+.tl-lane.drop-target {
+  background: color-mix(in srgb, var(--ap-color-foreground-accent) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ap-color-foreground-accent) 35%, transparent);
+  border-radius: var(--ap-radius-md);
 }
 
 .tl-lane-hint {

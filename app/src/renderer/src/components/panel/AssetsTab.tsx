@@ -1,7 +1,8 @@
 import { type DragEvent, useRef, useState } from "react";
+import { useDraggable } from "@dnd-kit/react";
+import type { Asset } from "@reel/edl";
 import { useEditor } from "../../store";
 import { addAssets, addAudioClip } from "../../lib/edl-edit";
-import { ASSET_MIME } from "../../lib/timeline-geometry";
 import { pathsFrom } from "../../lib/files";
 import { Icon, Menu, MenuHeader, MenuItem, MenuSection } from "../ui";
 
@@ -124,23 +125,7 @@ export function AssetsTab(): JSX.Element {
       {clips.length > 0 && (
         <div className="panel-grid">
           {clips.map((a) => (
-            <div
-              key={a.id}
-              className="panel-cell"
-              title={`${a.src} — drag onto the timeline`}
-              draggable
-              onDragStart={(e) =>
-                e.dataTransfer.setData(ASSET_MIME, JSON.stringify({ assetId: a.id, kind: a.kind }))
-              }
-            >
-              {slug &&
-                (a.kind === "image" ? (
-                  <img src={`reel-asset://${slug}/${a.src}`} alt="" />
-                ) : (
-                  <video src={`reel-asset://${slug}/${a.proxySrc ?? a.src}`} muted preload="metadata" />
-                ))}
-              <span className="panel-cell-name">{a.src.replace(/^assets\//, "")}</span>
-            </div>
+            <DraggableClipCell key={a.id} asset={a} slug={slug} />
           ))}
         </div>
       )}
@@ -184,22 +169,54 @@ export function AssetsTab(): JSX.Element {
         ) : (
           <div className="panel-list">
             {audio.map((a) => (
-              <div
-                key={a.id}
-                className="panel-row"
-                title={`${a.src} — drag onto an audio layer`}
-                draggable
-                onDragStart={(e) =>
-                  e.dataTransfer.setData(ASSET_MIME, JSON.stringify({ assetId: a.id, kind: a.kind }))
-                }
-              >
-                <Icon name="voice-high" size={14} />
-                <span className="panel-row-name">{a.src.replace(/^assets\//, "")}</span>
-              </div>
+              <DraggableAudioRow key={a.id} asset={a} />
             ))}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** dnd-kit drag source: a clip cell the timeline's video lanes accept. */
+function DraggableClipCell({ asset, slug }: { asset: Asset; slug: string | null }): JSX.Element {
+  const { ref, isDragging } = useDraggable({
+    id: `asset-${asset.id}`,
+    type: asset.kind,
+    data: { assetId: asset.id, kind: asset.kind },
+  });
+  return (
+    <div
+      ref={ref}
+      className={`panel-cell ${isDragging ? "dragging" : ""}`}
+      title={`${asset.src} — drag onto the timeline`}
+    >
+      {slug &&
+        (asset.kind === "image" ? (
+          <img src={`reel-asset://${slug}/${asset.src}`} alt="" />
+        ) : (
+          <video src={`reel-asset://${slug}/${asset.proxySrc ?? asset.src}`} muted preload="metadata" />
+        ))}
+      <span className="panel-cell-name">{asset.src.replace(/^assets\//, "")}</span>
+    </div>
+  );
+}
+
+/** dnd-kit drag source: an audio row the timeline's audio lanes accept. */
+function DraggableAudioRow({ asset }: { asset: Asset }): JSX.Element {
+  const { ref, isDragging } = useDraggable({
+    id: `asset-${asset.id}`,
+    type: asset.kind,
+    data: { assetId: asset.id, kind: asset.kind },
+  });
+  return (
+    <div
+      ref={ref}
+      className={`panel-row ${isDragging ? "dragging" : ""}`}
+      title={`${asset.src} — drag onto an audio layer`}
+    >
+      <Icon name="voice-high" size={14} />
+      <span className="panel-row-name">{asset.src.replace(/^assets\//, "")}</span>
     </div>
   );
 }

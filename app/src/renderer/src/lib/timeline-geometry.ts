@@ -6,7 +6,6 @@ import type { Edl, Track } from "@reel/edl";
 export const LABEL_W = 68;
 export const PX_PER_SEC = 60;
 export const MIN_DUR = 0.2;
-export const ASSET_MIME = "application/x-aperture-asset";
 
 export type DragMode = "move" | "left" | "right";
 /** Timeline lanes render clip-bearing tracks only (captions burn in via preview). */

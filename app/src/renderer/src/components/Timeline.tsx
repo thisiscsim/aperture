@@ -1,10 +1,10 @@
-import { type DragEvent, type MouseEvent, useRef, useState } from "react";
+import { type MouseEvent, type ReactNode, useRef, useState } from "react";
+import { useDragDropMonitor, useDroppable } from "@dnd-kit/react";
 import { durationSeconds, MAX_TIMELINE_SEC, type Asset, type Track } from "@reel/edl";
 import { useEditor } from "../store";
 import { addAssets, addTrack, renameTrack } from "../lib/edl-edit";
 import { pathsFrom } from "../lib/files";
 import {
-  ASSET_MIME,
   assetDurationFor,
   clipsOf,
   commit,
@@ -56,10 +56,56 @@ export function Timeline(): JSX.Element {
   // NOTE: the Space play/pause shortcut lives in App.tsx (editor-level), not
   // here — this component unmounts in Cmd+\ focus mode.
 
+  const pxPerSec = PX_PER_SEC * zoom;
+
+  // Drops from the Assets tab (dnd-kit). The monitor registers once with a
+  // stable callback; the ref keeps the handler's closures (zoom, store) fresh
+  // across renders. Reads go through getState so a stale EDL can't be used.
+  const dropAssetAt = (assetId: string, kind: string, trackId: string, sec: number) => {
+    const s = useEditor.getState();
+    const asset = s.edl?.assets.find((a) => a.id === assetId);
+    if (!asset) return;
+    const at = round(sec);
+    if (kind === "video") {
+      s.updateEdl((d) => {
+        const t = d.tracks.find((x) => x.id === trackId);
+        if (t?.type === "video") {
+          t.clips.push({
+            id: `c-${assetId}-${Date.now().toString(36)}`,
+            assetId,
+            start: at,
+            in: 0,
+            out: round(asset.durationSec ?? 3),
+            volume: 1,
+          });
+        }
+      });
+    } else if (kind === "audio") {
+      s.updateEdl((d) => placeAudioOnTrack(d, trackId, assetId, asset.durationSec, at));
+    }
+  };
+  const dropRef = useRef(dropAssetAt);
+  dropRef.current = dropAssetAt;
+  const pxPerSecRef = useRef(pxPerSec);
+  pxPerSecRef.current = pxPerSec;
+
+  useDragDropMonitor({
+    onDragEnd(event) {
+      if (event.canceled) return;
+      const { source, target, position } = event.operation;
+      if (!source || !target) return;
+      const data = source.data as { assetId?: string; kind?: string } | undefined;
+      const lane = target.data as { trackId?: string } | undefined;
+      if (!data?.assetId || !data.kind || !lane?.trackId) return;
+      const rect = (target as { element?: Element }).element?.getBoundingClientRect();
+      const sec = rect ? Math.max(0, (position.current.x - rect.left) / pxPerSecRef.current) : 0;
+      dropRef.current(data.assetId, data.kind, lane.trackId, sec);
+    },
+  });
+
   if (!edl) return <section className="tl" />;
 
   const fps = edl.format.fps;
-  const pxPerSec = PX_PER_SEC * zoom;
   // Clamp so a corrupt/hostile EDL can never drive the tick loop or lane width
   // unbounded (schema bounds timings too; this is belt-and-braces).
   const dur = Math.min(Math.max(durationSeconds(edl), 6), MAX_TIMELINE_SEC);
@@ -237,34 +283,6 @@ export function Timeline(): JSX.Element {
     });
   };
 
-  // Drops from the Assets tab (existing assets).
-  const onAssetDrop = (e: DragEvent<HTMLDivElement>, track: LaneTrack) => {
-    const raw = e.dataTransfer.getData(ASSET_MIME);
-    if (!raw) return;
-    e.preventDefault();
-    const { assetId, kind } = JSON.parse(raw) as { assetId: string; kind: string };
-    const asset = edl.assets.find((a) => a.id === assetId);
-    if (!asset) return;
-    const at = round(laneSec(e));
-    if (track.type === "video" && kind === "video") {
-      updateEdl((d) => {
-        const t = d.tracks.find((x) => x.id === track.id);
-        if (t?.type === "video") {
-          t.clips.push({
-            id: `c-${assetId}-${Date.now().toString(36)}`,
-            assetId,
-            start: at,
-            in: 0,
-            out: round(asset.durationSec ?? 3),
-            volume: 1,
-          });
-        }
-      });
-    } else if (track.type === "audio" && kind === "audio") {
-      updateEdl((d) => placeAudioOnTrack(d, track.id, assetId, asset.durationSec, at));
-    }
-  };
-
   const ticks: number[] = [];
   for (let s = 0; s <= Math.ceil(dur); s += 2) ticks.push(s);
 
@@ -356,19 +374,15 @@ export function Timeline(): JSX.Element {
                     : undefined
                 }
               />
-              <div
-                className={`tl-lane tl-lane-${track.type}`}
-                style={{ width: lanePx }}
+              <DroppableLane
+                track={track}
+                lanePx={lanePx}
                 onMouseDown={(e) => {
                   if (track.type === "text") sketchText(e, track);
                 }}
                 onClick={(e) => {
                   if (track.type !== "text") pickForLane(e, track);
                 }}
-                onDragOver={(e) => {
-                  if (e.dataTransfer.types.includes(ASSET_MIME)) e.preventDefault();
-                }}
-                onDrop={(e) => onAssetDrop(e, track)}
               >
                 {clipsOf(track).map((clip) => {
                   const geom = geomFor(track.type, clip, drag);
@@ -416,7 +430,7 @@ export function Timeline(): JSX.Element {
                 {track.clips.length === 0 && !ghost && (
                   <div className="tl-lane-hint">{emptyHint(track.type)}</div>
                 )}
-              </div>
+              </DroppableLane>
             </div>
           ))}
 
@@ -453,6 +467,41 @@ export function Timeline(): JSX.Element {
         }}
       />
     </section>
+  );
+}
+
+/* ---------- droppable lane (dnd-kit target for Assets-tab drags) ---------- */
+
+function DroppableLane({
+  track,
+  lanePx,
+  onMouseDown,
+  onClick,
+  children,
+}: {
+  track: LaneTrack;
+  lanePx: number;
+  onMouseDown: (e: MouseEvent<HTMLDivElement>) => void;
+  onClick: (e: MouseEvent<HTMLDivElement>) => void;
+  children: ReactNode;
+}): JSX.Element {
+  const { ref, isDropTarget } = useDroppable({
+    id: `lane-${track.id}`,
+    // Type-based acceptance: video lanes take video assets, audio lanes take
+    // audio; text lanes accept nothing (their clips are sketched, not dropped).
+    accept: track.type === "video" ? ["video"] : track.type === "audio" ? ["audio"] : [],
+    data: { trackId: track.id },
+  });
+  return (
+    <div
+      ref={ref}
+      className={`tl-lane tl-lane-${track.type} ${isDropTarget ? "drop-target" : ""}`}
+      style={{ width: lanePx }}
+      onMouseDown={onMouseDown}
+      onClick={onClick}
+    >
+      {children}
+    </div>
   );
 }
 
