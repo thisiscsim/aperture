@@ -91,6 +91,25 @@ export function reorderAssets(edl: Edl, family: "clip" | "audio", sourceId: stri
   edl.assets = edl.assets.map((a) => (inFamily(a) ? subset[i++] : a));
 }
 
+/**
+ * Remove a clip by id from whichever layer holds it (video, text, or audio —
+ * caption layers have no clips). Ids are searched, never pattern-matched, so
+ * agent-generated and hand-placed clips delete identically. Unknown ids no-op.
+ */
+export function removeClip(edl: Edl, clipId: string): void {
+  for (const track of edl.tracks) {
+    if (track.type === "caption") continue;
+    // The per-type clip arrays all carry `id`; widen once so splice works on
+    // the union without narrowing each track type separately.
+    const clips: { id: string }[] = track.clips;
+    const i = clips.findIndex((c) => c.id === clipId);
+    if (i !== -1) {
+      clips.splice(i, 1);
+      return;
+    }
+  }
+}
+
 /** Append a new empty timeline layer of the given type. */
 export function addTrack(edl: Edl, type: "video" | "text" | "audio", name?: string): void {
   const id = `${type}-${Date.now().toString(36)}`;

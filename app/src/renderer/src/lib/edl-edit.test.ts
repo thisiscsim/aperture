@@ -3,9 +3,11 @@ import { parseEdl, type Asset, type AudioTrack } from "@reel/edl";
 import {
   addAssets,
   addAudioClip,
+  findAudioClip,
   findVideoClip,
   mutateTextClip,
   mutateVideoClip,
+  removeClip,
   reorderAssets,
 } from "./edl-edit";
 
@@ -127,6 +129,33 @@ describe("reorderAssets", () => {
     // m1 is audio — not in the clip family view, so this must not move c1.
     reorderAssets(edl, "clip", "c1", "m1");
     expect(edl.assets.map((a) => a.id)).toEqual(before);
+  });
+});
+
+describe("removeClip", () => {
+  it("removes video, text, and audio clips by id, whatever layer holds them", () => {
+    const edl = baseEdl();
+    addAudioClip(edl, "m", "music", 4); // clip id a-m
+
+    removeClip(edl, "v1");
+    removeClip(edl, "t1");
+    removeClip(edl, "a-m");
+
+    expect(findVideoClip(edl, "v1")).toBeUndefined();
+    const text = edl.tracks.find((t) => t.type === "text");
+    expect(text?.type === "text" && text.clips).toEqual([]);
+    expect(findAudioClip(edl, "a-m")).toBeUndefined();
+  });
+
+  it("no-ops on unknown ids and skips caption layers safely", () => {
+    const edl = parseEdl({
+      tracks: [
+        { id: "v", type: "video", clips: [{ id: "v1", assetId: "a", start: 0, in: 0, out: 4 }] },
+        { id: "cap", type: "caption" },
+      ],
+    }).edl!;
+    removeClip(edl, "ghost");
+    expect(findVideoClip(edl, "v1")).toBeDefined();
   });
 });
 
