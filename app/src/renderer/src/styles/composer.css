@@ -133,6 +133,21 @@
   color: var(--ap-color-foreground-secondary);
 }
 
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.composer-pill--icon {
+  color: var(--ap-color-foreground-secondary);
+}
+
+.composer-pill--icon:hover {
+  color: var(--ap-color-foreground-primary);
+}
+
 .composer-submit {
   display: grid;
   place-items: center;
@@ -169,6 +184,13 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ---------- Compact variant (editor Create tab, Figma 346:10331) ---------- */
+/* No footer strip: the white main section is the whole card. */
+.composer--compact .composer-main {
+  border-bottom: none;
+  border-radius: var(--ap-radius-2xl);
 }
 
 /* ---------- Reference strip ---------- */

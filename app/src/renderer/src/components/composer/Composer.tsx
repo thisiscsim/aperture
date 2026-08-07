@@ -41,6 +41,7 @@ export function Composer({
   placeholder = "Describe the video you want to make…",
   showCritique = true,
   autoFocus = false,
+  variant = "wide",
 }: {
   value: string;
   onValueChange: (text: string) => void;
@@ -58,12 +59,20 @@ export function Composer({
   placeholder?: string;
   showCritique?: boolean;
   autoFocus?: boolean;
+  /**
+   * `wide` (zero-state home): every setting is a pill and references attach
+   * in the footer strip. `compact` (editor panel, Figma 346:10331): mode +
+   * effort pills only — aspect/duration fold into a slider-icon popover and
+   * the reference footer is dropped (references live in the panel's tab).
+   */
+  variant?: "wide" | "compact";
 }): JSX.Element {
   const refInput = useRef<HTMLInputElement>(null);
   const benchInput = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const [benchDrag, setBenchDrag] = useState(false);
 
+  const compact = variant === "compact";
   const critiqueMode = settings.mode === "critique" && Boolean(onAddBenchmarks);
   const effectivePlaceholder = critiqueMode
     ? "You can copy and paste a link here and Aperture will find the related video."
@@ -85,8 +94,65 @@ export function Composer({
     e.target.value = "";
   };
 
+  // Shared menu sections — pills in the wide variant, folded into the
+  // slider-icon settings popover in the compact one.
+  const aspectSection = (
+    <MenuSection>
+      <MenuHeader>Aspect ratio</MenuHeader>
+      {ASPECT_ORDER.map((aspect) => (
+        <MenuItem
+          key={aspect}
+          leading={
+            <Icon
+              name="aspect-ratio"
+              size={16}
+              style={aspect === "9:16" || aspect === "4:5" ? { transform: "rotate(-90deg)" } : undefined}
+            />
+          }
+          selected={settings.aspect === aspect}
+          onSelect={() => set({ aspect })}
+        >
+          {ASPECT_LABELS[aspect]} <span className="composer-pill-dim">{aspect}</span>
+        </MenuItem>
+      ))}
+    </MenuSection>
+  );
+  const durationSection = (
+    <MenuSection>
+      <MenuHeader>Duration</MenuHeader>
+      {DURATION_OPTIONS.map((sec) => (
+        <MenuItem
+          key={sec}
+          selected={settings.durationSec === sec}
+          onSelect={() => set({ durationSec: sec })}
+        >
+          {sec}s
+        </MenuItem>
+      ))}
+    </MenuSection>
+  );
+  const referenceModeSection = (
+    <MenuSection>
+      <MenuHeader>Apply references</MenuHeader>
+      <MenuItem
+        selected={settings.referenceMode === "literal"}
+        hint="Recreate the reference's look shot-for-shot"
+        onSelect={() => set({ referenceMode: "literal" })}
+      >
+        Literal
+      </MenuItem>
+      <MenuItem
+        selected={settings.referenceMode === "inspired"}
+        hint="Borrow the vibe, pacing, and palette"
+        onSelect={() => set({ referenceMode: "inspired" })}
+      >
+        As inspiration
+      </MenuItem>
+    </MenuSection>
+  );
+
   return (
-    <div className="composer">
+    <div className={compact ? "composer composer--compact" : "composer"}>
       <div className="composer-main">
         {critiqueMode && (
           <div
@@ -209,136 +275,115 @@ export function Composer({
               </MenuSection>
             </ComposerPillMenu>
 
-            <ComposerPillMenu
-              label={
-                <>
-                  {ASPECT_LABELS[settings.aspect]}{" "}
-                  <span className="composer-pill-dim">{settings.aspect}</span>
-                </>
-              }
-              leading={
-                <Icon
-                  name="aspect-ratio"
-                  size={16}
-                  style={
-                    settings.aspect === "9:16" || settings.aspect === "4:5"
-                      ? { transform: "rotate(-90deg)" }
-                      : undefined
-                  }
-                />
-              }
-            >
-              <MenuSection>
-                <MenuHeader>Aspect ratio</MenuHeader>
-                {ASPECT_ORDER.map((aspect) => (
-                  <MenuItem
-                    key={aspect}
-                    leading={
-                      <Icon
-                        name="aspect-ratio"
-                        size={16}
-                        style={
-                          aspect === "9:16" || aspect === "4:5" ? { transform: "rotate(-90deg)" } : undefined
-                        }
-                      />
+            {!compact && (
+              <ComposerPillMenu
+                label={
+                  <>
+                    {ASPECT_LABELS[settings.aspect]}{" "}
+                    <span className="composer-pill-dim">{settings.aspect}</span>
+                  </>
+                }
+                leading={
+                  <Icon
+                    name="aspect-ratio"
+                    size={16}
+                    style={
+                      settings.aspect === "9:16" || settings.aspect === "4:5"
+                        ? { transform: "rotate(-90deg)" }
+                        : undefined
                     }
-                    selected={settings.aspect === aspect}
-                    onSelect={() => set({ aspect })}
-                  >
-                    {ASPECT_LABELS[aspect]} <span className="composer-pill-dim">{aspect}</span>
-                  </MenuItem>
-                ))}
-              </MenuSection>
-            </ComposerPillMenu>
-
-            <ComposerPillMenu label={`${settings.durationSec}s`} leading={<Icon name="clock" size={16} />}>
-              <MenuSection>
-                <MenuHeader>Duration</MenuHeader>
-                {DURATION_OPTIONS.map((sec) => (
-                  <MenuItem
-                    key={sec}
-                    selected={settings.durationSec === sec}
-                    onSelect={() => set({ durationSec: sec })}
-                  >
-                    {sec}s
-                  </MenuItem>
-                ))}
-              </MenuSection>
-            </ComposerPillMenu>
-          </div>
-          <button
-            className="composer-submit"
-            aria-label={settings.mode === "critique" ? "Run critique" : "Generate"}
-            disabled={!canSubmit || busy}
-            onClick={onSubmit}
-          >
-            {busy ? <span className="composer-spinner" /> : <Icon name="arrow-up" size={16} />}
-          </button>
-        </div>
-      </div>
-
-      <div className="composer-footer">
-        <div className="composer-footer-row">
-          <button className="composer-footer-btn" disabled={busy} onClick={() => refInput.current?.click()}>
-            <Icon name="slide-add" size={16} />
-            Add reference
-          </button>
-          <Menu
-            popClassName="composer-pop composer-pop-right"
-            trigger={(toggle) => (
-              <button
-                className={`composer-footer-btn ${references.length === 0 ? "composer-footer-btn--idle" : ""}`}
-                disabled={busy}
-                onClick={toggle}
+                  />
+                }
               >
-                <Icon name="three-d" size={16} />
-                {REFERENCE_MODE_LABELS[settings.referenceMode]}
-              </button>
+                {aspectSection}
+              </ComposerPillMenu>
             )}
-          >
-            <MenuSection>
-              <MenuHeader>Apply references</MenuHeader>
-              <MenuItem
-                selected={settings.referenceMode === "literal"}
-                hint="Recreate the reference's look shot-for-shot"
-                onSelect={() => set({ referenceMode: "literal" })}
-              >
-                Literal
-              </MenuItem>
-              <MenuItem
-                selected={settings.referenceMode === "inspired"}
-                hint="Borrow the vibe, pacing, and palette"
-                onSelect={() => set({ referenceMode: "inspired" })}
-              >
-                As inspiration
-              </MenuItem>
-            </MenuSection>
-          </Menu>
-        </div>
-        {references.length > 0 && (
-          <div className="composer-refs">
-            {references.map((ref) => (
-              <Thumbnail key={ref.id} src={ref.thumb} size={64} duration={ref.duration} alt={ref.name}>
-                <button
-                  className="composer-ref-remove"
-                  aria-label={`Remove ${ref.name}`}
-                  onClick={() => onRemoveReference(ref.id)}
-                >
-                  ×
-                </button>
-              </Thumbnail>
-            ))}
+
+            {!compact && (
+              <ComposerPillMenu label={`${settings.durationSec}s`} leading={<Icon name="clock" size={16} />}>
+                {durationSection}
+              </ComposerPillMenu>
+            )}
           </div>
-        )}
-        <input
-          ref={refInput}
-          type="file"
-          accept="video/*,image/*"
-          multiple
-          hidden
-          onChange={pickReferences}
-        />
+          <div className="composer-actions">
+            {compact && (
+              <Menu
+                popClassName="composer-pop composer-pop-right"
+                trigger={(toggle) => (
+                  <button
+                    className="composer-pill composer-pill--icon"
+                    aria-label="Settings"
+                    onClick={toggle}
+                  >
+                    <Icon name="settings-slider" size={16} />
+                  </button>
+                )}
+              >
+                {aspectSection}
+                {durationSection}
+                {referenceModeSection}
+              </Menu>
+            )}
+            <button
+              className="composer-submit"
+              aria-label={settings.mode === "critique" ? "Run critique" : "Generate"}
+              disabled={!canSubmit || busy}
+              onClick={onSubmit}
+            >
+              {busy ? <span className="composer-spinner" /> : <Icon name="arrow-up" size={16} />}
+            </button>
+          </div>
+        </div>
       </div>
+
+      {compact ? null : (
+        <div className="composer-footer">
+          <div className="composer-footer-row">
+            <button className="composer-footer-btn" disabled={busy} onClick={() => refInput.current?.click()}>
+              <Icon name="slide-add" size={16} />
+              Add reference
+            </button>
+            <Menu
+              popClassName="composer-pop composer-pop-right"
+              trigger={(toggle) => (
+                <button
+                  className={`composer-footer-btn ${references.length === 0 ? "composer-footer-btn--idle" : ""}`}
+                  disabled={busy}
+                  onClick={toggle}
+                >
+                  <Icon name="three-d" size={16} />
+                  {REFERENCE_MODE_LABELS[settings.referenceMode]}
+                </button>
+              )}
+            >
+              {referenceModeSection}
+            </Menu>
+          </div>
+          {references.length > 0 && (
+            <div className="composer-refs">
+              {references.map((ref) => (
+                <Thumbnail key={ref.id} src={ref.thumb} size={64} duration={ref.duration} alt={ref.name}>
+                  <button
+                    className="composer-ref-remove"
+                    aria-label={`Remove ${ref.name}`}
+                    onClick={() => onRemoveReference(ref.id)}
+                  >
+                    ×
+                  </button>
+                </Thumbnail>
+              ))}
+            </div>
+          )}
+          <input
+            ref={refInput}
+            type="file"
+            accept="video/*,image/*"
+            multiple
+            hidden
+            onChange={pickReferences}
+          />
+        </div>
+      )}
     </div>
   );
 }

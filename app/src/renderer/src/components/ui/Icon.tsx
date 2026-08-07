@@ -44,6 +44,7 @@ import plusMedium from "../../assets/icons/plus-medium.svg?raw";
 import prompt from "../../assets/icons/prompt.svg?raw";
 import record from "../../assets/icons/record.svg?raw";
 import settingsGear from "../../assets/icons/settings-gear.svg?raw";
+import settingsSlider from "../../assets/icons/settings-slider.svg?raw";
 import shareOs from "../../assets/icons/share-os.svg?raw";
 import skip from "../../assets/icons/skip.svg?raw";
 import slideAdd from "../../assets/icons/slide-add.svg?raw";
@@ -113,6 +114,7 @@ const ICONS = {
   prompt,
   record,
   "settings-gear": settingsGear,
+  "settings-slider": settingsSlider,
   "share-os": shareOs,
   skip,
   "slide-add": slideAdd,
