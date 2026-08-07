@@ -54,8 +54,8 @@ export function EditorHeader(): JSX.Element {
       <div className="editor-header-actions">
         <SettingsButton labeled />
         <span className="editor-divider" />
-        <Button variant="tertiary" size="md" icon="share-os" onClick={onExport} disabled={exporting || !edl}>
-          {exporting ? "Exporting…" : "Share"}
+        <Button variant="primary" size="md" icon="share-os" onClick={onExport} disabled={exporting || !edl}>
+          {exporting ? "Exporting…" : "Export"}
         </Button>
       </div>
     </header>

@@ -203,11 +203,19 @@
 }
 
 /* ---------- Preview stage ---------- */
+/* Left column: stage on top, timeline below (panel runs full height beside). */
+.editor-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Stage + floating toolbar share a positioning context. */
 .editor-stage-wrap {
   position: relative;
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   display: flex;
   align-items: stretch;
 }
@@ -218,8 +226,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--background-secondary);
-  border-right: 0.5px solid var(--border-primary);
+  background: var(--ap-color-background-secondary);
   overflow: hidden;
 }
 
@@ -310,10 +317,10 @@
   height: calc(100% - 48px);
   max-height: 640px;
   aspect-ratio: 9 / 16;
-  background: var(--background-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  box-shadow: 0 28px 32px 0 rgba(0, 0, 0, 0.04);
+  background: var(--ap-color-background-primary);
+  border: 1px solid var(--ap-color-border-primary);
+  border-radius: var(--ap-radius-lg);
+  box-shadow: var(--ap-shadow-sm);
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -376,6 +383,7 @@
 .right-panel {
   width: var(--right-panel-w, 300px);
   flex: none;
+  border-left: 0.5px solid var(--ap-color-border-primary);
   background: var(--background-primary);
   display: flex;
   flex-direction: column;
@@ -1479,12 +1487,14 @@ button.tl-gutter-btn:hover {
   overflow: hidden;
 }
 
+/* Per the V1 mock, text chips carry the rosé action tint (the file styles
+   them with the audio action pair, not the V0 amber). */
 .tl-chip-text {
-  background: var(--ap-color-action-text-bg);
+  background: var(--ap-color-action-audio-bg);
 }
 
 .tl-chip-text .tl-chip-handle {
-  background: color-mix(in srgb, var(--ap-color-action-text-border) 32%, transparent);
+  background: color-mix(in srgb, var(--ap-color-action-audio-border) 32%, transparent);
 }
 
 .tl-chip-audio {

@@ -529,7 +529,7 @@ export function SettingsButton({ labeled = false }: { labeled?: boolean }): JSX.
   return (
     <>
       {labeled ? (
-        <Button variant="tertiary" size="md" icon="settings-gear" onClick={() => setOpen(true)}>
+        <Button variant="secondary" size="md" icon="settings-gear" onClick={() => setOpen(true)}>
           Settings
         </Button>
       ) : (

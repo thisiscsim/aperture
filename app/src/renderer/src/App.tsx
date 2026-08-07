@@ -151,10 +151,20 @@ export function App(): JSX.Element {
           }
         >
           <EditorHeaderM />
+          {/* Figma 346:9830: the timeline lives INSIDE the left column (it ends
+              where the panel starts); the right panel runs full height. */}
           <div className="editor-main">
-            <div className="editor-stage-wrap">
-              <PreviewStageM />
-              {!panelsHidden && <FloatingToolbarM />}
+            <div className="editor-left">
+              <div className="editor-stage-wrap">
+                <PreviewStageM />
+                {!panelsHidden && <FloatingToolbarM />}
+              </div>
+              {!panelsHidden && (
+                <>
+                  <PanelResizer panel="timeline" />
+                  <TimelineM />
+                </>
+              )}
             </div>
             {!panelsHidden && (
               <>
@@ -163,12 +173,6 @@ export function App(): JSX.Element {
               </>
             )}
           </div>
-          {!panelsHidden && (
-            <>
-              <PanelResizer panel="timeline" />
-              <TimelineM />
-            </>
-          )}
           <ExportModal />
           {!hasEdl && (
             <div className="boot">

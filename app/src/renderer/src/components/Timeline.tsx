@@ -1,5 +1,5 @@
 import { type DragEvent, type MouseEvent, useRef, useState } from "react";
-import { durationFrames, durationSeconds, MAX_TIMELINE_SEC, type Asset, type Track } from "@reel/edl";
+import { durationSeconds, MAX_TIMELINE_SEC, type Asset, type Track } from "@reel/edl";
 import { useEditor } from "../store";
 import { addAssets, addTrack, renameTrack } from "../lib/edl-edit";
 import { pathsFrom } from "../lib/files";
@@ -40,6 +40,10 @@ export function Timeline(): JSX.Element {
   const muted = useEditor((s) => s.muted);
   const playerCtl = useEditor((s) => s.playerCtl);
   const toggleMuted = useEditor((s) => s.toggleMuted);
+  const canUndo = useEditor((s) => s.edlPast.length > 0);
+  const canRedo = useEditor((s) => s.edlFuture.length > 0);
+  const undoEdl = useEditor((s) => s.undoEdl);
+  const redoEdl = useEditor((s) => s.redoEdl);
 
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghost, setGhost] = useState<{ trackId: string; start: number; dur: number } | null>(null);
@@ -261,7 +265,6 @@ export function Timeline(): JSX.Element {
     }
   };
 
-  const totalFrames = durationFrames(edl);
   const ticks: number[] = [];
   for (let s = 0; s <= Math.ceil(dur); s += 2) ticks.push(s);
 
@@ -272,11 +275,18 @@ export function Timeline(): JSX.Element {
     <section className="tl">
       <div className="tl-bar">
         <div className="tl-bar-side">
-          <IconButton icon="step-back" label="Jump to start" onClick={() => seek(0)} className="tl-bar-btn" />
+          <IconButton
+            icon="step-back"
+            label="Undo (⌘Z)"
+            onClick={undoEdl}
+            disabled={!canUndo}
+            className="tl-bar-btn"
+          />
           <IconButton
             icon="step-forwards"
-            label="Jump to end"
-            onClick={() => seek(Math.max(0, totalFrames - 1))}
+            label="Redo (⇧⌘Z)"
+            onClick={redoEdl}
+            disabled={!canRedo}
             className="tl-bar-btn"
           />
           <span className="tl-bar-divider" />
