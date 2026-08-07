@@ -77,12 +77,7 @@ export function addAudioClip(
  * untouched. Resolves by id, not index: a drop stays safe even if the EDL was
  * live-reloaded (agent write, undo) mid-drag. Unknown ids are a no-op.
  */
-export function reorderAssets(
-  edl: Edl,
-  family: "clip" | "audio",
-  sourceId: string,
-  targetId: string,
-): void {
+export function reorderAssets(edl: Edl, family: "clip" | "audio", sourceId: string, targetId: string): void {
   if (sourceId === targetId) return;
   const inFamily = (a: Asset) => (family === "audio" ? a.kind === "audio" : a.kind !== "audio");
   const subset = edl.assets.filter(inFamily);
