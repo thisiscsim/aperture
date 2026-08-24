@@ -1,6 +1,7 @@
 {
   "name": "reel-studio-app",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Aperture Electron editor.",
   "main": "out/main/index.js",
   "scripts": {
