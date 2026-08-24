@@ -2,7 +2,7 @@
   "name": "reel-studio",
   "private": true,
   "version": "0.1.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "AI-assisted short-form video studio (Electron editor + Claude Code harness, bridged by edl.json).",
   "workspaces": [
     "packages/*",

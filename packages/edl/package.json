@@ -1,7 +1,7 @@
 {
   "name": "@reel/edl",
   "version": "0.1.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/esm/index.d.ts",
